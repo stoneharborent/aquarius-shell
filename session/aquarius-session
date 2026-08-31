@@ -1,0 +1,347 @@
+#!/usr/bin/env bash
+# =============================================================================
+# aquarius-session — start the experimental Aquarius Session
+# =============================================================================
+# WHAT THIS IS, IN ONE SENTENCE
+#   This is the program the login screen runs when you pick "Aquarius Session
+#   (experimental)". It starts a window manager, starts the Aquarius Shell
+#   inside it, and sets up the environment that the rest of the desktop needs.
+#
+# WHAT IT IS NOT
+#   It is not the AquariusOS desktop. The shipping desktop is GNOME, and it is
+#   untouched by everything in this folder. This is the prototype track, and it
+#   lives next to GNOME on the login screen rather than replacing it. If this
+#   session fails, you log out and pick GNOME. That is the whole safety story
+#   and it does not bend.
+#
+# THE THREE THINGS IT STARTS
+#   1. A compositor — the window manager. Either niri or labwc; which one is
+#      still an open question (docs/adr/0001-framework.md), so both are here.
+#   2. The Aquarius Shell — our bar, run by Quickshell's `qs` binary. The
+#      compositor starts it, not this script, because a shell started outside
+#      the compositor would have nothing to attach itself to.
+#   3. The portals — which we do NOT start. They are started on demand by
+#      D-Bus. All this script has to do is make sure the environment they read
+#      is correct before anything asks for one. That is the XDG_CURRENT_DESKTOP
+#      line below, and it is the single most load-bearing line in this file.
+#
+# WHEN IT GOES WRONG
+#   A failing login session normally gives you a black screen and no
+#   explanation. So everything this script prints is also written to a log
+#   file, and the path is printed at the top of every run:
+#
+#       ~/.local/state/aquarius-session/session.log
+#
+#   Read that file first. Always.
+#
+# See docs/session.md for the beginner's walkthrough, including how to install
+# this without rebuilding the OS image.
+# =============================================================================
+
+set -euo pipefail
+
+aq_prog="aquarius-session"
+
+# -----------------------------------------------------------------------------
+# The log. Everything below this point goes to the terminal AND to the file.
+# -----------------------------------------------------------------------------
+AQ_STATE_DIR="${XDG_STATE_HOME:-${HOME}/.local/state}/aquarius-session"
+AQ_LOG="${AQ_STATE_DIR}/session.log"
+
+mkdir -p "${AQ_STATE_DIR}"
+
+# Keep the log from growing forever. One previous run is kept as .log.1, which
+# is exactly enough to compare "the time it worked" against "the time it did
+# not".
+if [ -f "${AQ_LOG}" ]; then
+    mv -f "${AQ_LOG}" "${AQ_LOG}.1"
+fi
+
+exec > >(tee -a "${AQ_LOG}") 2>&1
+
+echo "============================================================"
+echo "  Aquarius Session (experimental)"
+echo "  $(date)"
+echo "  log: ${AQ_LOG}"
+echo "============================================================"
+
+# -----------------------------------------------------------------------------
+# Failing loudly.
+#
+# `die` prints a heading, the reason, and what to do about it — then stops. It
+# is deliberately shouty, because the only person who will ever read it is
+# somebody staring at a login screen wondering what happened.
+# -----------------------------------------------------------------------------
+die() {
+    echo ""
+    echo "------------------------------------------------------------"
+    echo "  THE AQUARIUS SESSION COULD NOT START"
+    echo "------------------------------------------------------------"
+    echo "  ${1}"
+    echo ""
+    shift
+    for aq_line in "$@"; do
+        echo "  ${aq_line}"
+    done
+    echo ""
+    echo "  Nothing has been changed on your machine. Log in with GNOME"
+    echo "  and everything works as before."
+    echo ""
+    echo "  This message is also in:"
+    echo "    ${AQ_LOG}"
+    echo "------------------------------------------------------------"
+    exit 1
+}
+
+# -----------------------------------------------------------------------------
+# Where things live.
+#
+# This script can be run two ways, and both have to work:
+#   * straight out of a clone of the aquarius-shell repository, for developing;
+#   * installed to /usr/local, for logging into.
+#
+# So instead of hard-coding one path, it looks in a short list of places and
+# uses the first one that actually contains what it is looking for. An
+# environment variable always wins, which is what makes "point it at my working
+# copy for five minutes" possible without reinstalling anything.
+# -----------------------------------------------------------------------------
+aq_script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+aq_find_dir() {
+    # $1 = a file that must exist inside the directory, to prove it is the one
+    # $2.. = candidate directories, in order of preference
+    aq_marker="$1"
+    shift
+    for aq_candidate in "$@"; do
+        if [ -n "${aq_candidate}" ] && [ -f "${aq_candidate}/${aq_marker}" ]; then
+            printf '%s\n' "${aq_candidate}"
+            return 0
+        fi
+    done
+    return 1
+}
+
+# The compositor configurations (niri/config.kdl, labwc/rc.xml, portals/...).
+AQ_SESSION_DIR="$(aq_find_dir "niri/config.kdl" \
+    "${AQ_SESSION_DIR:-}" \
+    "${aq_script_dir}" \
+    "/usr/local/share/aquarius-session" \
+    "/usr/share/aquarius-session" \
+    || true)"
+
+if [ -z "${AQ_SESSION_DIR}" ]; then
+    die "The session's compositor configuration could not be found." \
+        "Looked for a folder containing 'niri/config.kdl' in:" \
+        "  \$AQ_SESSION_DIR (currently unset or wrong)" \
+        "  ${aq_script_dir}" \
+        "  /usr/local/share/aquarius-session" \
+        "  /usr/share/aquarius-session" \
+        "" \
+        "Fix: run session/install-session.sh from the aquarius-shell repo," \
+        "or set AQ_SESSION_DIR to the repo's session/ folder."
+fi
+
+# The shell itself — the folder with shell.qml in it. Quickshell reads
+# QS_CONFIG_PATH, so once this is found we simply export it and every later
+# `qs` invocation, including the ones behind key bindings, finds the same
+# configuration without anybody writing a path in a config file.
+AQ_SHELL_DIR="$(aq_find_dir "shell.qml" \
+    "${QS_CONFIG_PATH:-}" \
+    "${aq_script_dir}/.." \
+    "/usr/local/share/aquarius-shell" \
+    "/usr/share/aquarius-shell" \
+    || true)"
+
+if [ -z "${AQ_SHELL_DIR}" ]; then
+    die "The Aquarius Shell itself could not be found." \
+        "Looked for a folder containing 'shell.qml' in:" \
+        "  \$QS_CONFIG_PATH (currently unset or wrong)" \
+        "  ${aq_script_dir}/.." \
+        "  /usr/local/share/aquarius-shell" \
+        "  /usr/share/aquarius-shell" \
+        "" \
+        "Fix: run session/install-session.sh, or set QS_CONFIG_PATH to the" \
+        "folder containing shell.qml."
+fi
+
+# -----------------------------------------------------------------------------
+# Which compositor.
+#
+# ADR 0001 deliberately did not decide this. Both are configured; the bench run
+# is what picks one. Order of preference:
+#   1. the AQ_COMPOSITOR environment variable
+#   2. a one-word file: ~/.config/aquarius-session/compositor
+#   3. niri
+# -----------------------------------------------------------------------------
+AQ_COMPOSITOR_FILE="${XDG_CONFIG_HOME:-${HOME}/.config}/aquarius-session/compositor"
+
+if [ -z "${AQ_COMPOSITOR:-}" ] && [ -f "${AQ_COMPOSITOR_FILE}" ]; then
+    AQ_COMPOSITOR="$(tr -d '[:space:]' < "${AQ_COMPOSITOR_FILE}")"
+fi
+
+AQ_COMPOSITOR="${AQ_COMPOSITOR:-niri}"
+
+case "${AQ_COMPOSITOR}" in
+    niri|labwc) : ;;
+    *)
+        die "Unknown compositor '${AQ_COMPOSITOR}'." \
+            "This session knows about 'niri' and 'labwc' and nothing else." \
+            "" \
+            "Fix: put the word niri or labwc in" \
+            "  ${AQ_COMPOSITOR_FILE}"
+        ;;
+esac
+
+# -----------------------------------------------------------------------------
+# Is everything installed?
+#
+# These checks happen BEFORE anything is started, so a missing package is a
+# clear sentence rather than a black screen.
+# -----------------------------------------------------------------------------
+aq_missing=""
+
+aq_need() {
+    if ! command -v "$1" > /dev/null 2>&1; then
+        aq_missing="${aq_missing} $1"
+        echo "  MISSING  $1 — $2"
+    else
+        echo "  found    $1"
+    fi
+}
+
+echo ""
+echo "=== Checking what is installed ==="
+aq_need qs "the Quickshell runtime, which draws the shell. Package: quickshell"
+aq_need "${AQ_COMPOSITOR}" "the compositor. Package: ${AQ_COMPOSITOR}"
+aq_need dbus-daemon "the D-Bus session bus. Package: dbus"
+
+# gdbus is how the shell asks the system whether it prefers a light or dark
+# appearance. Its absence is NOT fatal — the shell simply stays on Ice, its
+# light default. Say so rather than failing.
+if command -v gdbus > /dev/null 2>&1; then
+    echo "  found    gdbus"
+else
+    echo "  note     gdbus is not installed (package: glib2)."
+    echo "           The shell will stay on the Ice light theme instead of"
+    echo "           following the system's light/dark setting. Harmless."
+fi
+
+if [ -n "${aq_missing}" ]; then
+    die "Some required programs are not installed:${aq_missing}" \
+        "On plain Fedora:" \
+        "  sudo dnf install quickshell ${AQ_COMPOSITOR}" \
+        "" \
+        "On Bazzite / AquariusOS (the system is read-only, so packages are" \
+        "layered onto it and it reboots once):" \
+        "  rpm-ostree install quickshell ${AQ_COMPOSITOR}" \
+        "  systemctl reboot" \
+        "" \
+        "A distrobox will NOT work for a login session — the compositor has to" \
+        "be on the host. See docs/session.md."
+fi
+
+# -----------------------------------------------------------------------------
+# Is there a session bus and a runtime directory to hang everything off?
+# -----------------------------------------------------------------------------
+if [ -z "${XDG_RUNTIME_DIR:-}" ]; then
+    die "XDG_RUNTIME_DIR is not set." \
+        "Wayland, D-Bus and the portals all keep their sockets in that" \
+        "directory, so nothing can work without it. It is normally set for you" \
+        "by the login manager. Seeing this usually means this script was run" \
+        "by hand from somewhere unusual rather than from the login screen."
+fi
+
+if [ -z "${DBUS_SESSION_BUS_ADDRESS:-}" ] && [ ! -S "${XDG_RUNTIME_DIR}/bus" ]; then
+    die "There is no D-Bus session bus." \
+        "The portals, the system tray and the notification service are all" \
+        "D-Bus services. Without a bus, screen recording and file dialogs" \
+        "cannot work at all." \
+        "" \
+        "This is normally provided by the login manager. If you are starting" \
+        "this by hand from a text console, wrap it:" \
+        "  dbus-run-session -- ${aq_prog}"
+fi
+
+# -----------------------------------------------------------------------------
+# The environment.
+#
+# XDG_CURRENT_DESKTOP is the important one and it is worth understanding why.
+#
+# xdg-desktop-portal decides which backend answers "let me record the screen"
+# or "let me open a file" by reading a configuration file whose NAME comes from
+# this variable. The list is colon-separated, most specific first, and for each
+# name in it the portal looks for `<name>-portals.conf`.
+#
+# So setting it to "aquarius-niri:aquarius:niri" makes the portal look for
+# aquarius-niri-portals.conf first — which is the file this repo ships, and the
+# reason the right backend gets picked. Get this wrong and screen recording
+# silently does nothing.
+#
+# The compositor-specific first entry is not decoration: niri and labwc need
+# DIFFERENT portal backends for screen capture (see session/portals/), so they
+# cannot share one configuration file.
+#
+# Source, verified: portals.conf(5), xdg-desktop-portal.
+# -----------------------------------------------------------------------------
+export XDG_SESSION_TYPE="wayland"
+export XDG_SESSION_DESKTOP="aquarius"
+export QS_CONFIG_PATH="${AQ_SHELL_DIR}"
+export AQ_SESSION_DIR
+
+case "${AQ_COMPOSITOR}" in
+    niri)
+        # "niri" last so that niri's own integrations still recognise the
+        # session; "aquarius" in the middle so that anything of ours that only
+        # cares "is this an Aquarius desktop" can ask one question.
+        export XDG_CURRENT_DESKTOP="aquarius-niri:aquarius:niri"
+        ;;
+    labwc)
+        # "wlroots" last because xdg-desktop-portal-wlr's own metadata still
+        # lists wlroots in its legacy UseIn field, and because a good deal of
+        # third-party software keys off that word to mean "this compositor
+        # speaks the wlr-* protocols".
+        export XDG_CURRENT_DESKTOP="aquarius-labwc:aquarius:wlroots"
+        ;;
+esac
+
+# Qt applications, including the shell, should use Wayland natively rather than
+# going through XWayland.
+export QT_QPA_PLATFORM="${QT_QPA_PLATFORM:-wayland}"
+
+# Deliberately NOT set: GDK_BACKEND. niri's documentation is explicit that
+# setting it globally breaks the screencast portal, and there is no upside.
+
+echo ""
+echo "=== Starting ==="
+echo "  compositor:  ${AQ_COMPOSITOR}"
+echo "  shell:       ${AQ_SHELL_DIR}"
+echo "  session:     ${AQ_SESSION_DIR}"
+echo "  desktop:     ${XDG_CURRENT_DESKTOP}"
+echo ""
+
+# -----------------------------------------------------------------------------
+# Hand over to the compositor. It starts the shell itself.
+#
+# Both configurations start the shell with a bare `qs` — no path. That works
+# because QS_CONFIG_PATH is exported above, and it is why neither the niri
+# config nor the labwc autostart file contains a single machine-specific path.
+# -----------------------------------------------------------------------------
+case "${AQ_COMPOSITOR}" in
+    niri)
+        # --session tells niri to push this session's environment into systemd
+        # and D-Bus and to run its D-Bus services. niri's own documentation is
+        # blunt about this: the portals do not work without it.
+        exec niri --session -c "${AQ_SESSION_DIR}/niri/config.kdl"
+        ;;
+    labwc)
+        # -C points labwc at a configuration DIRECTORY; it reads rc.xml,
+        # autostart, shutdown and environment from there. The shell is started
+        # by that autostart file, not from here.
+        #
+        # Deliberately NOT using labwc's -S/--session flag, which would shut the
+        # whole compositor down the moment the command it started exits. That
+        # would turn a crash of the bar into a logout, and a bar falling over
+        # should not log you out.
+        exec labwc -C "${AQ_SESSION_DIR}/labwc"
+        ;;
+esac

@@ -1,0 +1,39 @@
+# =============================================================================
+# labwc autostart — what runs once labwc is up
+# =============================================================================
+# labwc runs this file as a shell script after it has read rc.xml and set the
+# variables from the `environment` file next to this one. By that point
+# WAYLAND_DISPLAY exists, which is why the shell can only be started from here
+# and not from ../aquarius-session.
+#
+# NO PATHS IN THIS FILE. The shell is started with a bare `qs`, which finds its
+# configuration through QS_CONFIG_PATH, exported by ../aquarius-session before
+# labwc was launched. That is what keeps this file the same on every machine.
+#
+# The equivalent line in the niri configuration is `spawn-at-startup "qs"`.
+# =============================================================================
+
+# ---------------------------------------------------------------------------
+# 1. Tell systemd the graphical session has begun.
+#
+# Portals, notification daemons and keyring agents are systemd user services
+# that say "start me with graphical-session.target". labwc ships
+# labwc-session.target, which binds to that target, but labwc does not start it
+# itself — starting it is opt-in, and this is the opt-in.
+#
+# Without this line the portals may never start, and screen recording and file
+# dialogs quietly do nothing. niri does the equivalent itself via --session.
+# ---------------------------------------------------------------------------
+systemctl --user --no-block start labwc-session.target 2>/dev/null || true
+
+# ---------------------------------------------------------------------------
+# 2. The Aquarius Shell.
+#
+# If it crashes, labwc keeps running and you keep your windows — you get a
+# session with no bar, which is ugly but survivable, and typing `qs` in a
+# terminal brings it back. That is deliberately better than the alternative,
+# where a broken bar logs you out. (It is also why ../aquarius-session starts
+# labwc without its -S/--session flag, which would tie the compositor's life to
+# the shell's.)
+# ---------------------------------------------------------------------------
+qs &

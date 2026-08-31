@@ -1,0 +1,8 @@
+[Desktop Entry]
+Name=Aquarius Session (experimental)
+Comment=The Aquarius Shell on an inherited Wayland compositor. A prototype, not a daily driver.
+Exec=/usr/local/bin/aquarius-session
+TryExec=/usr/local/bin/aquarius-session
+Type=Application
+DesktopNames=aquarius
+Keywords=aquarius;shell;wayland;prototype;

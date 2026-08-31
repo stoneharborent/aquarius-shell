@@ -1,0 +1,102 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<!--
+  =============================================================================
+  The Aquarius Session, running on labwc
+  =============================================================================
+  (An XML comment may not contain two hyphens in a row, which is why the rules
+  in this file are drawn with = signs instead of the dashes used everywhere
+  else in the project. It is a quirk of XML, not a change of style.)
+
+  This is one of TWO compositor configurations in this folder. The other is
+  ../niri/config.kdl. ADR 0001 left the choice open on purpose:
+
+    labwc : a plain stacking compositor. Windows overlap, like every desktop
+            you have used. Boring on purpose. Budgie 10.10 ships its entire
+            desktop environment on it, which is the strongest possible evidence
+            that a shell like ours can live here.
+    niri  : a scrollable-tiling compositor, more opinionated and more
+            interesting for the handheld idea.
+
+  The bench run decides. Switch with one word:
+      echo niri > ~/.config/aquarius-session/compositor
+
+  =============================================================================
+  WHY THIS FILE IS SO SHORT
+  =============================================================================
+  <default /> below loads labwc's own key bindings: a terminal on Super+Return,
+  Alt+Tab to switch windows, Alt+F4 to close, Super+a to maximise, Super+arrows
+  to snap. Those are good and we have no reason to reinvent them, so this file
+  adds exactly two bindings on top and otherwise gets out of the way.
+
+  =============================================================================
+  TWO RULES THIS FILE OBEYS
+  =============================================================================
+  1. NO COLOURS. labwc's title bars and borders come from an Openbox theme, and
+     it would be easy to paste Ice's hex values into a themerc file here. Do
+     not. Colour in this project lives in theme/Ice.qml and theme/Midnight.qml
+     and nowhere else. Two places holding "the Aquarius blue" is how a desktop
+     stops looking designed. When the shell owns window decoration, it will own
+     the colour too.
+
+  2. NO PATHS. The shell is started from the autostart file next to this one,
+     with a bare `qs`, because ../aquarius-session exports QS_CONFIG_PATH first.
+
+  =============================================================================
+  KEY BINDINGS ADDED BY US
+  =============================================================================
+    W-space     open or close the Aquarius search palette (the shell's own IPC)
+    W-S-e       leave the session and return to the login screen
+
+  "W" is labwc's letter for Super (the Windows/Command key). Its other
+  modifiers are S=shift, C=control, A=alt.
+
+  Format reference: labwc-config(5) and labwc-actions(5).
+  =============================================================================
+-->
+
+<labwc_config>
+
+  <core>
+    <!-- Let the compositor draw title bars rather than each application
+         drawing its own. Fewer competing visual languages on screen. -->
+    <decoration>server</decoration>
+    <gap>8</gap>
+  </core>
+
+  <keyboard>
+
+    <!-- labwc's own defaults: Super+Return terminal, Alt+Tab, Alt+F4,
+         Super+a maximize, Super+arrows snap, plus the volume and brightness
+         keys. Keeping them means this file only has to describe what is
+         different about Aquarius. -->
+    <default />
+
+    <!--
+      The Aquarius search palette.
+
+      This does not launch a program. It sends a message to the shell that is
+      ALREADY running, telling it to show or hide its search box.
+      `qs ipc call <target> <function> <argument>` is Quickshell's own
+      mechanism for that, and "aquarius-shell" is the target name declared by
+      an IpcHandler inside the shell.
+
+      No path on `qs`: QS_CONFIG_PATH is in the environment labwc inherited.
+
+      UNVERIFIED: the exact function and argument spelling comes from the
+      search branch and has not been run together with this file yet. If the
+      palette does not open, ask the running shell what it actually offers:
+          qs ipc show
+    -->
+    <keybind key="W-space">
+      <action name="Execute" command="qs ipc call aquarius-shell search toggle" />
+    </keybind>
+
+    <!-- Leave the session and go back to the login screen. -->
+    <keybind key="W-S-e">
+      <action name="Exit" />
+    </keybind>
+
+  </keyboard>
+
+</labwc_config>
