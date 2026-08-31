@@ -72,6 +72,19 @@ for aq_file in \
     components/bar/ActiveAppName.qml \
     components/bar/BarClock.qml \
     components/bar/StatusCluster.qml \
+    services/qmldir \
+    services/FocusState.qml \
+    components/notifications/NotificationLayer.qml \
+    components/notifications/NotificationStore.qml \
+    components/notifications/NotificationPanelWindow.qml \
+    components/notifications/NotificationsPanel.qml \
+    components/notifications/NotificationGroup.qml \
+    components/notifications/NotificationRow.qml \
+    components/notifications/ToastLayer.qml \
+    components/notifications/Toast.qml \
+    components/notifications/IconChip.qml \
+    components/notifications/ActionButtons.qml \
+    components/notifications/InlineReply.qml \
     assets/logo.svg \
     assets/logo-mono.svg \
     harness/run-nested.sh \
@@ -273,6 +286,97 @@ for aq_name in Ice Midnight Theme; do
              "'pragma Singleton' at the top. Both are required."
     fi
 done
+
+# ------------------------------------------------------------------------------
+echo ""
+echo "=== 6b. every service singleton is listed in services/qmldir ==="
+# ------------------------------------------------------------------------------
+# Exactly the same rule as theme/qmldir, one directory over. services/ holds the
+# shell's shared state — the things there is meant to be precisely one of. A
+# singleton that is not declared here is not a singleton; it silently becomes a
+# separate copy per importer, which for something like Focus means Quick Settings
+# and the notification server disagreeing about whether you are to be disturbed.
+
+for aq_service in services/*.qml; do
+    aq_name="$(basename "${aq_service}" .qml)"
+
+    if ! grep -q '^pragma Singleton' "${aq_service}"; then
+        # Not every file in services/ has to be a singleton.
+        continue
+    fi
+
+    if grep -q "^singleton ${aq_name} .*${aq_name}\.qml$" services/qmldir; then
+        pass "services/qmldir declares ${aq_name}"
+    else
+        fail "services/${aq_name}.qml says 'pragma Singleton' but services/qmldir" \
+             "does not declare it. Add:  singleton ${aq_name} 1.0 ${aq_name}.qml"
+    fi
+done
+
+# ------------------------------------------------------------------------------
+echo ""
+echo "=== 6c. every Theme.<name> a component uses actually exists ==="
+# ------------------------------------------------------------------------------
+# The single most common way to break this shell is to type `Theme.fsTiny` for a
+# token called `fsMicro`. QML does not fail at start-up for that — the binding
+# quietly evaluates to undefined, and a piece of text renders at size 0, or a
+# rectangle renders in the default white, somewhere nobody is looking.
+#
+# The same check runs for FocusState, for the same reason: it is the one piece of
+# state two different components have to agree about.
+
+if python3 - <<'PYTHON'
+import pathlib
+import re
+import sys
+
+
+def declared(path):
+    """Every property, function and signal a QML file exposes by name."""
+    text = pathlib.Path(path).read_text(encoding='utf-8')
+    names = set()
+    names.update(re.findall(r'(?:readonly\s+)?property\s+[\w<>]+\s+(\w+)', text))
+    names.update(re.findall(r'property\s+alias\s+(\w+)', text))
+    names.update(re.findall(r'function\s+(\w+)\s*\(', text))
+    names.update(re.findall(r'signal\s+(\w+)', text))
+    return names
+
+
+def strip_comments(text):
+    text = re.sub(r'/\*.*?\*/', '', text, flags=re.S)
+    return re.sub(r'//[^\n]*', '', text)
+
+
+singletons = {
+    'Theme': declared('theme/Theme.qml'),
+    'FocusState': declared('services/FocusState.qml'),
+}
+
+bad = 0
+for path in sorted(pathlib.Path('.').rglob('*.qml')):
+    if '.git' in path.parts:
+        continue
+    if path.parts[0] in ('theme', 'services'):
+        continue
+    code = strip_comments(path.read_text(encoding='utf-8'))
+    for singleton, names in singletons.items():
+        for used in sorted(set(re.findall(singleton + r'\.(\w+)', code))):
+            if used not in names:
+                print("  FAIL %s uses %s.%s, which does not exist" % (path, singleton, used))
+                bad += 1
+
+if bad == 0:
+    print("  OK   every Theme.* and FocusState.* reference resolves")
+
+sys.exit(1 if bad else 0)
+PYTHON
+then
+    :
+else
+    fail "a component refers to a token or a function that is not there (above)." \
+         "Add it to theme/Theme.qml (and to BOTH palettes if it is a colour)," \
+         "or fix the spelling."
+fi
 
 # ------------------------------------------------------------------------------
 echo ""
