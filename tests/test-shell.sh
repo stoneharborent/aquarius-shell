@@ -391,6 +391,116 @@ fi
 
 # ------------------------------------------------------------------------------
 echo ""
+echo "=== 12. the dock's files exist ==="
+# ------------------------------------------------------------------------------
+# Same reasoning as check 1, for the second real piece of the shell. Kept as its
+# own block rather than added to check 1's list so that the dock, the panels and
+# the search box can each grow their own checks without three branches all
+# editing the same twenty lines.
+
+for aq_file in \
+    components/dock/Dock.qml \
+    components/dock/DockItem.qml \
+    components/dock/DockAddTile.qml \
+    components/dock/DockModel.qml \
+    components/dock/DockConfig.qml \
+    docs/dock.md
+do
+    if [ -f "${aq_file}" ]; then
+        pass "${aq_file}"
+    else
+        fail "${aq_file} is missing."
+    fi
+done
+
+# ------------------------------------------------------------------------------
+echo ""
+echo "=== 13. every Theme.<something> a component asks for actually exists ==="
+# ------------------------------------------------------------------------------
+# This is the check the dock needed most, and it is worth having for everything.
+#
+# QML does not complain when you read a property that does not exist — it hands
+# back `undefined`. `Theme.dockTileSize` misspelt as `Theme.dockTilesize` does
+# not error; the tile silently comes out zero pixels wide and you are left
+# hunting a layout bug that is really a typo. With no QML engine on this machine
+# to catch it, a string comparison is the next best thing.
+#
+# It reads the property names declared in theme/Theme.qml and confirms that
+# every `Theme.<name>` written anywhere else is one of them.
+
+if python3 - <<'PYTHON'
+import pathlib
+import re
+import sys
+
+theme = pathlib.Path('theme/Theme.qml').read_text(encoding='utf-8')
+
+# `property <type> <name>:` and `readonly property <type> <name>:`, plus
+# functions and signals, which are reached the same way.
+declared = set(re.findall(r'property\s+\w+(?:<\w+>)?\s+(\w+)\s*:', theme))
+declared |= set(re.findall(r'function\s+(\w+)\s*\(', theme))
+declared |= set(re.findall(r'signal\s+(\w+)\s*\(', theme))
+
+bad = []
+for path in sorted(pathlib.Path('.').rglob('*.qml')):
+    if '.git' in path.parts or path == pathlib.Path('theme/Theme.qml'):
+        continue
+    text = path.read_text(encoding='utf-8')
+    for line_number, line in enumerate(text.splitlines(), start=1):
+        # Skip comment lines, which quote token names while explaining them.
+        if line.lstrip().startswith('//'):
+            continue
+        for name in re.findall(r'\bTheme\.(\w+)', line):
+            if name not in declared:
+                bad.append((path, line_number, name))
+
+if bad:
+    for path, line_number, name in bad:
+        print("  FAIL %s:%d uses Theme.%s, which Theme.qml does not declare"
+              % (path, line_number, name))
+    sys.exit(1)
+
+print("  OK   every Theme.<name> in the repo is declared (%d available)"
+      % len(declared))
+PYTHON
+then
+    :
+else
+    fail "a component asks Theme for something it does not have (listed above)." \
+         "QML would return undefined and draw nothing, without an error." \
+         "Either fix the spelling, or add the token to Theme.qml — and if it" \
+         "is a colour, to BOTH theme/Ice.qml and theme/Midnight.qml."
+fi
+
+# ------------------------------------------------------------------------------
+echo ""
+echo "=== 14. no Plasma or KDE leftovers ==="
+# ------------------------------------------------------------------------------
+# The dock is a re-write of AquariusOS's KDE dock widget, which was itself a
+# fork of KDE's task manager. Porting from Plasma QML means Kirigami,
+# PlasmaComponents, PlasmaCore, `Plasmoid.` and `plasma.applet.*` are all one
+# careless paste away — and every one of them would tie this shell to Plasma,
+# which is the exact dependency the whole track exists to avoid. None of them
+# exist outside Plasma, so the shell would simply fail to start.
+#
+# (os-image's own build_files/dock-check.sh guards the KDE dock against the
+# mirror-image mistake. This is the same idea pointed the other way.)
+
+if grep -rn --include='*.qml' \
+        -E '(^|[^A-Za-z0-9_.])(Kirigami|PlasmaComponents[0-9]*|PlasmaCore|Plasmoid|TaskManagerApplet)\.|import +org\.kde\.|plasma\.applet\.' \
+        . --exclude-dir=.git > /dev/null 2>&1; then
+    grep -rn --include='*.qml' \
+        -E '(^|[^A-Za-z0-9_.])(Kirigami|PlasmaComponents[0-9]*|PlasmaCore|Plasmoid|TaskManagerApplet)\.|import +org\.kde\.|plasma\.applet\.' \
+        . --exclude-dir=.git || true
+    fail "a QML file uses a Plasma-only type or import." \
+         "This shell runs on any compositor and does not have Plasma." \
+         "Whatever it was doing has a portable Quickshell or QtQuick answer."
+else
+    pass "no Plasma or KDE types"
+fi
+
+# ------------------------------------------------------------------------------
+echo ""
 if [ "${aq_failures}" -ne 0 ]; then
     echo "::error::${aq_failures} check(s) failed."
     exit 1

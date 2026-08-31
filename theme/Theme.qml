@@ -123,6 +123,54 @@ Singleton {
     readonly property int hairline: 1            // every 1px rule in the shell
 
     // =========================================================================
+    // THE DOCK — measured off the V2 artboard
+    // =========================================================================
+    // From "AquariusOS Desktop Shell.html", the `.dock-ico` rule and the dock
+    // container's inline style:
+    //
+    //   container  left:50%; bottom:10px; gap:9px; padding:9px 13px;
+    //              border-radius:16px; border:1px solid ...
+    //   .dock-ico  width:44px; height:44px; border-radius:11px;
+    //              font:600 13px var(--font-display)
+    //   .dock-ico:hover  transform: translateY(-4px) scale(1.08)
+    //   .dock-ico i      bottom:-7px; width:4px; height:4px; border-radius:50%
+    //   separator  width:1px; height:28px
+    //   the + tile font-size:18px
+    //
+    // The dot's "bottom:-7px" is CSS for "the dot's BOTTOM edge sits 7px below
+    // the tile's bottom edge". With a 4px dot that leaves a 3px gap between the
+    // tile and the dot, which is what dockDotGap is. 3 + 4 = 7, and the dock's
+    // 9px bottom padding has room for it with 2px to spare.
+    readonly property int dockTileSize: 44        // one app tile, square
+    readonly property int dockTileRadius: 11      // that tile's corners
+    readonly property int dockTileInset: 6        // icon inset inside the tile*
+    readonly property int dockGap: 9              // space BETWEEN tiles
+    readonly property int dockPaddingH: 13        // space inside the slab, sides
+    readonly property int dockPaddingV: 9         // space inside the slab, top/bottom
+    readonly property int dockRadius: 16          // the slab's corners
+    readonly property int dockScreenMargin: 10    // slab's gap to the screen edge
+    readonly property int dockDotSize: 4          // the running-app dot
+    readonly property int dockDotGap: 3           // tile bottom -> dot top
+
+    // How solid that dot is. The design draws one state; these two come from
+    // the Plasma theme's tasks.svg, which used 0.55 for "running" and 0.8 for
+    // "running and focused". Keeping both means the dock can say which of
+    // several open apps you are actually in, at no cost in ink.
+    readonly property real dockDotOpacity: 0.55
+    readonly property real dockDotOpacityActive: 0.8
+
+    readonly property int dockSeparatorHeight: 28 // the rule before the + tile
+    readonly property int dockLift: 4             // how far a hovered tile rises
+    readonly property real dockHoverScale: 1.08   // and how much it grows
+    readonly property int dockGlyphSize: 13       // the two-letter icon fallback
+    readonly property int dockAddGlyphSize: 18    // the "+" on the add tile
+
+    // * The design draws two-letter placeholders rather than real icons, so it
+    //   has no inset to measure. 6 is the Plasma theme's 4-in-32 tile inset
+    //   scaled to 44 (round(44 * 4 / 32) = 6) — the number the KDE dock's
+    //   artwork already used, kept so the two docks line up while both exist.
+
+    // =========================================================================
     // TYPE
     // =========================================================================
     // The OS installs Sora, Inter and JetBrains Mono as system fonts. In the

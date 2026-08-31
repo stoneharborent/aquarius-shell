@@ -19,6 +19,7 @@
 import Quickshell
 
 import "components/bar"
+import "components/dock"
 
 ShellRoot {
     TopBar {
@@ -27,5 +28,14 @@ ShellRoot {
         // better than a menu that opens onto an empty box.
         onLauncherRequested: console.log("aquarius-shell: launcher requested (P2)")
         onNotificationsRequested: console.log("aquarius-shell: notifications requested (P2)")
+    }
+
+    Dock {
+        // The dashed "+" tile at the end of the dock. It is meant to open Flow
+        // Search — the full-screen app grid — which is being built separately
+        // and is not imported here. This is the documented seam; connect it
+        // when that lands. `qs ipc call dock openAppGrid` fires the same
+        // signal from outside the process. See docs/dock.md.
+        onAppGridRequested: console.log("aquarius-shell: app grid requested (P2)")
     }
 }
