@@ -200,8 +200,8 @@ echo "=== 4. colour lives in theme/ and nowhere else ==="
 # We look for hex colours outside theme/. "transparent" is allowed — it is the
 # absence of a colour, not a choice of one.
 
-if grep -rn --include='*.qml' -E '"#[0-9A-Fa-f]{3,8}"' components/ shell.qml > /dev/null 2>&1; then
-    grep -rn --include='*.qml' -E '"#[0-9A-Fa-f]{3,8}"' components/ shell.qml || true
+if grep -rn --include='*.qml' -E '"#[0-9A-Fa-f]{3,8}"' components/ services/ shell.qml > /dev/null 2>&1; then
+    grep -rn --include='*.qml' -E '"#[0-9A-Fa-f]{3,8}"' components/ services/ shell.qml || true
     fail "a component contains a raw colour value." \
          "Colour belongs in theme/Ice.qml and theme/Midnight.qml only." \
          "Add a role there, then use Theme.<role> here."
@@ -648,7 +648,7 @@ fi
 
 # ------------------------------------------------------------------------------
 echo ""
-echo "=== 12. the dock's files exist ==="
+echo "=== 18. the dock's files exist ==="
 # ------------------------------------------------------------------------------
 # Same reasoning as check 1, for the second real piece of the shell. Kept as its
 # own block rather than added to check 1's list so that the dock, the panels and
@@ -672,7 +672,7 @@ done
 
 # ------------------------------------------------------------------------------
 echo ""
-echo "=== 13. every Theme.<something> a component asks for actually exists ==="
+echo "=== 19. every Theme.<something> a component asks for actually exists ==="
 # ------------------------------------------------------------------------------
 # This is the check the dock needed most, and it is worth having for everything.
 #
@@ -731,7 +731,7 @@ fi
 
 # ------------------------------------------------------------------------------
 echo ""
-echo "=== 14. no Plasma or KDE leftovers ==="
+echo "=== 20. no Plasma or KDE leftovers ==="
 # ------------------------------------------------------------------------------
 # The dock is a re-write of AquariusOS's KDE dock widget, which was itself a
 # fork of KDE's task manager. Porting from Plasma QML means Kirigami,
