@@ -1,1 +1,16 @@
-singleton FocusState FocusState.qml
+# =============================================================================
+# services/qmldir — the shell's shared, single-instance state
+# =============================================================================
+# Same rule as theme/qmldir: QML will not treat a file as a singleton on the
+# strength of the `pragma Singleton` line inside it alone. It also has to be
+# named here, in this exact shape:
+#
+#     singleton <TypeName> <version> <FileName>
+#
+# Miss it and the shell fails at start-up with "FocusState is not a type",
+# which is a confusing way to be told "you did not write it down here".
+#
+# This directory is pulled in by `import "../../services"` from the components.
+# =============================================================================
+
+singleton FocusState 1.0 FocusState.qml
