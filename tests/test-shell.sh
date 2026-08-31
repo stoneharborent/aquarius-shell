@@ -765,12 +765,14 @@ echo "=== 20. no Plasma or KDE leftovers ==="
 # (os-image's own build_files/dock-check.sh guards the KDE dock against the
 # mirror-image mistake. This is the same idea pointed the other way.)
 
-if grep -rn --include='*.qml' \
+# Comment lines are exempt: a comment SAYING "Kirigami.Icon did X and here is
+# the portable answer" is exactly the provenance note we want ported files to
+# carry, and it ties nothing to Plasma.
+plasma_hits="$(grep -rn --include='*.qml' \
         -E '(^|[^A-Za-z0-9_.])(Kirigami|PlasmaComponents[0-9]*|PlasmaCore|Plasmoid|TaskManagerApplet)\.|import +org\.kde\.|plasma\.applet\.' \
-        . --exclude-dir=.git > /dev/null 2>&1; then
-    grep -rn --include='*.qml' \
-        -E '(^|[^A-Za-z0-9_.])(Kirigami|PlasmaComponents[0-9]*|PlasmaCore|Plasmoid|TaskManagerApplet)\.|import +org\.kde\.|plasma\.applet\.' \
-        . --exclude-dir=.git || true
+        . --exclude-dir=.git 2>/dev/null | grep -Ev '^[^:]+:[0-9]+:[[:space:]]*//' || true)"
+if [ -n "$plasma_hits" ]; then
+    printf '%s\n' "$plasma_hits"
     fail "a QML file uses a Plasma-only type or import." \
          "This shell runs on any compositor and does not have Plasma." \
          "Whatever it was doing has a portable Quickshell or QtQuick answer."
@@ -780,7 +782,7 @@ fi
 
 # ------------------------------------------------------------------------------
 echo ""
-echo "=== 12. every glyph name asked for actually exists ==="
+echo "=== 21. every glyph name asked for actually exists ==="
 # ------------------------------------------------------------------------------
 # QsGlyph draws its icons from a table of SVG path data keyed by name. A name
 # that is not in that table draws NOTHING — silently, on a machine that is not
@@ -831,7 +833,7 @@ fi
 
 # ------------------------------------------------------------------------------
 echo ""
-echo "=== 13. Focus is one switch, in one place ==="
+echo "=== 22. Focus is one switch, in one place ==="
 # ------------------------------------------------------------------------------
 # Focus (do-not-disturb) is shared between Quick Settings, which flips it, and
 # the notification server, which obeys it. If either one keeps its own copy, the
@@ -869,7 +871,7 @@ fi
 
 # ------------------------------------------------------------------------------
 echo ""
-echo "=== 14. shelling out happens only where it is documented ==="
+echo "=== 23. shelling out happens only where it is documented ==="
 # ------------------------------------------------------------------------------
 # Almost everything in this shell reaches the system through a Quickshell
 # service speaking a published protocol. Exactly two places run a command-line
