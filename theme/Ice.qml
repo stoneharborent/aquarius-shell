@@ -87,11 +87,6 @@ Singleton {
     // push the desktop back without turning a light desktop into a dark one.
     readonly property color scrim: "#5916273A"       // ink at 35%
 
-    // `accentWash` is the accent laid UNDER something rather than as its fill —
-    // the selected row in a list. The design's rgba(138,180,255,.14), in Ice's
-    // own accent. It is the accent's counterpart to hoverWash.
-    readonly property color accentWash: "#242C8FC4"  // aquariusBlue at 14%
-
     // --- Semantic colours, tuned for a light ground ----------------------------
     readonly property color success: "#1F9E8C"
     readonly property color warn: "#C2792E"
@@ -109,4 +104,20 @@ Singleton {
 
     // Text drawn ON TOP of a filled accent shape (a pressed toggle, a badge).
     readonly property color onAccent: "#FFFFFF"
+
+    // The accent as a WASH — a tint of it laid over a surface rather than a
+    // solid fill. The V2 design uses this for a toggle that is switched on
+    // (`.qs-toggle.on`, `rgba(138,180,255,.16)`), which in the shell is the
+    // "Focus until morning" pill in the notifications panel — and the selected
+    // row in Flow Search's results list, the accent's counterpart to hoverWash.
+    // (Two P2 tracks invented this role independently, at 14% and 16%; they
+    // unified on 16% at the merge.)
+    //
+    // It is a stored value rather than something worked out from `accent` at
+    // runtime for the same reason every other colour here is: a component must
+    // never compute a colour. The consequence, written down so it is not a
+    // surprise later: if Settings ever lets somebody choose indigo or turquoise
+    // as their accent, THIS role does not follow along on its own — a wash per
+    // accent has to be added here, beside the accent it belongs to.
+    readonly property color accentWash: "#292C8FC4"  // aquariusBlue at 16%
 }

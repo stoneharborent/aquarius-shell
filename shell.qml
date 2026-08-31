@@ -8,9 +8,9 @@
 //
 //     qs -p /path/to/aquarius-shell
 //
-// The table of contents so far: the top bar (P1), then P2's dock, Quick
-// Settings and the Flow Search palette. Notifications are the last P2 piece
-// still to land. See docs/ROADMAP.md.
+// The table of contents: the top bar (P1), then P2's dock, Quick Settings,
+// the Flow Search palette, and the notification pipeline — the daemon, its
+// toasts and the panel that drops out of the clock. See docs/ROADMAP.md.
 //
 // KEEP THIS FILE SHORT. It is the table of contents for the whole shell, and a
 // table of contents stops being useful the moment it has logic in it. Anything
@@ -20,15 +20,18 @@ import Quickshell
 
 import "components/bar"
 import "components/dock"
+import "components/notifications"
 import "components/search"
 
 ShellRoot {
     TopBar {
-        // Clicking the Aquarius mark opens the search palette. The clock is
-        // still Phase P2 work and still goes nowhere, which is honest and
-        // better than a menu that opens onto an empty box.
+        // Clicking the Aquarius mark opens the search palette.
         onLauncherRequested: flowSearch.toggleSearch()
-        onNotificationsRequested: console.log("aquarius-shell: notifications requested (P2)")
+
+        // Clicking the clock opens the notifications panel, and the clock stays
+        // lit while it is open.
+        onNotificationsRequested: notifications.togglePanel()
+        notificationsOpen: notifications.panelOpen
 
         // Quick Settings is REAL — it opens from the bar's status cluster, on
         // the screen whose bar was clicked. This is not a request going
@@ -46,6 +49,12 @@ ShellRoot {
         // `qs ipc call dock openAppGrid` fires the same signal from outside.
         // See docs/dock.md.
         onAppGridRequested: flowSearch.toggleSearch()
+    }
+
+    // The notification daemon, the toasts and the panel. See
+    // docs/notifications.md.
+    NotificationLayer {
+        id: notifications
     }
 
     // The search palette. Invisible until something asks for it — the bar or

@@ -115,6 +115,17 @@ for aq_file in \
     components/search/calc.js \
     docs/flow-search.md \
     tests/search-js-tests.mjs \
+    components/notifications/NotificationLayer.qml \
+    components/notifications/NotificationStore.qml \
+    components/notifications/NotificationPanelWindow.qml \
+    components/notifications/NotificationsPanel.qml \
+    components/notifications/NotificationGroup.qml \
+    components/notifications/NotificationRow.qml \
+    components/notifications/ToastLayer.qml \
+    components/notifications/Toast.qml \
+    components/notifications/IconChip.qml \
+    components/notifications/ActionButtons.qml \
+    components/notifications/InlineReply.qml \
     assets/logo.svg \
     assets/logo-mono.svg \
     harness/run-nested.sh \
@@ -316,6 +327,97 @@ for aq_name in Ice Midnight Theme; do
              "'pragma Singleton' at the top. Both are required."
     fi
 done
+
+# ------------------------------------------------------------------------------
+echo ""
+echo "=== 6b. every service singleton is listed in services/qmldir ==="
+# ------------------------------------------------------------------------------
+# Exactly the same rule as theme/qmldir, one directory over. services/ holds the
+# shell's shared state — the things there is meant to be precisely one of. A
+# singleton that is not declared here is not a singleton; it silently becomes a
+# separate copy per importer, which for something like Focus means Quick Settings
+# and the notification server disagreeing about whether you are to be disturbed.
+
+for aq_service in services/*.qml; do
+    aq_name="$(basename "${aq_service}" .qml)"
+
+    if ! grep -q '^pragma Singleton' "${aq_service}"; then
+        # Not every file in services/ has to be a singleton.
+        continue
+    fi
+
+    if grep -q "^singleton ${aq_name} .*${aq_name}\.qml$" services/qmldir; then
+        pass "services/qmldir declares ${aq_name}"
+    else
+        fail "services/${aq_name}.qml says 'pragma Singleton' but services/qmldir" \
+             "does not declare it. Add:  singleton ${aq_name} 1.0 ${aq_name}.qml"
+    fi
+done
+
+# ------------------------------------------------------------------------------
+echo ""
+echo "=== 6c. every Theme.<name> a component uses actually exists ==="
+# ------------------------------------------------------------------------------
+# The single most common way to break this shell is to type `Theme.fsTiny` for a
+# token called `fsMicro`. QML does not fail at start-up for that — the binding
+# quietly evaluates to undefined, and a piece of text renders at size 0, or a
+# rectangle renders in the default white, somewhere nobody is looking.
+#
+# The same check runs for FocusState, for the same reason: it is the one piece of
+# state two different components have to agree about.
+
+if python3 - <<'PYTHON'
+import pathlib
+import re
+import sys
+
+
+def declared(path):
+    """Every property, function and signal a QML file exposes by name."""
+    text = pathlib.Path(path).read_text(encoding='utf-8')
+    names = set()
+    names.update(re.findall(r'(?:readonly\s+)?property\s+[\w<>]+\s+(\w+)', text))
+    names.update(re.findall(r'property\s+alias\s+(\w+)', text))
+    names.update(re.findall(r'function\s+(\w+)\s*\(', text))
+    names.update(re.findall(r'signal\s+(\w+)', text))
+    return names
+
+
+def strip_comments(text):
+    text = re.sub(r'/\*.*?\*/', '', text, flags=re.S)
+    return re.sub(r'//[^\n]*', '', text)
+
+
+singletons = {
+    'Theme': declared('theme/Theme.qml'),
+    'FocusState': declared('services/FocusState.qml'),
+}
+
+bad = 0
+for path in sorted(pathlib.Path('.').rglob('*.qml')):
+    if '.git' in path.parts:
+        continue
+    if path.parts[0] in ('theme', 'services'):
+        continue
+    code = strip_comments(path.read_text(encoding='utf-8'))
+    for singleton, names in singletons.items():
+        for used in sorted(set(re.findall(singleton + r'\.(\w+)', code))):
+            if used not in names:
+                print("  FAIL %s uses %s.%s, which does not exist" % (path, singleton, used))
+                bad += 1
+
+if bad == 0:
+    print("  OK   every Theme.* and FocusState.* reference resolves")
+
+sys.exit(1 if bad else 0)
+PYTHON
+then
+    :
+else
+    fail "a component refers to a token or a function that is not there (above)." \
+         "Add it to theme/Theme.qml (and to BOTH palettes if it is a colour)," \
+         "or fix the spelling."
+fi
 
 # ------------------------------------------------------------------------------
 echo ""
@@ -713,68 +815,10 @@ do
     fi
 done
 
-# ------------------------------------------------------------------------------
-echo ""
-echo "=== 19. every Theme.<something> a component asks for actually exists ==="
-# ------------------------------------------------------------------------------
-# This is the check the dock needed most, and it is worth having for everything.
-#
-# QML does not complain when you read a property that does not exist — it hands
-# back `undefined`. `Theme.dockTileSize` misspelt as `Theme.dockTilesize` does
-# not error; the tile silently comes out zero pixels wide and you are left
-# hunting a layout bug that is really a typo. With no QML engine on this machine
-# to catch it, a string comparison is the next best thing.
-#
-# It reads the property names declared in theme/Theme.qml and confirms that
-# every `Theme.<name>` written anywhere else is one of them.
-
-if python3 - <<'PYTHON'
-import pathlib
-import re
-import sys
-
-theme = pathlib.Path('theme/Theme.qml').read_text(encoding='utf-8')
-
-# `property <type> <name>:` and `readonly property <type> <name>:`, plus
-# functions and signals, which are reached the same way.
-declared = set(re.findall(r'property\s+\w+(?:<\w+>)?\s+(\w+)\s*:', theme))
-declared |= set(re.findall(r'function\s+(\w+)\s*\(', theme))
-declared |= set(re.findall(r'signal\s+(\w+)\s*\(', theme))
-
-bad = []
-for path in sorted(pathlib.Path('.').rglob('*.qml')):
-    if '.git' in path.parts or path == pathlib.Path('theme/Theme.qml'):
-        continue
-    text = path.read_text(encoding='utf-8')
-    for line_number, line in enumerate(text.splitlines(), start=1):
-        # Skip comment lines, which quote token names while explaining them.
-        if line.lstrip().startswith('//'):
-            continue
-        for name in re.findall(r'\bTheme\.(\w+)', line):
-            if name not in declared:
-                bad.append((path, line_number, name))
-
-if bad:
-    for path, line_number, name in bad:
-        print("  FAIL %s:%d uses Theme.%s, which Theme.qml does not declare"
-              % (path, line_number, name))
-    sys.exit(1)
-
-print("  OK   every Theme.<name> in the repo is declared (%d available)"
-      % len(declared))
-PYTHON
-then
-    :
-else
-    fail "a component asks Theme for something it does not have (listed above)." \
-         "QML would return undefined and draw nothing, without an error." \
-         "Either fix the spelling, or add the token to Theme.qml — and if it" \
-         "is a colour, to BOTH theme/Ice.qml and theme/Midnight.qml."
-fi
 
 # ------------------------------------------------------------------------------
 echo ""
-echo "=== 20. no Plasma or KDE leftovers ==="
+echo "=== 19. no Plasma or KDE leftovers ==="
 # ------------------------------------------------------------------------------
 # The dock is a re-write of AquariusOS's KDE dock widget, which was itself a
 # fork of KDE's task manager. Porting from Plasma QML means Kirigami,
@@ -803,7 +847,7 @@ fi
 
 # ------------------------------------------------------------------------------
 echo ""
-echo "=== 21. every glyph name asked for actually exists ==="
+echo "=== 20. every glyph name asked for actually exists ==="
 # ------------------------------------------------------------------------------
 # QsGlyph draws its icons from a table of SVG path data keyed by name. A name
 # that is not in that table draws NOTHING — silently, on a machine that is not
@@ -859,7 +903,7 @@ fi
 
 # ------------------------------------------------------------------------------
 echo ""
-echo "=== 22. Focus is one switch, in one place ==="
+echo "=== 21. Focus is one switch, in one place ==="
 # ------------------------------------------------------------------------------
 # Focus (do-not-disturb) is shared between Quick Settings, which flips it, and
 # the notification server, which obeys it. If either one keeps its own copy, the
@@ -897,7 +941,7 @@ fi
 
 # ------------------------------------------------------------------------------
 echo ""
-echo "=== 23. shelling out happens only where it is documented ==="
+echo "=== 22. shelling out happens only where it is documented ==="
 # ------------------------------------------------------------------------------
 # Almost everything in this shell reaches the system through a Quickshell
 # service speaking a published protocol. Exactly two places run a command-line
@@ -940,7 +984,7 @@ fi
 
 # ------------------------------------------------------------------------------
 echo ""
-echo "=== 24. the search palette's logic actually runs ==="
+echo "=== 23. the search palette's logic actually runs ==="
 # ------------------------------------------------------------------------------
 # Everything above this line inspects text. This runs code.
 #
@@ -965,7 +1009,7 @@ fi
 
 # ------------------------------------------------------------------------------
 echo ""
-echo "=== 25. the search JavaScript stays plain JavaScript ==="
+echo "=== 24. the search JavaScript stays plain JavaScript ==="
 # ------------------------------------------------------------------------------
 # The two .js libraries are testable ONLY because they are pure functions with
 # no QML in them. The moment one reaches for Theme, Quickshell or qsTr, node can
@@ -1065,7 +1109,7 @@ fi
 
 # ------------------------------------------------------------------------------
 echo ""
-echo "=== 26. the search palette can actually be summoned ==="
+echo "=== 25. the search palette can actually be summoned ==="
 # ------------------------------------------------------------------------------
 # A layer-shell client cannot bind a global key; the compositor does, and it
 # reaches the shell through Quickshell's IPC. That makes the exact command

@@ -65,11 +65,11 @@ Singleton {
     readonly property color handleShadow: "#66000000"    // black at 40%, as the design draws it
 
     // --- Overlays -----------------------------------------------------------------
-    // Ice's twin of the same two roles — read Ice.qml for what they are for.
-    // Midnight dims harder than Ice (60% against 35%) because a dark desktop
-    // under a dark panel needs more separation to read as "behind" at all.
+    // Ice's twin — read Ice.qml for what it is for. Midnight dims harder than
+    // Ice (60% against 35%) because a dark desktop under a dark panel needs
+    // more separation to read as "behind" at all. (accentWash lives further
+    // down, beside the accents it belongs to.)
     readonly property color scrim: "#990B1220"       // bg navy at 60%
-    readonly property color accentWash: "#2400BFFF"  // aquariusBlue at 14%
 
     // --- Semantic colours, tuned for a dark ground -------------------------------
     readonly property color success: "#5FC9B0"
@@ -85,4 +85,13 @@ Singleton {
     readonly property color aquamarine: "#7FFFD4"
 
     readonly property color onAccent: "#08121E"
+
+    // The accent as a wash. Ice's twin — see the long note beside `accentWash`
+    // in Ice.qml for what it is for and the one thing it does not do.
+    //
+    // Midnight's accent is a much brighter blue than Ice's, so the SAME 16%
+    // that reads as a gentle tint on white would glare on deep navy. It is
+    // dialled back to 12% here on purpose; the two are meant to look equally
+    // quiet, not to carry equal numbers.
+    readonly property color accentWash: "#1F00BFFF"  // aquariusBlue at 12%
 }

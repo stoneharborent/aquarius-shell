@@ -101,7 +101,6 @@ Singleton {
     readonly property color pressWash: root.colors.pressWash
 
     readonly property color scrim: root.colors.scrim
-    readonly property color accentWash: root.colors.accentWash
 
     readonly property color success: root.colors.success
     readonly property color warn: root.colors.warn
@@ -110,6 +109,7 @@ Singleton {
 
     readonly property color accent: root.colors.accent
     readonly property color onAccent: root.colors.onAccent
+    readonly property color accentWash: root.colors.accentWash
 
     // Quick Settings washes. See the note beside them in Ice.qml.
     readonly property color tileIdle: root.colors.tileIdle
@@ -309,6 +309,38 @@ Singleton {
     readonly property int searchFooterPaddingV: 9
 
     // =========================================================================
+    // NOTIFICATIONS — measured off the V2 artboard
+    // =========================================================================
+    // From "AquariusOS Desktop Shell.html", the block with id="ovNotif" (the
+    // same panel published on its own as "AquariusOS Shell Notifications.html"):
+    //
+    //   .panel  { right:12px; top:38px; width:350px; padding:16px;
+    //             border-radius: var(--radius-lg) }
+    //   .notif  { gap:12px; padding:12px; border-radius:12px }
+    //   .notif .ni { width:34px; height:34px; border-radius:9px }   <- icon chip
+    //   the svg inside .ni is drawn 15x15
+    //
+    // Only the numbers that are NOT already on a ladder above are named here.
+    // The panel's 16px padding is `sp4`, the 12px row padding and 12px right
+    // offset are `sp3`, the 8px gap between rows is `sp2`, and both 12px
+    // corner radii are `radiusLg` — those are used directly, not restated.
+    //
+    // The design's `top:38px` is the 30px bar plus 8px of air, so the popup is
+    // positioned with a `sp2` top margin against a window that already starts
+    // below the bar. There is no "38" anywhere in the code, and there should
+    // not be: if the bar's height ever changes, the gap should stay 8.
+    readonly property int notifPanelWidth: 350      // the panel AND the toasts
+    readonly property int notifChipSize: 34         // the rounded icon chip
+    readonly property int notifIconSize: 15         // the glyph inside the chip
+    readonly property int notifGroupIconSize: 16    // the app icon on a group header
+
+    // How tall the scrolling list of notifications may get before it scrolls
+    // instead of growing. Not a design number — the artboard draws three rows
+    // and stops. 420 is twenty rows' worth of a short list, which keeps the
+    // panel comfortably inside a 768px-tall laptop screen with the footer.
+    readonly property int notifMaxListHeight: 420
+
+    // =========================================================================
     // TYPE
     // =========================================================================
     // The OS installs Sora, Inter and JetBrains Mono as system fonts. In the
@@ -341,6 +373,17 @@ Singleton {
                                            // and the Flow Search footnote. There is
                                            // no body step this small on purpose —
                                            // it is only ever used for mono asides.
+
+    // --- two steps below the published scale ---------------------------------
+    // tokens/typography.css stops at caption (12px). The shell's popups go
+    // smaller than any page the token sheet was drawn for: QS tile subtitles
+    // (10.5px), slider labels (11px), notification body text (11.5px), the
+    // Flow Search footnote and keyboard hints (10.5px mono), and notification
+    // timestamps (10px mono). Rather than let components each invent their own
+    // 11, the two steps are named ONCE above — fsMicro and fsMonoSm. Three P2
+    // tracks arrived at them independently with three different roundings;
+    // they unified on 11 at the merge. If the design system ever publishes its
+    // own micro steps, re-point these rather than keeping a second opinion.
 
     // =========================================================================
     // MOTION

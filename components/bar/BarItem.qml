@@ -45,6 +45,12 @@ Item {
     // the interface tells, and those add up.
     property bool interactive: false
 
+    // Set to true while the thing this item opens is ON SCREEN. The pill then
+    // stays lit even after the pointer has moved away, which is what tells you
+    // which bar item the panel in front of you belongs to. Added for the
+    // notifications panel; every other item that opens a panel wants the same.
+    property bool active: false
+
     signal clicked()
 
     // Right-click. Only the system tray needs this: a StatusNotifierItem's menu
@@ -60,8 +66,8 @@ Item {
     Rectangle {
         anchors.fill: parent
         radius: Theme.barItemRadius
-        visible: root.interactive && (mouse.containsMouse || mouse.pressed)
-        color: mouse.pressed ? Theme.pressWash : Theme.hoverWash
+        visible: root.active || (root.interactive && (mouse.containsMouse || mouse.pressed))
+        color: (mouse.pressed || root.active) ? Theme.pressWash : Theme.hoverWash
     }
 
     Row {
