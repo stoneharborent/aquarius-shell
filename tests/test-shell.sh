@@ -18,6 +18,18 @@
 #   * the SVG assets are well-formed XML
 #   * the CI workflow is valid YAML
 #   * the shell scripts pass shellcheck (if shellcheck is installed)
+#   * the search palette's JavaScript stays plain JavaScript
+#   * the IPC summoning contract says the same thing everywhere it is written
+#
+# WHAT THIS CAN ACTUALLY RUN (added with the Flow Search palette)
+#   Section 12 is different in kind from everything above it. The search
+#   palette's two pieces of real logic — the fuzzy matcher and the calculator —
+#   are deliberately written as plain `.pragma library` JavaScript rather than
+#   as QML, which means `node` can load and EXECUTE them on a Mac.
+#   tests/search-js-tests.mjs does exactly that: ~70 assertions about what the
+#   matcher ranks first and what the calculator refuses to evaluate. Those are
+#   not structural checks. They are the first tests in this repository that run
+#   the actual code.
 #
 # WHAT THIS CANNOT CHECK, AND WHY
 #   Whether the QML is CORRECT. The tool for that is `qmllint`, which ships with
@@ -28,8 +40,9 @@
 #   via harness/run-nested.sh.
 #
 #   Be clear-eyed about the size of that gap. Passing every check in this file
-#   means the code is well-formed and internally consistent. It does not mean it
-#   draws a bar.
+#   means the code is well-formed and internally consistent, and that the search
+#   palette's matching and arithmetic behave. It does not mean it draws a bar,
+#   opens a palette, or takes a single keystroke.
 #
 # Run it by hand with:  ./tests/test-shell.sh
 # =============================================================================
@@ -72,6 +85,14 @@ for aq_file in \
     components/bar/ActiveAppName.qml \
     components/bar/BarClock.qml \
     components/bar/StatusCluster.qml \
+    components/search/FlowSearch.qml \
+    components/search/SearchEngine.qml \
+    components/search/SearchField.qml \
+    components/search/ResultRow.qml \
+    components/search/fuzzy.js \
+    components/search/calc.js \
+    docs/flow-search.md \
+    tests/search-js-tests.mjs \
     assets/logo.svg \
     assets/logo-mono.svg \
     harness/run-nested.sh \
@@ -387,6 +408,199 @@ if command -v shellcheck > /dev/null 2>&1; then
 else
     echo "  SKIP shellcheck is not installed; skipping the deeper script checks."
     echo "       Install with: brew install shellcheck"
+fi
+
+# ------------------------------------------------------------------------------
+echo ""
+echo "=== 12. the search palette's logic actually runs ==="
+# ------------------------------------------------------------------------------
+# Everything above this line inspects text. This runs code.
+#
+# components/search/fuzzy.js and components/search/calc.js are plain JavaScript
+# with one QML pragma at the top, which means node can execute them on a Mac.
+# tests/search-js-tests.mjs asserts what the matcher puts first and — the part
+# that matters most — every string the calculator must REFUSE, since it is fed
+# whatever a person types into a box holding the whole desktop's keyboard.
+
+if command -v node > /dev/null 2>&1; then
+    if node tests/search-js-tests.mjs; then
+        pass "the search matcher and calculator behave"
+    else
+        fail "the search logic tests failed (listed above)."
+    fi
+else
+    echo "  SKIP node is not installed; the search logic tests cannot run."
+    echo "       This is the only test in this repo that executes real code —"
+    echo "       install node and run it before trusting a change to fuzzy.js"
+    echo "       or calc.js."
+fi
+
+# ------------------------------------------------------------------------------
+echo ""
+echo "=== 13. the search JavaScript stays plain JavaScript ==="
+# ------------------------------------------------------------------------------
+# The two .js libraries are testable ONLY because they are pure functions with
+# no QML in them. The moment one reaches for Theme, Quickshell or qsTr, node can
+# no longer load it and section 12 quietly stops testing anything real. This
+# check is what stops that from happening silently.
+
+aq_js_ok=1
+for aq_js in components/search/fuzzy.js components/search/calc.js; do
+    if ! grep -q '^\.pragma library' "${aq_js}"; then
+        fail "${aq_js} is missing its '.pragma library' line." \
+             "Without it QML gives every importer its own copy, and the" \
+             "node test harness refuses to load it."
+        aq_js_ok=0
+    fi
+    # Comments are blanked first — these files EXPLAIN why they must not touch
+    # Quickshell, and a check that fails on its own rationale is a bad check.
+    # (Line comments only; neither file uses /* */ and neither should start.)
+    if sed -E 's,//.*,,' "${aq_js}" \
+        | grep -nE '(^|[^A-Za-z_.])(Theme|Quickshell|qsTr|Qt)[.(]' > /dev/null 2>&1; then
+        sed -E 's,//.*,,' "${aq_js}" \
+            | grep -nE '(^|[^A-Za-z_.])(Theme|Quickshell|qsTr|Qt)[.(]' \
+            | sed "s,^,       ${aq_js}:," || true
+        fail "${aq_js} reaches into QML." \
+             "These files must stay pure JavaScript so they can be executed" \
+             "and tested on a Mac. Move the QML part into a .qml file."
+        aq_js_ok=0
+    fi
+done
+
+if [ "${aq_js_ok}" -eq 1 ]; then
+    pass "fuzzy.js and calc.js are pure, testable JavaScript"
+fi
+
+# The brackets in the JavaScript, for the case where node is not installed and
+# section 12 skipped. Same idea as section 2, same reason.
+if python3 - components/search <<'PYTHON'
+import pathlib
+import sys
+
+root = pathlib.Path(sys.argv[1])
+bad = 0
+
+pairs = {'}': '{', ')': '(', ']': '['}
+openers = set(pairs.values())
+
+for path in sorted(root.rglob('*.js')):
+    text = path.read_text(encoding='utf-8')
+    out = []
+    i = 0
+    n = len(text)
+    while i < n:
+        c = text[i]
+        if c == '/' and i + 1 < n and text[i + 1] == '/':
+            while i < n and text[i] != '\n':
+                i += 1
+        elif c == '/' and i + 1 < n and text[i + 1] == '*':
+            i += 2
+            while i + 1 < n and not (text[i] == '*' and text[i + 1] == '/'):
+                i += 1
+            i += 2
+        elif c in ('"', "'", '`'):
+            quote = c
+            i += 1
+            while i < n and text[i] != quote:
+                if text[i] == '\\':
+                    i += 1
+                i += 1
+            i += 1
+        else:
+            out.append(c)
+            i += 1
+    stack = []
+    problem = None
+    for ch in ''.join(out):
+        if ch in openers:
+            stack.append(ch)
+        elif ch in pairs:
+            if not stack or stack[-1] != pairs[ch]:
+                problem = "an unexpected '%s'" % ch
+                break
+            stack.pop()
+    if problem is None and stack:
+        problem = "%d bracket(s) never closed" % len(stack)
+    if problem:
+        print("  FAIL %s: %s" % (path, problem))
+        bad += 1
+    else:
+        print("  OK   %s" % path)
+
+sys.exit(1 if bad else 0)
+PYTHON
+then
+    :
+else
+    fail "at least one search JavaScript file has unbalanced brackets."
+fi
+
+# ------------------------------------------------------------------------------
+echo ""
+echo "=== 14. the search palette can actually be summoned ==="
+# ------------------------------------------------------------------------------
+# A layer-shell client cannot bind a global key; the compositor does, and it
+# reaches the shell through Quickshell's IPC. That makes the exact command
+# string a CONTRACT between this repo and whoever writes the compositor config —
+# and a contract written down in three places drifts unless something checks it.
+#
+# The pieces: the handler's target must be `search`, it must expose toggle/open/
+# close, and the one command line must be spelled identically in the component,
+# in shell.qml and in the documentation.
+
+aq_ipc_call='qs ipc -c aquarius-shell call search toggle'
+
+if grep -q 'target: "search"' components/search/FlowSearch.qml; then
+    pass "the IPC handler's target is 'search'"
+else
+    fail "components/search/FlowSearch.qml no longer registers target \"search\"." \
+         "The compositor keybind calls that name. Changing it silently breaks" \
+         "the only way the palette can be opened from the keyboard."
+fi
+
+for aq_fn in toggle open close; do
+    if grep -qE "function ${aq_fn}\(\):" components/search/FlowSearch.qml; then
+        pass "the IPC handler exposes ${aq_fn}()"
+    else
+        fail "components/search/FlowSearch.qml no longer exposes ${aq_fn}()." \
+             "Quickshell only registers handler functions whose argument and" \
+             "return types are written out, so check the signature too."
+    fi
+done
+
+for aq_doc in components/search/FlowSearch.qml shell.qml docs/flow-search.md; do
+    if grep -qF "${aq_ipc_call}" "${aq_doc}"; then
+        pass "${aq_doc} spells the summoning command the same way"
+    else
+        fail "${aq_doc} does not contain the exact summoning command:" \
+             "  ${aq_ipc_call}" \
+             "All three must agree, or somebody will bind a key to a line that" \
+             "does nothing and spend an afternoon finding out why."
+    fi
+done
+
+# The law again, from the other direction. Quickshell DOES ship a GlobalShortcut
+# type — in Quickshell.Hyprland. Section 3 already fails on that import; this
+# says out loud why the search palette does not use the obvious thing.
+# Comments are blanked first, for the same reason as section 13: FlowSearch.qml
+# has a long comment about why it does NOT use GlobalShortcut, and a check that
+# fails on its own explanation would teach people to delete the explanation.
+aq_shortcut_ok=1
+while IFS= read -r aq_qml; do
+    if sed -E 's,//.*,,' "${aq_qml}" | grep -n 'GlobalShortcut' > /dev/null 2>&1; then
+        sed -E 's,//.*,,' "${aq_qml}" | grep -n 'GlobalShortcut' \
+            | sed "s,^,       ${aq_qml}:," || true
+        aq_shortcut_ok=0
+    fi
+done < <(find components shell.qml -name '*.qml')
+
+if [ "${aq_shortcut_ok}" -eq 1 ]; then
+    pass "no GlobalShortcut — summoning stays compositor-agnostic"
+else
+    fail "something uses GlobalShortcut." \
+         "The only GlobalShortcut in Quickshell 0.3.1 is Hyprland's, and it" \
+         "speaks a Hyprland-only protocol. Summoning goes through IpcHandler." \
+         "See the note at the top of components/search/FlowSearch.qml."
 fi
 
 # ------------------------------------------------------------------------------

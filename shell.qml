@@ -19,13 +19,24 @@
 import Quickshell
 
 import "components/bar"
+import "components/search"
 
 ShellRoot {
     TopBar {
-        // Both of these are wired up in Phase P2. Until then, clicking the
-        // Aquarius mark or the clock does nothing at all — which is honest, and
+        // Clicking the Aquarius mark opens the search palette. The clock is
+        // still Phase P2 work and still goes nowhere, which is honest and
         // better than a menu that opens onto an empty box.
-        onLauncherRequested: console.log("aquarius-shell: launcher requested (P2)")
+        onLauncherRequested: flowSearch.toggleSearch()
         onNotificationsRequested: console.log("aquarius-shell: notifications requested (P2)")
+    }
+
+    // The search palette. Invisible until something asks for it — the bar
+    // above, or the compositor's Super keybind through:
+    //
+    //     qs ipc -c aquarius-shell call search toggle
+    //
+    // See docs/flow-search.md for the whole contract.
+    FlowSearch {
+        id: flowSearch
     }
 }
