@@ -1,0 +1,171 @@
+// =============================================================================
+// The Aquarius Session, running on niri
+// =============================================================================
+// This is one of TWO compositor configurations in this folder. The other is
+// ../labwc/rc.xml. ADR 0001 left the choice open on purpose:
+//
+//   niri  — a scrollable-tiling compositor. Windows live on an infinite strip
+//           you scroll sideways, rather than in overlapping stacks. It is the
+//           more opinionated choice and the more interesting one for the
+//           handheld idea.
+//   labwc — a plain stacking compositor. Windows overlap, like every desktop
+//           you have used. Boring on purpose, and Budgie ships on it.
+//
+// The bench run decides. Switch with one word:
+//     echo labwc > ~/.config/aquarius-session/compositor
+//
+// -----------------------------------------------------------------------------
+// TWO RULES THIS FILE OBEYS
+// -----------------------------------------------------------------------------
+// 1. NO COLOURS. Not one. Colour in this project lives in theme/Ice.qml and
+//    theme/Midnight.qml and nowhere else, and a compositor config is very much
+//    "somewhere else". So niri's focus ring, borders and overview backdrop are
+//    left at its own defaults. They will look like niri, because they ARE niri,
+//    and that is honest until the shell owns that chrome itself. Do not add
+//    active-color / inactive-color lines here to "match the theme" — that is
+//    exactly the drift the one-source-of-truth rule exists to prevent.
+//
+// 2. NO PATHS. There is no path to the shell anywhere below. The shell is
+//    started with a bare `qs`, which works because ../aquarius-session exports
+//    QS_CONFIG_PATH before starting niri. That keeps this file identical on
+//    every machine.
+//
+// -----------------------------------------------------------------------------
+// KEY BINDINGS ADDED BY US (everything else below is stock niri)
+// -----------------------------------------------------------------------------
+//   Mod+Space   open/close the Aquarius search palette (the shell's own IPC)
+//
+// "Mod" is niri's word for Super (the Windows/Command key) when it is running
+// as the real compositor, and Alt when it is running nested in a window. That
+// is niri's own behaviour, not ours, and it is why the nested harness and the
+// real session feel slightly different.
+//
+// Format reference: https://kdl.dev — "/-" comments out the node after it.
+// =============================================================================
+
+input {
+    keyboard {
+        xkb {
+            // Left empty on purpose. niri then takes the keyboard layout from
+            // the system setting (org.freedesktop.locale1), which is the one
+            // the user already chose when they installed the OS.
+        }
+        numlock
+    }
+
+    touchpad {
+        tap
+        natural-scroll
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Layout
+// -----------------------------------------------------------------------------
+// Gaps and widths only. No colours — see rule 1 at the top.
+layout {
+    gaps 8
+
+    // Where a new window lands on the strip: centred, so opening something
+    // does not shove the thing you were reading off the edge.
+    center-focused-column "on-overflow"
+
+    default-column-width { proportion 0.5; }
+}
+
+// -----------------------------------------------------------------------------
+// Start the shell
+// -----------------------------------------------------------------------------
+// A bare `qs`. See rule 2 at the top: QS_CONFIG_PATH is already exported.
+//
+// If the shell crashes, niri keeps running and you keep your windows — you get
+// a session with no bar, which is ugly but survivable, and `qs` from a terminal
+// brings it back. That is deliberately better than the alternative, where a
+// broken bar logs you out.
+spawn-at-startup "qs"
+
+// -----------------------------------------------------------------------------
+// Session chrome
+// -----------------------------------------------------------------------------
+// niri normally pops up a hotkey cheat-sheet on every start. Useful the first
+// time, an interruption the twentieth.
+hotkey-overlay {
+    skip-at-startup
+}
+
+// Ask applications to let the compositor draw their title bars rather than
+// drawing their own. Fewer competing visual languages on screen.
+prefer-no-csd
+
+screenshot-path "~/Pictures/Screenshots/Aquarius %Y-%m-%d %H-%M-%S.png"
+
+// Environment variables for everything niri starts. Normally empty, because
+// ../aquarius-session has already set what matters before niri was launched.
+// Kept here, and empty, as the documented place to put one if you ever need to.
+/-environment {
+    EXAMPLE_VARIABLE "value"
+}
+
+// =============================================================================
+// Key bindings
+// =============================================================================
+binds {
+    // ---- the one binding that is ours -------------------------------------
+    //
+    // The Aquarius search palette. This does not launch a program: it sends a
+    // message to the shell that is ALREADY running, telling it to show or hide
+    // its search box.
+    //
+    // `qs ipc call <target> <function> <argument>` is Quickshell's own
+    // mechanism for talking to a running configuration. The target name
+    // "aquarius-shell" is declared by an IpcHandler inside the shell.
+    //
+    // No path is needed on `qs` here for the same reason as everywhere else:
+    // QS_CONFIG_PATH is in the environment niri inherited.
+    //
+    // UNVERIFIED: the exact function/argument spelling comes from the search
+    // branch and has not been run together with this file yet. If the palette
+    // does not open, ask the running shell what it actually offers:
+    //     qs ipc show
+    Mod+Space hotkey-overlay-title="Aquarius Search" {
+        spawn "qs" "ipc" "call" "aquarius-shell" "search" "toggle";
+    }
+
+    // ---- stock niri, kept minimal on purpose ------------------------------
+    Mod+Shift+Slash { show-hotkey-overlay; }
+
+    // A terminal. The fallback chain is not elegance, it is honesty: Fedora
+    // has moved between GNOME Console (kgx) and Ptyxis, and xdg-terminal-exec
+    // is the standard way to ask "whatever this machine calls a terminal".
+    Mod+Return hotkey-overlay-title="Terminal" {
+        spawn-sh "xdg-terminal-exec || ptyxis --new-window || kgx || xterm";
+    }
+
+    Mod+Q repeat=false { close-window; }
+    Mod+F repeat=false { maximize-column; }
+    Mod+Shift+F repeat=false { fullscreen-window; }
+
+    // The overview: a zoomed-out view of every workspace and window.
+    Mod+O repeat=false { toggle-overview; }
+
+    // Moving the focus around the strip.
+    Mod+Left  { focus-column-left; }
+    Mod+Right { focus-column-right; }
+    Mod+Up    { focus-window-up; }
+    Mod+Down  { focus-window-down; }
+
+    // Moving the window itself.
+    Mod+Ctrl+Left  { move-column-left; }
+    Mod+Ctrl+Right { move-column-right; }
+    Mod+Ctrl+Up    { move-window-up; }
+    Mod+Ctrl+Down  { move-window-down; }
+
+    // Screenshots. niri takes these itself, without a portal, which makes them
+    // a useful control when testing whether the PORTAL-based screen capture
+    // (OBS and friends) is working: if this works and OBS does not, the problem
+    // is the portal, not the compositor.
+    Print { screenshot; }
+
+    // Leave the session and go back to the login screen.
+    Mod+Shift+E { quit; }
+}

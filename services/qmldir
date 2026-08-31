@@ -1,1 +1,2 @@
 singleton FocusState FocusState.qml
+singleton SystemAppearance 1.0 SystemAppearance.qml

@@ -171,4 +171,8 @@ It is **not** the AquariusOS desktop. It is a window with a small desktop in it,
 for building and looking at the shell.
 
 The real thing — this shell as a login session you can pick at the login screen,
-next to GNOME — is **Phase P2**. See `../docs/ROADMAP.md`.
+next to GNOME — is **Phase P2**. It lives in `../session/`, and the step-by-step
+walkthrough is **[`../docs/session.md`](../docs/session.md)**.
+
+Do the harness first. If the bar does not draw in a window, nothing on that page
+will help.

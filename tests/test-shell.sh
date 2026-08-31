@@ -389,6 +389,263 @@ else
     echo "       Install with: brew install shellcheck"
 fi
 
+# ==============================================================================
+# THE SESSION (session/) — checks 12 to 17
+# ==============================================================================
+# Everything below is about session/: the files that let a Linux box log INTO
+# the Aquarius Shell rather than run it in a window. It is appended rather than
+# folded into the checks above so that the original checks keep working exactly
+# as they did.
+#
+# The same honesty applies here as everywhere: these confirm the files exist,
+# parse, and obey the project's rules. They cannot confirm that a compositor
+# starts, that a portal answers, or that the login screen shows the session.
+# Only docs/session.md's bench walkthrough can do that.
+
+# ------------------------------------------------------------------------------
+echo ""
+echo "=== 12. every file the session needs exists ==="
+# ------------------------------------------------------------------------------
+# A session that is missing one file does not half-start. It gives you a black
+# screen and sends you back to the login prompt with no explanation, which is
+# the least debuggable failure in this whole project.
+
+for aq_file in \
+    session/README.md \
+    session/aquarius-session \
+    session/aquarius.desktop \
+    session/install-session.sh \
+    session/niri/config.kdl \
+    session/labwc/rc.xml \
+    session/labwc/autostart \
+    session/labwc/shutdown \
+    session/labwc/environment \
+    session/portals/aquarius-niri-portals.conf \
+    session/portals/aquarius-labwc-portals.conf \
+    services/SystemAppearance.qml \
+    docs/session.md
+do
+    if [ -f "${aq_file}" ]; then
+        pass "${aq_file}"
+    else
+        fail "${aq_file} is missing."
+    fi
+done
+
+# ------------------------------------------------------------------------------
+echo ""
+echo "=== 13. the session's structured files parse ==="
+# ------------------------------------------------------------------------------
+# The labwc configuration is XML and the portal configurations are INI. Both
+# fail SILENTLY when malformed — labwc falls back to its defaults, and
+# xdg-desktop-portal simply picks a different back end — so a typo in either
+# shows up as "screen recording does nothing" rather than as an error.
+
+if python3 -c "import xml.etree.ElementTree as e,sys; e.parse(sys.argv[1])" \
+        session/labwc/rc.xml 2>/dev/null; then
+    pass "session/labwc/rc.xml is well-formed XML"
+else
+    fail "session/labwc/rc.xml is not well-formed XML."
+fi
+
+if python3 - <<'PYTHON'
+import configparser
+import pathlib
+import sys
+
+bad = 0
+for path in sorted(pathlib.Path('session/portals').glob('*-portals.conf')):
+    parser = configparser.ConfigParser()
+    # Portal keys are case-sensitive interface names like
+    # org.freedesktop.impl.portal.ScreenCast. configparser lower-cases keys by
+    # default, which would make this check pass on a file the portal cannot use.
+    parser.optionxform = str
+    try:
+        parser.read_string(path.read_text(encoding='utf-8'))
+    except Exception as exc:
+        print("  FAIL %s: %s" % (path, exc))
+        bad += 1
+        continue
+
+    if not parser.has_section('preferred'):
+        print("  FAIL %s: no [preferred] section" % path)
+        bad += 1
+        continue
+
+    if not parser.has_option('preferred', 'default'):
+        print("  FAIL %s: [preferred] has no 'default' key" % path)
+        bad += 1
+        continue
+
+    print("  OK   %s ([preferred] default=%s)"
+          % (path, parser.get('preferred', 'default')))
+
+sys.exit(1 if bad else 0)
+PYTHON
+then
+    :
+else
+    fail "a portal configuration is malformed (listed above)."
+fi
+
+# The .desktop entry is also INI, and needs three specific keys or the login
+# screen ignores it without comment.
+if python3 - <<'PYTHON'
+import configparser
+import sys
+
+parser = configparser.ConfigParser()
+parser.optionxform = str
+parser.read('session/aquarius.desktop', encoding='utf-8')
+
+if not parser.has_section('Desktop Entry'):
+    print("  FAIL session/aquarius.desktop: no [Desktop Entry] section")
+    sys.exit(1)
+
+missing = [k for k in ('Name', 'Exec', 'Type')
+           if not parser.has_option('Desktop Entry', k)]
+if missing:
+    print("  FAIL session/aquarius.desktop: missing %s" % ", ".join(missing))
+    sys.exit(1)
+
+print("  OK   session/aquarius.desktop (%s -> %s)"
+      % (parser.get('Desktop Entry', 'Name'),
+         parser.get('Desktop Entry', 'Exec')))
+PYTHON
+then
+    :
+else
+    fail "session/aquarius.desktop is not a usable desktop entry (above)."
+fi
+
+# ------------------------------------------------------------------------------
+echo ""
+echo "=== 14. the niri configuration's braces balance ==="
+# ------------------------------------------------------------------------------
+# The niri config is KDL, and the real checker for it is `niri validate`, which
+# needs niri and therefore Linux. This is the same trick as check 2: strip the
+# comments and strings, then count the braces. It catches the one mistake that
+# is easy to make and impossible to see.
+
+if python3 - <<'PYTHON'
+import pathlib
+import re
+import sys
+
+text = pathlib.Path('session/niri/config.kdl').read_text(encoding='utf-8')
+
+# KDL raw strings look like r#"...."#, and can contain anything including
+# braces and quote marks. Remove them first, then ordinary strings, then
+# comments — in that order, so a // inside a string is not mistaken for one.
+text = re.sub(r'r#+"(?:.|\n)*?"#+', '""', text)
+text = re.sub(r'"(?:[^"\\]|\\.)*"', '""', text)
+text = re.sub(r'/\*(?:.|\n)*?\*/', '', text)
+text = re.sub(r'//[^\n]*', '', text)
+
+depth = 0
+problem = None
+for char in text:
+    if char == '{':
+        depth += 1
+    elif char == '}':
+        depth -= 1
+        if depth < 0:
+            problem = "an unexpected '}'"
+            break
+
+if problem is None and depth != 0:
+    problem = "%d brace(s) never closed" % depth
+
+if problem:
+    print("  FAIL session/niri/config.kdl: %s" % problem)
+    sys.exit(1)
+
+print("  OK   session/niri/config.kdl")
+PYTHON
+then
+    :
+else
+    fail "session/niri/config.kdl has unbalanced braces (listed above)." \
+         "The real check is 'niri validate -c session/niri/config.kdl'," \
+         "which needs a Linux machine with niri installed."
+fi
+
+# ------------------------------------------------------------------------------
+echo ""
+echo "=== 15. the colour rule reaches the session files too ==="
+# ------------------------------------------------------------------------------
+# Check 4 keeps hex colours out of components/. The same rule applies to the
+# compositor configurations, and the temptation there is stronger: both niri and
+# labwc will happily take an Aquarius blue for their focus ring, and the moment
+# one of them has it, "the Aquarius blue" lives in two places and starts to
+# drift. The compositors' own chrome stays at their own defaults until the shell
+# owns it.
+
+if grep -rn -E '#[0-9A-Fa-f]{3,8}\b' \
+        session/niri session/labwc session/portals > /dev/null 2>&1; then
+    grep -rn -E '#[0-9A-Fa-f]{3,8}\b' \
+        session/niri session/labwc session/portals || true
+    fail "a session configuration contains what looks like a hex colour." \
+         "Colour belongs in theme/Ice.qml and theme/Midnight.qml only." \
+         "Leave the compositor's own chrome at the compositor's defaults."
+else
+    pass "no colours in the compositor or portal configurations"
+fi
+
+# ------------------------------------------------------------------------------
+echo ""
+echo "=== 16. no machine-specific paths in the session files ==="
+# ------------------------------------------------------------------------------
+# Check 8 does this for .qml, .sh and .yml. The session adds four more file
+# types, and they are exactly the ones where a stray path does the most damage:
+# a compositor config naming somebody's home directory works on one laptop.
+#
+# The design that avoids it: no session config names the shell's location at
+# all. They start it with a bare `qs`, and QS_CONFIG_PATH does the rest.
+
+if grep -rn -E '(/Users/|/home/[a-z]|/private/tmp/|/var/folders/)' \
+        session/niri session/labwc session/portals session/aquarius.desktop \
+        > /dev/null 2>&1; then
+    grep -rn -E '(/Users/|/home/[a-z]|/private/tmp/|/var/folders/)' \
+        session/niri session/labwc session/portals session/aquarius.desktop || true
+    fail "a session file contains an absolute path to somebody's machine."
+else
+    pass "no machine-specific paths in the session configurations"
+fi
+
+# ------------------------------------------------------------------------------
+echo ""
+echo "=== 17. the session scripts hold up ==="
+# ------------------------------------------------------------------------------
+# aquarius-session has no .sh on the end, because it is a command a person
+# types and the login screen runs — but it is still bash, and shellcheck reads
+# the shebang.
+
+for aq_sh in session/aquarius-session session/install-session.sh; do
+    if bash -n "${aq_sh}" 2>/dev/null; then
+        pass "${aq_sh} parses"
+    else
+        fail "${aq_sh} is not valid bash."
+    fi
+    if [ -x "${aq_sh}" ]; then
+        pass "${aq_sh} is executable"
+    else
+        fail "${aq_sh} is not executable." \
+             "The login screen cannot run a file it is not allowed to run." \
+             "Run:  chmod +x ${aq_sh}"
+    fi
+done
+
+if command -v shellcheck > /dev/null 2>&1; then
+    if shellcheck session/aquarius-session session/install-session.sh; then
+        pass "shellcheck is happy with the session scripts"
+    else
+        fail "shellcheck found problems in the session scripts (above)."
+    fi
+else
+    echo "  SKIP shellcheck is not installed; skipping the session scripts."
+fi
+
 # ------------------------------------------------------------------------------
 echo ""
 echo "=== 12. the dock's files exist ==="

@@ -1,0 +1,31 @@
+# =============================================================================
+# labwc environment — variables for everything labwc starts
+# =============================================================================
+# This file is NOT a shell script. labwc parses it itself, one NAME=value per
+# line, so that the values can be reloaded when labwc is reconfigured. A line
+# starting with '#' is a comment; trailing comments are not supported.
+#
+# It is nearly empty on purpose. Everything that matters — XDG_CURRENT_DESKTOP,
+# XDG_SESSION_TYPE, QS_CONFIG_PATH, QT_QPA_PLATFORM — is already set by
+# ../aquarius-session before labwc is ever started, and labwc inherits it.
+# Setting the same variable in two places is how they end up disagreeing.
+#
+# The two things worth knowing:
+#
+#   * XDG_CURRENT_DESKTOP. labwc sets this to "labwc:wlroots" by default, but
+#     ONLY if it is not already set. ../aquarius-session sets it first, to
+#     "aquarius-labwc:aquarius:wlroots", and that is deliberate: it is the name
+#     xdg-desktop-portal uses to find our portal configuration. Do not override
+#     it here — you would break screen recording without any warning.
+#
+#   * GDK_BACKEND. Never set it. It breaks the screencast portal.
+#
+# Uncomment and edit below only for genuinely machine-local things.
+# =============================================================================
+
+# Keyboard layout, if the system setting is not what you want:
+# XKB_DEFAULT_LAYOUT=se
+
+# Cursor theme and size:
+# XCURSOR_THEME=Adwaita
+# XCURSOR_SIZE=24
