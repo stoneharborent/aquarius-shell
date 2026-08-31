@@ -8,9 +8,9 @@
 //
 //     qs -p /path/to/aquarius-shell
 //
-// Right now there is exactly one thing: the top bar. Phase P2 adds the dock,
-// Quick Settings, notifications and the Flow Search palette, and each one will
-// be another line in this file. See docs/ROADMAP.md.
+// The table of contents so far: the top bar (P1), then P2's dock, Quick
+// Settings and the Flow Search palette. Notifications are the last P2 piece
+// still to land. See docs/ROADMAP.md.
 //
 // KEEP THIS FILE SHORT. It is the table of contents for the whole shell, and a
 // table of contents stops being useful the moment it has logic in it. Anything
@@ -20,13 +20,14 @@ import Quickshell
 
 import "components/bar"
 import "components/dock"
+import "components/search"
 
 ShellRoot {
     TopBar {
-        // Both of these are wired up in Phase P2. Until then, clicking the
-        // Aquarius mark or the clock does nothing at all — which is honest, and
+        // Clicking the Aquarius mark opens the search palette. The clock is
+        // still Phase P2 work and still goes nowhere, which is honest and
         // better than a menu that opens onto an empty box.
-        onLauncherRequested: console.log("aquarius-shell: launcher requested (P2)")
+        onLauncherRequested: flowSearch.toggleSearch()
         onNotificationsRequested: console.log("aquarius-shell: notifications requested (P2)")
 
         // Quick Settings is REAL — it opens from the bar's status cluster, on
@@ -39,11 +40,21 @@ ShellRoot {
     }
 
     Dock {
-        // The dashed "+" tile at the end of the dock. It is meant to open Flow
-        // Search — the full-screen app grid — which is being built separately
-        // and is not imported here. This is the documented seam; connect it
-        // when that lands. `qs ipc call dock openAppGrid` fires the same
-        // signal from outside the process. See docs/dock.md.
-        onAppGridRequested: console.log("aquarius-shell: app grid requested (P2)")
+        // The dashed "+" tile. The full-screen app grid it was drawn for does
+        // not exist yet, so it opens the nearest real thing: the search
+        // palette, which launches apps today and grows into the grid later.
+        // `qs ipc call dock openAppGrid` fires the same signal from outside.
+        // See docs/dock.md.
+        onAppGridRequested: flowSearch.toggleSearch()
+    }
+
+    // The search palette. Invisible until something asks for it — the bar or
+    // dock above, or the compositor's Super keybind through:
+    //
+    //     qs ipc -c aquarius-shell call search toggle
+    //
+    // See docs/flow-search.md for the whole contract.
+    FlowSearch {
+        id: flowSearch
     }
 }
