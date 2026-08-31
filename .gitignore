@@ -1,0 +1,51 @@
+# =============================================================================
+# Things that must never be committed
+# =============================================================================
+# This repo is mostly plain text that Quickshell reads directly — there is no
+# build step and therefore very little to ignore. Most of what follows is junk
+# that other programs leave lying around.
+
+# --- macOS and iCloud --------------------------------------------------------
+# This folder lives inside iCloud Drive, and iCloud is untidy. `.DS_Store` is
+# Finder's own bookkeeping. The "* 2" pattern catches iCloud's sync-conflict
+# copies, which have bitten this project before: see the iCloud warnings in
+# ../CLAUDE.md. If you ever find a file here you did not create, check whether it
+# is a resurrected copy of something git already deleted BEFORE assuming it is
+# somebody's work in progress.
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon?
+._*
+* 2
+* 2.*
+*\ 2
+
+# --- Editors -----------------------------------------------------------------
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.qmlls.ini
+
+# --- Qt / QML ----------------------------------------------------------------
+# We ship no compiled artefacts, but Qt Creator and the QML tooling scatter
+# these around if anybody opens the folder with them.
+*.qmlc
+*.jsc
+.qmlcache/
+build/
+build-*/
+CMakeLists.txt.user*
+
+# --- Quickshell runtime ------------------------------------------------------
+# Quickshell keeps per-configuration state and cache folders of its own. They
+# belong to the machine running the shell, not to the shell.
+.cache/
+.state/
+
+# --- Logs and scratch --------------------------------------------------------
+*.log
+*.tmp
+scratch/
