@@ -1,0 +1,134 @@
+# =============================================================================
+# The first automated QML validation this project has ever had
+# =============================================================================
+# Worth saying plainly, because it is easy to assume otherwise: every Plasma
+# widget AquariusOS has shipped so far went out SYNTAX-UNVERIFIED. The checker in
+# os-image/tests/test-aquarius-plasmoid.sh counts brackets — which is a real
+# check, and it is all that was possible, because `qmllint` needs Qt installed
+# and the repo is written on a Mac. No QML engine has ever looked at any of it
+# before it reached a user's machine.
+#
+# This workflow ends that. It runs on a Fedora container, installs the real Qt
+# QML tooling, and runs `qmllint` — the actual QML compiler front-end — over
+# every file in this repo.
+#
+# ---------------------------------------------------------------------------
+# THIS WORKFLOW IS DORMANT
+# ---------------------------------------------------------------------------
+# aquarius-shell is a LOCAL git repository. It has no GitHub remote and has been
+# pushed nowhere. GitHub Actions therefore never runs any of this today.
+#
+# It is written now, before it can run, for one reason: the day this repo does
+# get a remote, the checks should already exist. A repo that arrives on GitHub
+# with CI is a repo where the first pull request is checked. A repo that arrives
+# without it usually stays without it.
+#
+# Until then, run the Mac-side checks by hand:
+#
+#     ./tests/test-shell.sh
+#
+# Nothing here needs the network from macOS, an account, or a secret. It becomes
+# live the moment a remote exists, with no edits.
+# ---------------------------------------------------------------------------
+
+name: Lint
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # The checks that need nothing installed. Fast, and they run on every push.
+  # ---------------------------------------------------------------------------
+  structure:
+    name: Structure, theme rules and scripts
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Get the code
+        uses: actions/checkout@v4
+
+      - name: Install shellcheck
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y shellcheck
+
+      - name: Install PyYAML so the workflow files get parse-checked too
+        run: python3 -m pip install --user pyyaml
+
+      # This is the same script a person runs on their own machine. One script,
+      # one set of rules — CI must never be able to disagree with the desk.
+      - name: Run the repo checks
+        run: ./tests/test-shell.sh
+
+  # ---------------------------------------------------------------------------
+  # The real thing: Qt's own QML checker.
+  # ---------------------------------------------------------------------------
+  qmllint:
+    name: qmllint (Fedora + Qt 6)
+    runs-on: ubuntu-latest
+
+    # Fedora, because that is what AquariusOS is built on — so the Qt version
+    # here is the Qt version the shell will actually run against, rather than
+    # whatever Ubuntu happens to ship.
+    container:
+      image: fedora:latest
+
+    steps:
+      - name: Install Qt's QML tools and Quickshell
+        run: |
+          set -euxo pipefail
+
+          # qt6-qtdeclarative-devel is the package that contains `qmllint`,
+          # `qmlformat` and the QML language server.
+          dnf install -y --setopt=install_weak_deps=False \
+            qt6-qtdeclarative-devel \
+            qt6-qtdeclarative \
+            qt6-qtsvg \
+            git
+
+          # Quickshell provides the Quickshell, Quickshell.Wayland and
+          # Quickshell.Services.* modules our files import. Without it, qmllint
+          # cannot resolve those imports and reports every use of PanelWindow,
+          # Theme and friends as unknown.
+          #
+          # It is in Fedora proper, but has only been there since recent
+          # releases, so fall back to the COPR that carries it for older ones.
+          # `|| true` on the first attempt keeps a missing package from failing
+          # the job before the fallback gets its turn.
+          dnf install -y quickshell || {
+            dnf install -y dnf-plugins-core
+            dnf copr enable -y errornointernet/quickshell
+            dnf install -y quickshell
+          }
+
+      - name: Get the code
+        uses: actions/checkout@v4
+
+      - name: Show which versions we are checking against
+        run: |
+          qmllint --version || true
+          qs --version || true
+          rpm -q qt6-qtdeclarative quickshell || true
+
+      - name: Run qmllint over every QML file
+        run: |
+          set -euo pipefail
+
+          # -I adds an import path. QML needs to be told where our own modules
+          # live, or `import "../../theme"` and the singletons in it cannot be
+          # resolved and every use of Theme is reported as an unknown name.
+          #
+          # Quickshell installs its own QML modules into the system import path,
+          # so those resolve without help.
+          find . -name '*.qml' -not -path './.git/*' -print0 \
+            | xargs -0 qmllint -I . -I ./theme -I ./components
+
+      # A warning-free `qmllint` is the goal, but on a first run against a
+      # pre-1.0 toolkit some warnings will be about Quickshell's own type
+      # information rather than about our code. If that turns out to be noisy,
+      # the honest fix is a `.qmllint.ini` in the repo listing exactly which
+      # warnings are disabled and why — NOT quietly dropping the step.
