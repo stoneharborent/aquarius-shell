@@ -32,8 +32,11 @@
 //   rather than once a second when it knows you are not showing seconds.
 //   (https://quickshell.org/docs/v0.3.1/types/Quickshell/SystemClock/)
 //
-// P2 will hang the notifications panel off a click here. For now the click is
-// wired to a signal that goes nowhere, so the shape of the thing is right.
+// P2 HANGS THE NOTIFICATIONS PANEL OFF A CLICK HERE.
+//   The click emits `activated()`; TopBar turns that into
+//   `notificationsRequested()`; shell.qml opens the panel. This file does not
+//   know what a notification is and should not — it knows it was clicked.
+//   The panel itself is components/notifications/, and docs/notifications.md.
 // =============================================================================
 import QtQuick
 
@@ -53,6 +56,8 @@ BarItem {
     Accessible.role: Accessible.Button
     Accessible.name: qsTr("Clock and notifications")
     Accessible.description: dateLabel.text + " " + timeLabel.text
+    Accessible.checkable: true
+    Accessible.checked: root.active
 
     // Ticks once a minute. Seconds would be 60x the wake-ups for information
     // nobody reads off a bar.

@@ -57,9 +57,15 @@ Scope {
     // (the full-screen launcher) off this. Today it goes nowhere.
     signal launcherRequested()
 
-    // Emitted when somebody clicks the clock. P2 hangs notifications + calendar
-    // off this.
+    // Emitted when somebody clicks the clock. shell.qml hangs the notifications
+    // panel off this.
     signal notificationsRequested()
+
+    // Set by shell.qml while that panel is on screen, so the clock stays lit
+    // and a screen reader can say the button is pressed. The bar does not own
+    // the panel and must not try to — it reports a click and is told what
+    // happened.
+    property bool notificationsOpen: false
 
     Variants {
         model: Quickshell.screens
@@ -132,6 +138,7 @@ Scope {
                 StatusCluster {}
 
                 BarClock {
+                    active: root.notificationsOpen
                     onActivated: root.notificationsRequested()
                 }
             }
