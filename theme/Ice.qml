@@ -59,6 +59,19 @@ Singleton {
     readonly property color hoverWash: "#1416273A"   // ink at 8%
     readonly property color pressWash: "#2116273A"   // ink at 13%
 
+    // --- Overlays ---------------------------------------------------------------
+    // `scrim` is the dim laid over the whole desktop behind a modal surface —
+    // today that is only the Flow Search palette. The V2 artboard dims with
+    // rgba(6,7,12,.45), a near-black at 45%, because V2 was a dark design. Ice
+    // is light, so the same idea is spelled as the ink navy at 35%: enough to
+    // push the desktop back without turning a light desktop into a dark one.
+    readonly property color scrim: "#5916273A"       // ink at 35%
+
+    // `accentWash` is the accent laid UNDER something rather than as its fill —
+    // the selected row in a list. The design's rgba(138,180,255,.14), in Ice's
+    // own accent. It is the accent's counterpart to hoverWash.
+    readonly property color accentWash: "#242C8FC4"  // aquariusBlue at 14%
+
     // --- Semantic colours, tuned for a light ground ----------------------------
     readonly property color success: "#1F9E8C"
     readonly property color warn: "#C2792E"

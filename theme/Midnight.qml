@@ -47,6 +47,13 @@ Singleton {
     readonly property color hoverWash: "#14DCE9F4"   // ink at 8%
     readonly property color pressWash: "#21DCE9F4"   // ink at 13%
 
+    // --- Overlays -----------------------------------------------------------------
+    // Ice's twin of the same two roles — read Ice.qml for what they are for.
+    // Midnight dims harder than Ice (60% against 35%) because a dark desktop
+    // under a dark panel needs more separation to read as "behind" at all.
+    readonly property color scrim: "#990B1220"       // bg navy at 60%
+    readonly property color accentWash: "#2400BFFF"  // aquariusBlue at 14%
+
     // --- Semantic colours, tuned for a dark ground -------------------------------
     readonly property color success: "#5FC9B0"
     readonly property color warn: "#E0A35A"

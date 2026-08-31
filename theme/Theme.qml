@@ -69,6 +69,9 @@ Singleton {
     readonly property color hoverWash: root.colors.hoverWash
     readonly property color pressWash: root.colors.pressWash
 
+    readonly property color scrim: root.colors.scrim
+    readonly property color accentWash: root.colors.accentWash
+
     readonly property color success: root.colors.success
     readonly property color warn: root.colors.warn
     readonly property color danger: root.colors.danger
@@ -123,6 +126,49 @@ Singleton {
     readonly property int hairline: 1            // every 1px rule in the shell
 
     // =========================================================================
+    // THE FLOW SEARCH PALETTE — measured off the V2 artboard
+    // =========================================================================
+    // Source: "AquariusOS Shell Search.html", which is an iframe onto
+    // "AquariusOS Desktop Shell.html#search". The numbers below are that
+    // drawing's numbers, read straight out of its inline styles:
+    //
+    //   .panel  { left:50%; top:170px; width:560px; padding:8px; radius:12px }
+    //   header  { padding:12px 14px; gap:12px; border-bottom:1px }
+    //   list    { padding:6px 2px }
+    //   .res    { padding:10px 14px; gap:12px; border-radius:10px }
+    //   .res .ri{ width:30px; height:30px; border-radius:8px }
+    //   .res kbd{ border-radius:5px; padding:2px 6px }
+    //   footer  { padding:9px 14px; border-top:1px }
+    //
+    // Same reasoning as the top bar above: these are artboard numbers rather
+    // than ladder numbers, and they live here so no component types them.
+    readonly property int searchWidth: 560           // the palette's width
+    readonly property int searchTop: 170             // its distance from the top of the screen
+    readonly property int searchPanelPadding: 8      // space inside the panel's edge
+    readonly property int searchIconSize: 17         // the magnifier at the left of the field
+
+    readonly property int searchFieldPaddingH: 14
+    readonly property int searchFieldPaddingV: 12
+    readonly property int searchFieldGap: 12
+
+    readonly property int searchListPaddingH: 2
+    readonly property int searchListPaddingV: 6
+
+    readonly property int searchRowPaddingH: 14
+    readonly property int searchRowPaddingV: 10
+    readonly property int searchRowGap: 12
+    readonly property int searchRowRadius: 10
+    readonly property int searchRowIconSize: 30
+    readonly property int searchRowIconRadius: 8
+
+    readonly property int searchHintPaddingH: 6
+    readonly property int searchHintPaddingV: 2
+    readonly property int searchHintRadius: 5
+
+    readonly property int searchFooterPaddingH: 14
+    readonly property int searchFooterPaddingV: 9
+
+    // =========================================================================
     // TYPE
     // =========================================================================
     // The OS installs Sora, Inter and JetBrains Mono as system fonts. In the
@@ -149,6 +195,10 @@ Singleton {
     readonly property int fsSmall: 14      // design says 13.5px; Qt wants a whole number
     readonly property int fsCaption: 12    // <- the top bar's size
     readonly property int fsMono: 13       // design says 12.5px; same rounding
+    readonly property int fsMonoSm: 11     // design says 10.5px; the keyboard hints
+                                           // and the Flow Search footnote. There is
+                                           // no body step this small on purpose —
+                                           // it is only ever used for mono asides.
 
     // =========================================================================
     // MOTION
