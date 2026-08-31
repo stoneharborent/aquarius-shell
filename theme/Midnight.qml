@@ -61,4 +61,13 @@ Singleton {
     readonly property color aquamarine: "#7FFFD4"
 
     readonly property color onAccent: "#08121E"
+
+    // The accent as a wash. Ice's twin — see the long note beside `accentWash`
+    // in Ice.qml for what it is for and the one thing it does not do.
+    //
+    // Midnight's accent is a much brighter blue than Ice's, so the SAME 16%
+    // that reads as a gentle tint on white would glare on deep navy. It is
+    // dialled back to 12% here on purpose; the two are meant to look equally
+    // quiet, not to carry equal numbers.
+    readonly property color accentWash: "#1F00BFFF"  // aquariusBlue at 12%
 }
