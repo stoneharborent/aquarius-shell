@@ -1,0 +1,23 @@
+# =============================================================================
+# theme/qmldir — tells QML that these three files are SINGLETONS
+# =============================================================================
+# A "singleton" is a thing there is exactly one of, that anything can reach
+# without being handed a reference to it. Theme, Ice and Midnight are all
+# singletons because a desktop with two disagreeing copies of the palette is
+# a desktop with a bug.
+#
+# QML will not treat a file as a singleton on the strength of the `pragma
+# Singleton` line inside it alone — it also has to be listed here, in a plain
+# text file, in this exact shape:
+#
+#     singleton <TypeName> <version> <FileName>
+#
+# Forget this file and the shell fails at start-up with "Ice is not a type",
+# which is a confusing way to be told "you did not write it down here".
+#
+# This directory is pulled in by `import "../../theme"` from the components.
+# =============================================================================
+
+singleton Ice 1.0 Ice.qml
+singleton Midnight 1.0 Midnight.qml
+singleton Theme 1.0 Theme.qml
