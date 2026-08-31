@@ -72,6 +72,28 @@ for aq_file in \
     components/bar/ActiveAppName.qml \
     components/bar/BarClock.qml \
     components/bar/StatusCluster.qml \
+    components/bar/TrayItem.qml \
+    services/qmldir \
+    services/FocusState.qml \
+    components/quicksettings/QuickSettingsPanel.qml \
+    components/quicksettings/QuickSettingsPopup.qml \
+    components/quicksettings/QsTile.qml \
+    components/quicksettings/QsTileSlot.qml \
+    components/quicksettings/QsSlider.qml \
+    components/quicksettings/QsGlyph.qml \
+    components/quicksettings/QsBatteryGlyph.qml \
+    components/quicksettings/QsPlatform.qml \
+    components/quicksettings/TileWifi.qml \
+    components/quicksettings/TileBluetooth.qml \
+    components/quicksettings/TileFocus.qml \
+    components/quicksettings/TilePowerProfile.qml \
+    components/quicksettings/TileGameMode.qml \
+    components/quicksettings/SliderVolume.qml \
+    components/quicksettings/SliderBrightness.qml \
+    components/quicksettings/BatteryLine.qml \
+    components/quicksettings/StatusGlyphNetwork.qml \
+    components/quicksettings/StatusGlyphSound.qml \
+    components/quicksettings/StatusGlyphBattery.qml \
     assets/logo.svg \
     assets/logo-mono.svg \
     harness/run-nested.sh \
@@ -754,6 +776,134 @@ if grep -rn --include='*.qml' \
          "Whatever it was doing has a portable Quickshell or QtQuick answer."
 else
     pass "no Plasma or KDE types"
+fi
+
+# ------------------------------------------------------------------------------
+echo ""
+echo "=== 12. every glyph name asked for actually exists ==="
+# ------------------------------------------------------------------------------
+# QsGlyph draws its icons from a table of SVG path data keyed by name. A name
+# that is not in that table draws NOTHING — silently, on a machine that is not
+# this one. That is exactly the failure a cheap test should catch, and it is the
+# reason the glyphs are named strings rather than an enum: an enum would be
+# checked by the QML engine, which is not available here.
+
+if python3 - <<'PYTHON'
+import pathlib
+import re
+import sys
+
+table = pathlib.Path('components/quicksettings/QsGlyph.qml').read_text(encoding='utf-8')
+
+# The keys of the `art` object: lines of the shape   "wifi": {
+known = set(re.findall(r'^\s*"([a-z0-9-]+)"\s*:\s*\{', table, re.M))
+if not known:
+    print("  FAIL could not find any glyph names in QsGlyph.qml's table.")
+    print("       Has the shape of that file changed? This test reads it by hand.")
+    sys.exit(1)
+
+bad = 0
+for path in sorted(pathlib.Path('components').rglob('*.qml')):
+    if path.name == 'QsGlyph.qml':
+        continue
+    text = path.read_text(encoding='utf-8')
+    # glyph: "name"   /   fallbackGlyph: "name"
+    for match in re.finditer(r'\b(?:glyph|fallbackGlyph)\s*:\s*"([^"]*)"', text):
+        name = match.group(1)
+        if name == "":
+            continue
+        if name not in known:
+            print("  FAIL %s asks for the glyph '%s', which QsGlyph.qml does not have."
+                  % (path, name))
+            bad += 1
+
+if bad == 0:
+    print("  OK   every glyph name used is in QsGlyph.qml (%d available)" % len(known))
+sys.exit(1 if bad else 0)
+PYTHON
+then
+    :
+else
+    fail "a component asks for a glyph that does not exist (listed above)." \
+         "Add it to the table in components/quicksettings/QsGlyph.qml, or fix" \
+         "the spelling."
+fi
+
+# ------------------------------------------------------------------------------
+echo ""
+echo "=== 13. Focus is one switch, in one place ==="
+# ------------------------------------------------------------------------------
+# Focus (do-not-disturb) is shared between Quick Settings, which flips it, and
+# the notification server, which obeys it. If either one keeps its own copy, the
+# desktop ends up saying Focus is on while the toasts keep arriving — the single
+# most common bug in do-not-disturb implementations.
+#
+# services/FocusState.qml is the one place it lives. This checks that it is
+# properly declared as a singleton, and that nothing under components/ has
+# quietly grown a second copy of the state.
+
+if grep -q '^singleton FocusState .*FocusState\.qml$' services/qmldir; then
+    pass "services/qmldir declares FocusState"
+else
+    fail "services/qmldir does not declare FocusState." \
+         "Add:  singleton FocusState FocusState.qml"
+fi
+
+if grep -q '^pragma Singleton' services/FocusState.qml; then
+    pass "services/FocusState.qml says 'pragma Singleton'"
+else
+    fail "services/FocusState.qml is a singleton but does not say" \
+         "'pragma Singleton' at the top. Both are required."
+fi
+
+if grep -rn --include='*.qml' -E 'property\s+bool\s+(focusEnabled|dndEnabled|doNotDisturb|notificationsInhibited)' \
+        components/ > /dev/null 2>&1; then
+    grep -rn --include='*.qml' -E 'property\s+bool\s+(focusEnabled|dndEnabled|doNotDisturb|notificationsInhibited)' \
+        components/ || true
+    fail "a component keeps its own copy of the Focus state." \
+         "Focus lives in services/FocusState.qml and nowhere else. Read it," \
+         "call toggle(), and do not cache 'enabled'."
+else
+    pass "no component duplicates the Focus state"
+fi
+
+# ------------------------------------------------------------------------------
+echo ""
+echo "=== 14. shelling out happens only where it is documented ==="
+# ------------------------------------------------------------------------------
+# Almost everything in this shell reaches the system through a Quickshell
+# service speaking a published protocol. Exactly two places run a command-line
+# program instead, and both are deliberate, documented, and quarantined:
+#
+#   SliderBrightness.qml  runs `brightnessctl`, because Quickshell has no
+#                         brightness service and QML has no generic D-Bus type.
+#                         INTERIM — see the header of that file.
+#   TileGameMode.qml      hands off to the OS's own session-switching command.
+#                         That is the seam; Game Mode is not the shell's to
+#                         implement.
+#
+# A third one appearing without a conversation is how a portable shell quietly
+# turns into a pile of scripts. If you are adding one, add it here too and write
+# down why in docs/quick-settings.md.
+
+aq_allowed_shellers="components/quicksettings/SliderBrightness.qml components/quicksettings/TileGameMode.qml"
+
+aq_shell_out_ok=1
+while IFS= read -r aq_file; do
+    case " ${aq_allowed_shellers} " in
+        *" ${aq_file} "*) ;;
+        *)
+            fail "${aq_file} builds a command line." \
+                 "Only these files may: ${aq_allowed_shellers}." \
+                 "Everything else goes through a Quickshell service."
+            aq_shell_out_ok=0
+            ;;
+    esac
+done < <(grep -rl --include='*.qml' -E '(^|[^A-Za-z])command\s*[:=]\s*\[' components/ \
+         | sed 's|^\./||' | sort -u)
+
+if [ "${aq_shell_out_ok}" -eq 1 ]; then
+    pass "only the two documented files run a command"
 fi
 
 # ------------------------------------------------------------------------------

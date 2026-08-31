@@ -59,6 +59,26 @@ Singleton {
     readonly property color hoverWash: "#1416273A"   // ink at 8%
     readonly property color pressWash: "#2116273A"   // ink at 13%
 
+    // --- Quick Settings: tile and slider washes --------------------------------
+    // The V2 Quick Settings design paints its tiles as washes of the text colour
+    // over the panel, and the LIT tile as a wash of the accent. It writes those
+    // as rgba(255,255,255,.07) and rgba(138,180,255,.16) — white and blue being
+    // the ink and accent of the old dark identity. Ice does the same thing with
+    // Ice's own ink and accent, so the tiles read as the same design rather than
+    // as the dark design pasted onto a light bar.
+    //
+    // (Design source: os-image/branding/design-system/"AquariusOS Desktop Shell.html",
+    // the `.qs-toggle`, `.qs-toggle.on`, `.ic` and `.slider` rules.)
+    readonly property color tileIdle: "#1216273A"        // ink at 7%  — design .qs-toggle
+    readonly property color tileHover: "#1C16273A"       // ink at 11% — hover, our own
+    readonly property color tileChip: "#1F16273A"        // ink at 12% — design .qs-toggle .ic
+    readonly property color tileDisabled: "#0816273A"    // ink at 3%  — nothing to switch
+    readonly property color tileActive: "#292C8FC4"      // accent at 16% — design .qs-toggle.on
+    readonly property color tileActiveHover: "#382C8FC4" // accent at 22% — hover on a lit tile
+    readonly property color trackIdle: "#1F16273A"       // ink at 12% — design .slider
+    readonly property color handleFill: "#FFFFFF"        // design .slider u is flat white
+    readonly property color handleShadow: "#3316273A"    // ink at 20% — design's 0 1px 4px
+
     // --- Semantic colours, tuned for a light ground ----------------------------
     readonly property color success: "#1F9E8C"
     readonly property color warn: "#C2792E"

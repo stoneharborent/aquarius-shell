@@ -3,53 +3,79 @@
 // =============================================================================
 // StatusCluster — the group of small status icons left of the clock
 // =============================================================================
-// THIS IS A PLACEHOLDER, AND IT IS DELIBERATELY A PLACEHOLDER.
+// THIS USED TO BE THREE EMPTY BOXES. TWO OF THEM ARE REAL NOW.
 //
-// In the finished design this holds, left to right: Drop (send a file to
-// another device), Search, then Wi-Fi + battery, which together open Quick
-// Settings. None of those exist yet — they are Phase P2 (see docs/ROADMAP.md).
+//   In the finished design this holds, left to right: Drop (send a file to
+//   another device), Search, then Wi-Fi + battery, which together open Quick
+//   Settings.
 //
-// What it does today is reserve the space and prove the layout: a row of empty
-// slots, each exactly the size a real icon will be, so the bar's spacing and the
-// clock's position are already correct and will not shift when the real things
-// land. The slots draw a faint outline so you can see them on the bench and know
-// the bar is doing what it should.
+//   What is real, in this file, today:
 //
-// Set `showSlots` to false to hide them entirely.
+//     * THE SYSTEM TRAY. Every application that puts an icon in the tray, via
+//       StatusNotifierItem. See TrayItem.qml.
+//     * THE STATUS BUTTON. Live Wi-Fi, sound and battery glyphs, off the same
+//       services the Quick Settings panel uses, and a click that opens that
+//       panel underneath it.
 //
-// WHEN YOU FILL THESE IN
-//   Each slot becomes a BarItem with `interactive: true`, an icon inside, and a
-//   click that opens a PopupWindow. The tray one is not hand-built: Quickshell
-//   ships a SystemTray service that speaks StatusNotifierItem, which is the
-//   standardised tray protocol — the same rule as everything else in this repo,
-//   published protocols only.
-//   (https://quickshell.org/docs/v0.3.1/types/Quickshell.Services.SystemTray/)
+//   What is still a placeholder, and belongs to other Phase-P2 tracks:
+//
+//     * DROP — the send-to-any-device panel.
+//     * SEARCH — the Flow Search palette.
+//
+//   Those two keep their empty outlined slots so the bar's spacing stays right
+//   and the clock does not shift sideways when they land. Set `showPlannedSlots`
+//   to false to hide them.
+//
+// ⚠️ THE GLYPHS ARE READ-ONLY MIRRORS OF THE PANEL, NOT A SECOND SOURCE OF TRUTH
+//
+//   The Wi-Fi, sound and battery glyphs here read the SAME Quickshell singletons
+//   the Quick Settings tiles read — Networking, Pipewire, UPower. They hold no
+//   state, cache nothing and write nothing. If the bar and the panel could ever
+//   disagree about whether Wi-Fi is on, that would be a bug in one of them; the
+//   arrangement here is that there is nothing to disagree about.
+//
+// ⚠️ WHY THE THREE GLYPHS ARE IN THREE SEPARATE LOADED FILES
+//
+//   Same reason the tiles are. `Quickshell.Networking` needs Quickshell 0.3.0 or
+//   newer (it is not in the v0.2.1 type index) and Fedora's package was a 0.2.1
+//   snapshot when this was written. A file that imports a missing module fails
+//   to load ENTIRELY — and if that file were this one, the bar would lose its
+//   tray and its clock along with its Wi-Fi glyph.
+//
+//   So each glyph that touches a service is its own tiny file behind a Loader.
+//   A missing module costs one glyph. Read the header of
+//   components/quicksettings/QsTileSlot.qml for the full reasoning.
 // =============================================================================
 import QtQuick
 
+import Quickshell.Services.SystemTray
+
 import "../../theme"
+import "../quicksettings"
 
 Row {
     id: root
 
-    // Draw the empty slots, or leave the space blank.
-    property bool showSlots: true
+    // Emitted when the status button opens or closes the Quick Settings panel.
+    // TopBar passes it up to shell.qml, so the shell has one observable place
+    // where "the panel opened" happens.
+    signal quickSettingsToggled(bool nowOpen)
 
-    // What each future icon will occupy. Matches the design's bar icons, which
-    // are drawn at 13-15px inside a 22px-tall item.
-    property int slotSize: 15
+    // Draw the empty Drop and Search slots, or leave the space blank.
+    property bool showPlannedSlots: true
 
-    // The names are here so the bar reads as a plan rather than as three boxes.
+    // The two things in the design that other P2 tracks own. Named here so the
+    // bar reads as a plan rather than as two mystery boxes.
     readonly property var plannedSlots: [
         { key: "drop", label: qsTr("Drop — send to any device") },
-        { key: "search", label: qsTr("Search") },
-        { key: "tray", label: qsTr("Network, sound and battery") }
+        { key: "search", label: qsTr("Search") }
     ]
 
     spacing: Theme.barItemSpacing
 
+    // ---- still to come: Drop and Search --------------------------------------
     Repeater {
-        model: root.showSlots ? root.plannedSlots : []
+        model: root.showPlannedSlots ? root.plannedSlots : []
 
         delegate: BarItem {
             required property var modelData
@@ -62,13 +88,57 @@ Row {
             Accessible.name: modelData.label
 
             Rectangle {
-                width: root.slotSize
-                height: root.slotSize
+                width: Theme.barGlyphSize
+                height: Theme.barGlyphSize
                 radius: 3
                 color: "transparent"
                 border.width: Theme.hairline
                 border.color: Theme.line
             }
         }
+    }
+
+    // ---- the system tray ------------------------------------------------------
+    // Referencing the SystemTray singleton is what makes Quickshell start
+    // tracking the tray, so this Repeater is also the thing that turns it on.
+    Repeater {
+        model: SystemTray.items
+
+        delegate: TrayItem {
+            required property var modelData
+            item: modelData
+        }
+    }
+
+    // ---- Wi-Fi, sound, battery — and the way into Quick Settings --------------
+    BarItem {
+        id: statusButton
+
+        interactive: true
+        onClicked: {
+            quickSettings.toggle();
+            root.quickSettingsToggled(quickSettings.open);
+        }
+
+        Accessible.role: Accessible.Button
+        Accessible.name: qsTr("Network, sound and battery")
+        Accessible.description: qsTr("Opens Quick Settings")
+
+        // Each of these is a Loader rather than the glyph itself. See the note
+        // at the top about why. A glyph whose module is missing leaves a gap the
+        // width of nothing, and the others carry on.
+        Loader { source: "../quicksettings/StatusGlyphNetwork.qml" }
+        Loader { source: "../quicksettings/StatusGlyphSound.qml" }
+        Loader { source: "../quicksettings/StatusGlyphBattery.qml" }
+    }
+
+    // The panel itself. It is declared here, inside the bar, because it has to
+    // anchor to THIS bar item on THIS monitor — `Variants` in TopBar.qml builds
+    // one whole bar per screen, and each one gets its own panel with it. A
+    // single panel declared up in shell.qml would have no way to know which
+    // screen's bar it was hanging from.
+    QuickSettingsPopup {
+        id: quickSettings
+        anchorItem: statusButton
     }
 }
