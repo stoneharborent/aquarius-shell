@@ -19,7 +19,7 @@ behind a fallback session; no burn-the-boats moments.*
 
 ---
 
-## Phase P1 — the bar · **current**
+## Phase P1 — the bar
 
 Scaffold the repo, pick the framework, and ship **one real piece**: the Ice top
 bar.
@@ -53,25 +53,47 @@ design project with what was learned.
 
 ---
 
-## Phase P2 — the rest of the shell, and a session that boots
+## Phase P2 — the rest of the shell, and a session that boots · **current**
 
-Months 2–4 in the plan's estimate.
+Months 2–4 in the plan's estimate. **All six pieces WRITTEN 2026-08-31** (five
+parallel tracks, merged the same day) — written, not proven: nothing below has
+been executed by a QML engine. Each component's doc ends with its own unproven
+list and bench steps.
 
-- **Dock** — centred, per the V2 design. Pinned apps plus running ones, off
-  `ToplevelManager` and `DesktopEntries`.
-- **Quick Settings** — the tray panel: Wi-Fi, Bluetooth, Focus, Game Mode, sound
-  and brightness. On `Quickshell.Services.{UPower,Pipewire}` and
-  `Quickshell.Bluetooth`; NetworkManager over D-Bus.
-- **Notifications** — a real `NotificationServer`, GNOME 48/49's stacked-by-app
-  model with inline actions.
-- **Flow Search palette** — one search box with all the command syntax hidden.
-- **The status cluster** — the placeholder slots in `components/bar/` become
-  real, tray included (`Quickshell.Services.SystemTray`, StatusNotifierItem).
-- **The experimental Aquarius Session** boots on the bench: an inherited
-  compositor (labwc or niri — undecided, see ADR 0001) with this shell and the
-  portals configured (`portals.conf` mixing `-gtk` and `-wlr`).
-- **Theme follows the system** — `Theme.dark` stops being a stored value and
-  becomes a binding to the freedesktop appearance portal.
+- [x] **Dock** — centred, per the V2 design. Pinned apps plus running ones, off
+  `ToplevelManager` and `DesktopEntries`. The centred running dot the KDE fork
+  couldn't draw. Pinned list in `~/.config/aquarius-shell/dock.json`, watched
+  live. `docs/dock.md`.
+- [x] **Quick Settings** — the 330px panel: Wi-Fi, Bluetooth, Focus, adaptive
+  4th tile, sound + brightness, battery. Build finding: Quickshell v0.3.0 HAS
+  a NetworkManager service (`Quickshell.Networking`) — no `nmcli`; but Fedora
+  may still package 0.2.1, so Wi-Fi sits behind a `Loader`. No brightness
+  service exists anywhere — `brightnessctl` via `Process`, fenced as the
+  documented interim. `docs/quick-settings.md`.
+- [x] **Notifications** — the shell IS the freedesktop notification daemon
+  (`NotificationServer`), with toasts, the 350px stacked-by-app panel off the
+  clock, inline actions and reply, and Focus-until-morning (deadline, auto-off
+  timer, persisted across restarts). Critical urgency breaks through Focus.
+  `docs/notifications.md`.
+- [x] **Flow Search palette** — one box; apps, math, session actions (honest
+  scope — no faked file/web search). Summoned by
+  `qs ipc -c aquarius-shell call search toggle`; there is NO portable
+  global-shortcut path in Quickshell today (its `GlobalShortcut` is
+  Hyprland-only), so the compositor binds the key. `docs/flow-search.md`.
+- [x] **The status cluster** — real: live network/sound/battery glyphs, the
+  system tray (StatusNotifierItem), click opens Quick Settings.
+- [x] **The experimental Aquarius Session** — written, has never booted:
+  session entry + loud-failure launcher + configs for BOTH candidate
+  compositors. Build finding that feeds the compositor gate: the plan's
+  `-gtk`+`-wlr` portal mix is right for labwc but wrong for niri, which needs
+  the GNOME portal for capture — per-compositor portals.conf, selected by
+  `XDG_CURRENT_DESKTOP`. Beginner walkthrough: `docs/session.md`.
+- [x] **Theme follows the system** — `Theme.dark` is now a binding on the
+  appearance portal via `services/SystemAppearance.qml` (`gdbus` under
+  `Process`; Quickshell has no portal module), falling back to Ice-light.
+- [ ] **Run it.** The bench boots the nested harness first, then the real
+  session, and works through the five docs' bench lists. Until then P2 is
+  written, not proven — same honest state P1's bar is in.
 
 **Gate (verbatim from the plan):** *OBS records, Steam desktop works, a full
 workday survives on the bench.*
@@ -88,9 +110,11 @@ desktop environment from a nice-looking configuration.
 - Session polish: lock and idle (`WlSessionLock`), autostart, polkit agent,
   keyring.
 - On-screen keyboard for handheld.
-- The Bazzite session-select patch (its Game↔Desktop switching hardcodes
-  `plasma.desktop`, so a new session needs a small permanent patch, re-verified
-  each Bazzite update).
+- The Bazzite session-select patch. (Corrected by the P2 session track: both
+  `os-session-select` and `bazzite-autologin` branch on `base-image-name` and
+  hardcode `plasma.desktop` OR `gnome.desktop` — on our GNOME bases the value
+  in the way is `gnome.desktop`. Same small permanent patch, different lines;
+  see docs/session.md § "when this ships in the image".)
 - Flatpak theme extensions so third-party apps do not look foreign.
 
 **Gate (verbatim from the plan):** *a fresh install where a stranger never needs

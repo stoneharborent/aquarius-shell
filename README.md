@@ -82,11 +82,17 @@ these. Full explanation and troubleshooting: **[`harness/README.md`](harness/REA
 |---|---|
 | `shell.qml` | The front door. Everything hangs off this file. Deliberately tiny. |
 | `theme/` | **Ice** (light) and **Midnight** (dark) as the single source of truth for every colour, size and typeface. No component anywhere contains a hex value. |
-| `components/bar/` | The top bar — the first real piece. Aquarius mark, active app name, placeholder status slots, clock. |
+| `components/bar/` | The top bar — the first real piece. Aquarius mark, active app name, status cluster (live glyphs + system tray), clock. |
+| `components/dock/` | The centred dock: pinned + running apps, hover lift, the centred running dot. `docs/dock.md`. |
+| `components/quicksettings/` | The 330px Quick Settings panel and the bar glyphs that open it. `docs/quick-settings.md`. |
+| `components/notifications/` | The notification daemon, toasts, and the panel off the clock. `docs/notifications.md`. |
+| `components/search/` | The Flow Search palette — apps, math, session actions. `docs/flow-search.md`. |
+| `services/` | Shared single-instance state: Focus (do-not-disturb) and the system light/dark preference. |
+| `session/` | The experimental Aquarius Session: login entry, launcher, niri + labwc configs, portals. `docs/session.md`. |
 | `assets/` | The Aquarius logo, copied from `os-image/branding/`. |
 | `harness/` | How to run it on Linux, written for a beginner. |
 | `docs/adr/` | Decision records. `0001-framework.md` is why this is built on Quickshell and why the licence is still Apache-2.0. |
-| `docs/ROADMAP.md` | P1 (this) → P2 (dock, Quick Settings, notifications, search) → P3 (services, session) → P4. |
+| `docs/ROADMAP.md` | P1 (the bar) → P2 (the rest of the shell — written, unproven) → P3 (services, session polish) → P4. |
 | `tests/` | The checks that can run without a Linux machine. |
 | `.github/workflows/` | The same checks in CI. **Dormant** — see below. |
 
@@ -110,24 +116,30 @@ which is what lets a component be written once and be right in both.
 
 ## Honest status
 
-**Nothing in this repository has ever been run.**
+**Almost nothing in this repository has ever been run.**
 
-Not once. It was written on a Mac, where no QML engine and no Wayland compositor
-exist. What has been checked is: the brackets balance, the imports are the ones
-we intend, no file smuggles in a colour behind the theme's back, no path points
-at somebody's laptop, the shell scripts pass `shellcheck`, and the SVGs and
-workflow files parse. That is real, and it is a great deal more than this project
-had a week ago — but it is not the same as *working*.
+It is written on a Mac, where no QML engine and no Wayland compositor exist.
+The one exception, as of P2: the search palette's fuzzy matcher and calculator
+are plain JavaScript precisely so `node tests/search-js-tests.mjs` can execute
+them here — 73 assertions that really run. Everything else has been checked
+structurally: the brackets balance, the imports are the ones we intend, no file
+smuggles in a colour behind the theme's back, every `Theme.*` and `FocusState.*`
+name a component asks for actually exists, shelling out happens only in the
+three documented places, no path points at somebody's laptop, the scripts pass
+`shellcheck`, and the SVGs and workflow files parse. That is real — but it is
+not the same as *working*.
 
-The first honest test is `harness/run-nested.sh` on a Linux machine. Until that
-has happened, treat every screenshot-shaped sentence in these docs as a
-description of intent.
+The first honest test is `harness/run-nested.sh` on a Linux machine, then the
+bench lists at the end of each `docs/*.md`. Until that has happened, treat every
+screenshot-shaped sentence in these docs as a description of intent.
 
 **Also true, and easy to lose track of:**
 
 - This is **not** in the OS image. Nothing in `os-image/` references it.
-- The Aquarius mark and the clock click do nothing yet. They are wired to signals
-  that print a line and stop. That is Phase P2.
+- The whole P2 layer — dock, Quick Settings, notifications, search, the
+  session — was written in one day by five parallel tracks and merged the same
+  day. Each component's doc ends with its own unproven list; read it before
+  trusting the component.
 - Quickshell, which runs this, is pre-1.0 alpha software and says so. Breaking
   changes are promised, with migration notes. See ADR 0001.
 
