@@ -61,6 +61,18 @@ Scope {
     // off this.
     signal notificationsRequested()
 
+    // Emitted when the Quick Settings panel opens or closes. Unlike the two
+    // signals above, this one is NOT a request for somebody else to do
+    // something — the panel has already opened by the time it arrives. It exists
+    // so the shell has one observable place where "Quick Settings is on screen"
+    // happens: a future keybinding, an on-screen keyboard that needs to get out
+    // of the way, or simply a log line while debugging on the bench.
+    //
+    // The panel itself lives inside the status cluster, because it has to anchor
+    // to the bar item on the screen it belongs to, and `Variants` above builds
+    // one bar per screen. See the note at the bottom of StatusCluster.qml.
+    signal quickSettingsToggled(bool nowOpen)
+
     Variants {
         model: Quickshell.screens
 
@@ -129,7 +141,9 @@ Scope {
                 anchors.verticalCenter: parent.verticalCenter
                 spacing: Theme.barItemSpacing
 
-                StatusCluster {}
+                StatusCluster {
+                    onQuickSettingsToggled: nowOpen => root.quickSettingsToggled(nowOpen)
+                }
 
                 BarClock {
                     onActivated: root.notificationsRequested()

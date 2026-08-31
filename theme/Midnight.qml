@@ -47,6 +47,23 @@ Singleton {
     readonly property color hoverWash: "#14DCE9F4"   // ink at 8%
     readonly property color pressWash: "#21DCE9F4"   // ink at 13%
 
+    // --- Quick Settings: tile and slider washes -----------------------------------
+    // Ice's twins. Same percentages, Midnight's own ink and accent. See the long
+    // note beside these in Ice.qml for where the percentages come from.
+    //
+    // Midnight is the theme the V2 design was actually drawn in, so these are the
+    // closest to the original artwork: a tile is a wash of near-white ink, a lit
+    // tile is a wash of the accent blue.
+    readonly property color tileIdle: "#12DCE9F4"        // ink at 7%
+    readonly property color tileHover: "#1CDCE9F4"       // ink at 11%
+    readonly property color tileChip: "#1FDCE9F4"        // ink at 12%
+    readonly property color tileDisabled: "#08DCE9F4"    // ink at 3%
+    readonly property color tileActive: "#2900BFFF"      // accent at 16%
+    readonly property color tileActiveHover: "#3800BFFF" // accent at 22%
+    readonly property color trackIdle: "#1FDCE9F4"       // ink at 12%
+    readonly property color handleFill: "#DCE9F4"        // ink — the design's white handle
+    readonly property color handleShadow: "#66000000"    // black at 40%, as the design draws it
+
     // --- Semantic colours, tuned for a dark ground -------------------------------
     readonly property color success: "#5FC9B0"
     readonly property color warn: "#E0A35A"

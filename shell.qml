@@ -27,5 +27,13 @@ ShellRoot {
         // better than a menu that opens onto an empty box.
         onLauncherRequested: console.log("aquarius-shell: launcher requested (P2)")
         onNotificationsRequested: console.log("aquarius-shell: notifications requested (P2)")
+
+        // Quick Settings is REAL — it opens from the bar's status cluster, on
+        // the screen whose bar was clicked. This is not a request going
+        // anywhere; by the time it arrives the panel is already on screen. It is
+        // here so the shell has one observable place where that happens. See
+        // docs/quick-settings.md.
+        onQuickSettingsToggled: nowOpen =>
+            console.log("aquarius-shell: quick settings", nowOpen ? "opened" : "closed")
     }
 }

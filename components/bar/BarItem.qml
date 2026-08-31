@@ -47,6 +47,12 @@ Item {
 
     signal clicked()
 
+    // Right-click. Only the system tray needs this: a StatusNotifierItem's menu
+    // is opened with the secondary button, and a tray without its menus is not a
+    // tray. Everything else in the bar leaves this unconnected, and an
+    // unconnected signal costs nothing.
+    signal rightClicked()
+
     implicitWidth: row.implicitWidth + Theme.barItemPaddingH * 2
     implicitHeight: Theme.barItemHeight
 
@@ -69,8 +75,13 @@ Item {
         anchors.fill: parent
         enabled: root.interactive
         hoverEnabled: root.interactive
-        acceptedButtons: Qt.LeftButton
+        acceptedButtons: Qt.LeftButton | Qt.RightButton
         cursorShape: root.interactive ? Qt.PointingHandCursor : Qt.ArrowCursor
-        onClicked: root.clicked()
+        onClicked: function (event) {
+            if (event.button === Qt.RightButton)
+                root.rightClicked();
+            else
+                root.clicked();
+        }
     }
 }
