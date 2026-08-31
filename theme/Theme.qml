@@ -13,14 +13,33 @@
 //   designed and starts looking assembled. Every desktop that looks cheap looks
 //   cheap for exactly this reason.
 //
-// HOW TO SWITCH THEMES
-//   Change `dark` below. Everything repaints, because every component's colour
-//   is a live binding through here.
+// HOW THE THEME IS CHOSEN — updated in P2
+//   `dark` used to be a stored value somebody flipped by hand. It now FOLLOWS
+//   THE SYSTEM: if the machine says it prefers dark, the shell is Midnight; if
+//   it says light, or says nothing at all, the shell is Ice.
 //
-//   Later (Phase P3) this will follow the system's own light/dark setting via
-//   the freedesktop appearance portal, the same signal GNOME and KDE apps read.
-//   It is a one-line change here when that lands: `dark` stops being a stored
-//   value and becomes a binding to the portal. Nothing else in the repo moves.
+//   The question is asked through the freedesktop appearance portal — the same
+//   standard GNOME apps, KDE apps and every Flatpak read — and the asking lives
+//   in services/SystemAppearance.qml, not here. This file only decides what to
+//   do with the answer, which is the decision that belongs to the theme.
+//
+//   Three cases, and the third is the one that matters:
+//     system says dark      -> Midnight
+//     system says light     -> Ice
+//     nothing answers       -> `storedDark` below, which is Ice
+//
+//   That last case covers any machine where no portal answers. A missing
+//   portal must never be a broken-looking desktop; it just means AquariusOS's
+//   own decision stands, and AquariusOS's own decision is light.
+//
+//   (In the nested harness the shell may well pick up the HOST desktop's
+//   setting, since it is the host's portal on the bus. That is fine and even
+//   useful — but it is untested, like everything else here.)
+//
+//   `dark` is still a writable property. Assigning to it (from a future
+//   Settings panel, say) breaks the binding in the ordinary QML way and pins
+//   the theme by hand. That is deliberate: following the system is the default,
+//   not a cage.
 //
 // WHERE THE SIZES COME FROM
 //   The V2 design system — os-image/branding/design-system/, specifically the
@@ -34,6 +53,8 @@ pragma Singleton
 
 import Quickshell
 
+import "../services"
+
 Singleton {
     id: root
 
@@ -42,7 +63,17 @@ Singleton {
     // =========================================================================
     // false = Ice (light) — AquariusOS's main theme.
     // true  = Midnight (dark).
-    property bool dark: false
+
+    // What we fall back to when the system has no opinion, or when there is no
+    // portal to ask. Ice-first is the AquariusOS identity decision (Royce,
+    // 2026-08-31), so this is false and should stay false.
+    property bool storedDark: false
+
+    // The live answer. Follows the system; falls back to `storedDark`.
+    // Writable on purpose — see the note at the top of this file.
+    property bool dark: SystemAppearance.hasPreference
+                        ? SystemAppearance.prefersDark
+                        : root.storedDark
 
     // `colors` is the palette object itself. Components normally use the
     // shortcuts underneath instead, but a component that wants to pass a whole
