@@ -10,12 +10,20 @@ genuinely proven versus what is still only written down.*
 
 ## The short version
 
-**It runs.** The bar, the dock, Quick Settings, the notifications panel and Flow
-Search all draw, and all five read real data from the real machine.
+**It runs, and it responds.** The bar, the dock, Quick Settings, the
+notifications panel and Flow Search all draw, all five read real data from the
+real machine, and — after the interaction pass later the same day — searching,
+launching, cycling windows, toggling, sliding, replying and clearing all do what
+they say.
 
 Four failures stopped it loading, and each one had passed every check in
-`tests/test-shell.sh` first. A fifth was breaking a component silently. All five
-are fixed and committed, one commit each.
+`tests/test-shell.sh` first. A fifth was breaking a component silently. A sixth,
+found only by driving it, had silently killed three features in the search
+palette since the day that file was written. All are fixed and committed, one
+commit each, and the last one now has a test that catches its whole class.
+
+Three defects remain open because they need a decision rather than a fix — they
+are listed at the end of the interaction pass below.
 
 ---
 
@@ -73,6 +81,81 @@ Each of these was seen on screen, with a screenshot, on this machine.
   panel groups them by application with counts, a collapse chevron, timestamps,
   *Clear all*, and the footer clock with *Focus until morning*.
 
+## The interaction pass — 2026-09-01, later the same day
+
+The first run proved things DRAW. This pass drove them: keystrokes, clicks and
+real D-Bus traffic, checked against the machine rather than against a
+screenshot. It found one dead feature, three defects that need a decision, and
+proved the rest.
+
+### One bug found and fixed: `Item.palette` shadowed the search overlay's id
+
+The search palette used `id: palette`, and every QML `Item` also has a built-in
+`palette` property. An object's own property wins over the file's ids, so in the
+result delegate `palette.selectedIndex` meant `Item.palette.selectedIndex` —
+undefined. `index === undefined` is false, silently, so **three features had
+never worked once**: the selected row was never drawn, its "open" hint chip
+never appeared, and `awaitingConfirm` never armed, which is the confirm-twice
+guard on destructive session actions.
+
+The arrow keys had been working perfectly the whole time. Nothing on screen said
+so. Found by painting the selected row bright red and watching nothing happen.
+
+`tests/test-shell.sh` section 26 now fails on any id spelled like a property
+every QML object has, so this class cannot come back quietly.
+
+### Proven by driving it
+
+| What | How it was checked |
+|---|---|
+| Search launches an app | Enter on a result: window count 0 to 1, palette closed itself, bar changed to the app's name, dock grew a tile with a running dot |
+| Search does arithmetic | `2^10` then Enter: the system clipboard contained `1024` |
+| Arrow keys | Down moves the accent wash from row 0 to row 1 (after the fix above) |
+| Escape | Closes the palette; `isOpen` returns false |
+| Dock cycles windows | Two windows of one app, click its tile: focus moved from window 3 to window 2 |
+| Quick Settings' Focus tile | Toggles on and off, and `focus.json` on disk follows it both ways |
+| The sound slider reads | Setting the volume externally to 50% moved the slider to 50% live |
+| The sound slider writes | Clicking a quarter along the track set the real volume to 0.23 |
+| Notification action buttons | Clicking "Open folder" delivered `open` back to the sending program, which exited |
+| Notification inline reply | Typed a reply, pressed Send, and the bus carried `NotificationReplied (3, 'yes, exported this morning')`, then the notification closed |
+| Clear all | Empties the panel, which then says "You're all caught up." and drops the Clear all link |
+
+### Found, not fixed — these need a decision
+
+1. **Quick Settings open stops the search palette receiving any keys.**
+   Reproducible. Quick Settings is a `PopupWindow` with `grabFocus: true`, which
+   takes an input grab from the compositor. Open it, then open the palette: the
+   palette appears, with a blinking text cursor, and every keystroke goes
+   somewhere else. Nothing says so. The obvious intent is that opening the
+   palette should dismiss Quick Settings — but the panel lives inside the bar's
+   per-screen `Variants`, so wiring that is a real change, not a one-liner.
+
+2. **The Bluetooth tile can stick in a transitional state indefinitely.** After
+   a toggle it read "Turning on..." with an off glyph, for half an hour, while
+   the adapter was in fact powered with two devices connected. The tile mirrors
+   Quickshell's `adapter.state` and `adapter.enabled` faithfully and both were
+   stale, so this is Quickshell 0.2.1's Bluetooth service rather than our
+   binding. Worth noting the same long-lived process had also drifted on volume
+   (tile 38%, machine 30%). **Restarting the shell corrected both.** Whether
+   this is the alpha service or the container's grip on the buses is open — and
+   it is a good reason to check a suspicious reading against the machine before
+   calling it a shell bug.
+
+3. **Clicking the dock tile of an app with one focused window does nothing on
+   niri.** The code asks that window to minimise, which is right by the protocol
+   — and niri has no concept of minimising, so the request is ignored. A dead
+   click is the kind of small lie this shell is not supposed to tell. What
+   should it do on a compositor with no minimise?
+
+4. Minor: the inline reply's placeholder hint
+   (`x-kde-reply-placeholder-text`) is not picked up — the field says "Reply"
+   rather than "Reply to Bianca".
+
+Not a bug, recorded so nobody re-finds it: clicking a toast that has already
+timed out does nothing, which looks exactly like a broken button.
+
+---
+
 ## What is still NOT proven
 
 - **Both gates.** P1's *does it feel better than the themed panel?* and P2's
@@ -81,9 +164,16 @@ Each of these was seen on screen, with a screenshot, on this machine.
 - **The real login session.** Everything above ran in the nested harness. The
   session in `session/` — picking Aquarius at the login screen — has still never
   been logged into. That is the next real step, and `docs/session.md` has it.
-- **Anything interactive beyond opening.** Clicking a search result to launch an
-  app, the inline reply on a notification, the Focus timer surviving a restart,
-  dragging a dock tile — all still only written.
+- **Dragging a dock tile to reorder**, and the `+` tile's app grid (which does
+  not exist yet — it opens the search palette instead).
+- **Launching a pinned dock app.** The six pinned entries are host applications,
+  and inside the distrobox their commands do not exist, so the launch path was
+  proven through the search palette instead. Both go through the same
+  `entry.execute()`.
+- **The Focus timer expiring**, and Focus surviving a shell restart.
+- **Destructive session actions** — log out, restart, shut down. Deliberately
+  never triggered on Royce's own machine; the confirm-twice guard protecting
+  them was fixed above but has still never been seen to arm.
 - **More than one monitor**, and plugging one in or out while running.
 - **labwc.** Only niri has been used. The compositor comparison the roadmap
   wants has not started.

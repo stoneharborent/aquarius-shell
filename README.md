@@ -126,11 +126,17 @@ and the shell really is the machine's notification daemon. The theme follows the
 system's light/dark setting, and saving a `.qml` file reloads the shell in about
 a second.
 
-What it does not prove: **that any of it responds to being used.** Opening a
-panel is not clicking things in it. Launching from a search result, pressing a
-notification's action, dragging a dock tile, toggling Wi-Fi — none of that has
-been done. And the real login session has still never been booted; all of the
-above was the nested harness.
+A second pass the same day drove it rather than looking at it: search launches
+applications and copies sums to the clipboard, the arrow keys move a selection
+that is now actually drawn, the dock cycles between an app's windows, Focus
+toggles and persists to disk, the sound slider both reads and writes the real
+volume, and notification action buttons, inline reply and Clear all all do what
+they say — the reply verified on the message bus.
+
+What it still does not prove: **the real login session has never been booted.**
+Everything above was the nested harness. Dragging a dock tile, the Focus timer
+expiring and the destructive session actions are also untested, and three
+defects found by that pass are still open because they need a decision.
 
 The record, including the five bugs that run found and what is still untested,
 is **[`docs/first-run-on-hardware.md`](docs/first-run-on-hardware.md)**. Read it

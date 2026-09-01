@@ -43,8 +43,15 @@ bar.
 
 **Gate (verbatim from the plan):** *does it feel better than the themed panel?*
 
-**Still open.** The bar now runs, so the gate can finally be asked — but it is a
-judgement Royce makes at the machine, and running is not the same as answering.
+**PASSED — 2026-09-01, Royce, at the machine: "the bar does feel better."**
+P1's gate is closed. He also confirmed the widgets and notifications worked and
+that the Aquarius mark opens the search palette, and answered the three open
+questions the first run raised: the bar's Drop/Search placeholders stay as they
+are for now, the fuzzy search breadth is right, and the Quick Settings text
+truncation is fine as it is.
+
+The sub-questions below were written before the bar existed; they are kept as
+the record of what the gate was asking.
 One thing the first run already settled: the bar comes up **Midnight, not Ice**,
 because it follows the system setting and the bench machine is set to dark. The
 gate's phrase "the light bar" needs re-reading with that in mind.
@@ -121,13 +128,19 @@ inside it works. Each component's doc still ends with its own unproven list.
   set to dark and the shell came up Midnight. `Theme.dark` is now a binding on the
   appearance portal via `services/SystemAppearance.qml` (`gdbus` under
   `Process`; Quickshell has no portal module), falling back to Ice-light.
-- [~] **Run it.** *Half done, 2026-09-01.* The nested harness ran and five of
-  the six pieces drew and read real data — see
-  [`first-run-on-hardware.md`](first-run-on-hardware.md). Still outstanding, and
-  this is the bigger half: **the real session has never been booted**, and
-  nothing has been proven to respond to being USED — no result launched from
-  search, no notification action pressed, no dock tile clicked, no Quick
-  Settings toggle flipped. The five docs' bench lists are still the work.
+- [~] **Run it.** *2026-09-01. Drawing and behaviour both done in the harness;
+  the session is not.* Five of the six pieces drew and read real data, and a
+  second pass the same day drove them: search launches apps and copies sums,
+  the arrow keys move a selection that is now actually drawn, the dock cycles
+  windows, Focus toggles and persists, the sound slider reads and writes, and
+  notification action buttons, inline reply and Clear all all work — inline
+  reply verified on the bus. Full record, including the three defects left open
+  for a decision: [`first-run-on-hardware.md`](first-run-on-hardware.md).
+
+  **Still outstanding, and it is the bigger half: the real session has never
+  been booted.** Also untested: dragging a dock tile, the Focus timer expiring,
+  launching a pinned dock app, and the destructive session actions (deliberately
+  never triggered on Royce's own machine).
 
 **Gate (verbatim from the plan):** *OBS records, Steam desktop works, a full
 workday survives on the bench.*
