@@ -92,7 +92,7 @@ these. Full explanation and troubleshooting: **[`harness/README.md`](harness/REA
 | `assets/` | The Aquarius logo, copied from `os-image/branding/`. |
 | `harness/` | How to run it on Linux, written for a beginner. |
 | `docs/adr/` | Decision records. `0001-framework.md` is why this is built on Quickshell and why the licence is still Apache-2.0. |
-| `docs/ROADMAP.md` | P1 (the bar) → P2 (the rest of the shell — written, unproven) → P3 (services, session polish) → P4. |
+| `docs/ROADMAP.md` | P1 (the bar — runs) → P2 (the rest of the shell — five of six run, the session does not) → P3 (services, session polish) → P4. |
 | `tests/` | The checks that can run without a Linux machine. |
 | `.github/workflows/` | The same checks in CI. **Dormant** — see below. |
 
@@ -116,22 +116,30 @@ which is what lets a component be written once and be right in both.
 
 ## Honest status
 
-**Almost nothing in this repository has ever been run.**
+**It runs — as of 2026-09-01, on the bench PC.** Everything before that date was
+written on a Mac and had never been executed.
 
-It is written on a Mac, where no QML engine and no Wayland compositor exist.
-The one exception, as of P2: the search palette's fuzzy matcher and calculator
-are plain JavaScript precisely so `node tests/search-js-tests.mjs` can execute
-them here — 73 assertions that really run. Everything else has been checked
-structurally: the brackets balance, the imports are the ones we intend, no file
-smuggles in a colour behind the theme's back, every `Theme.*` and `FocusState.*`
-name a component asks for actually exists, shelling out happens only in the
-three documented places, no path points at somebody's laptop, the scripts pass
-`shellcheck`, and the SVGs and workflow files parse. That is real — but it is
-not the same as *working*.
+What that first run proved: the bar draws and tracks the focused window, the
+dock draws its six pinned apps and puts a running dot under an open one, Quick
+Settings reads the real machine, Flow Search does sums and finds applications,
+and the shell really is the machine's notification daemon. The theme follows the
+system's light/dark setting, and saving a `.qml` file reloads the shell in about
+a second.
 
-The first honest test is `harness/run-nested.sh` on a Linux machine, then the
-bench lists at the end of each `docs/*.md`. Until that has happened, treat every
-screenshot-shaped sentence in these docs as a description of intent.
+What it does not prove: **that any of it responds to being used.** Opening a
+panel is not clicking things in it. Launching from a search result, pressing a
+notification's action, dragging a dock tile, toggling Wi-Fi — none of that has
+been done. And the real login session has still never been booted; all of the
+above was the nested harness.
+
+The record, including the five bugs that run found and what is still untested,
+is **[`docs/first-run-on-hardware.md`](docs/first-run-on-hardware.md)**. Read it
+before trusting a tick anywhere else.
+
+One thing worth taking from it: all four failures that stopped the shell loading
+had passed `tests/test-shell.sh` first. Those checks read the files; they do not
+run them. They are the cheap gate, and they stay useful — but the bench lists at
+the end of each `docs/*.md` are the real one.
 
 **Also true, and easy to lose track of:**
 

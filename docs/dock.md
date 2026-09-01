@@ -3,10 +3,16 @@
 *The second real piece of the Aquarius Shell. Bottom-centred, pinned apps plus
 running ones, with the running dot the design has been asking for since V2.*
 
-**Nothing on this page has been run.** It was written on a Mac, where no QML
-engine and no Wayland compositor exist. The [Not proven](#not-proven) section
-lists exactly what that leaves untested, and [On the
-bench](#on-the-bench-what-to-actually-do) is the sequence that would settle it.
+**It runs — 2026-09-01, on the bench PC.** The dock draws its six pinned apps
+with their real artwork, the hairline rule and the `+` tile, and opening an
+application added a tile with **the running dot underneath it**. Details and
+screenshots: [`first-run-on-hardware.md`](first-run-on-hardware.md).
+
+That is drawing and running-state, and no more. Everything a person does TO the
+dock — clicking a tile to launch or focus, the hover lift, dragging to reorder,
+the `+` tile's app grid — is still only written. The
+[Not proven](#not-proven) section is the list, and [On the
+bench](#on-the-bench-what-to-actually-do) is the sequence that settles the rest.
 
 ---
 

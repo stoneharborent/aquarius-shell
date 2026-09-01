@@ -1,7 +1,13 @@
 # Quick Settings, and the bar's status cluster
 
-*Phase P2. Written on a Mac, where none of it can be run. Read the "What is not
-proven" section before believing anything else in this file.*
+*Phase P2. Written on a Mac; first run 2026-09-01 on the bench PC, where the
+panel opened and read the real machine — Wi-Fi "No adapter", Bluetooth naming the
+connected MX Vertical, Performance "Balanced", sound at the system's true 38%.
+The run also found that the bar's status cluster was drawing every tray icon as
+an empty box, and wearing a crossed-out Wi-Fi mark on a machine with no wireless
+adapter; both are fixed. Toggling anything in the panel is still unproven — read
+the "What is not proven" section, and
+[`first-run-on-hardware.md`](first-run-on-hardware.md).*
 
 ---
 

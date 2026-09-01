@@ -35,13 +35,22 @@ bar.
 - [x] `harness/` — run it in a nested compositor window on any Linux box.
 - [x] `tests/` + `.github/workflows/lint.yml` — the first automated QML checking
       this project has ever had.
-- [ ] **Run it.** Nothing in this list above has been executed by a QML engine.
-      Until the harness runs on the bench, P1 is written, not proven.
+- [x] **Run it.** Done 2026-09-01 on the bench PC. The bar draws, the active app
+      name tracks the focused window, the theme follows the system's dark
+      setting, and the file-watching reload loop works. Four load failures and
+      one silent layout bug were found and fixed — the full record, including
+      what is still unproven, is **[`first-run-on-hardware.md`](first-run-on-hardware.md)**.
 
 **Gate (verbatim from the plan):** *does it feel better than the themed panel?*
 
-Practically, that means standing the Ice bar next to the shipped one and
-answering honestly. Sub-questions worth writing down when the bench run happens:
+**Still open.** The bar now runs, so the gate can finally be asked — but it is a
+judgement Royce makes at the machine, and running is not the same as answering.
+One thing the first run already settled: the bar comes up **Midnight, not Ice**,
+because it follows the system setting and the bench machine is set to dark. The
+gate's phrase "the light bar" needs re-reading with that in mind.
+
+Practically, that means standing the Aquarius bar next to the shipped one and
+answering honestly. Sub-questions worth writing down when it is judged:
 
 - Does the light bar read cleanly against real wallpapers, or does it wash out?
 - Is 30px right on a real screen, or is that an artboard number?
@@ -56,31 +65,51 @@ design project with what was learned.
 ## Phase P2 — the rest of the shell, and a session that boots · **current**
 
 Months 2–4 in the plan's estimate. **All six pieces WRITTEN 2026-08-31** (five
-parallel tracks, merged the same day) — written, not proven: nothing below has
-been executed by a QML engine. Each component's doc ends with its own unproven
-list and bench steps.
+parallel tracks, merged the same day).
 
-- [x] **Dock** — centred, per the V2 design. Pinned apps plus running ones, off
+**FIVE OF THE SIX NOW RUN — 2026-09-01, on the bench PC.** The dock, Quick
+Settings, notifications, Flow Search and the status cluster were all executed by
+a QML engine, drew on screen, and read real data from the real machine. The
+sixth, the login session, has still never been booted. The full record of what
+that run proved and what it did not is
+**[`first-run-on-hardware.md`](first-run-on-hardware.md)** — read it before
+trusting any tick below, because "runs" is not "finished": what was checked was
+that each piece draws and shows true information, not that every interaction
+inside it works. Each component's doc still ends with its own unproven list.
+
+- [x] **Dock** — centred, per the V2 design. **RUNS 2026-09-01**: draws the six
+  pinned apps with real artwork, and opening an app added a tile with the
+  running dot underneath it. Pinned apps plus running ones, off
   `ToplevelManager` and `DesktopEntries`. The centred running dot the KDE fork
   couldn't draw. Pinned list in `~/.config/aquarius-shell/dock.json`, watched
   live. `docs/dock.md`.
-- [x] **Quick Settings** — the 330px panel: Wi-Fi, Bluetooth, Focus, adaptive
+- [x] **Quick Settings** — **RUNS 2026-09-01**, reading the real machine: Wi-Fi
+  *No adapter*, Bluetooth naming the connected MX Vertical, Performance
+  *Balanced*, sound at the system's true 38%. The 330px panel: Wi-Fi, Bluetooth, Focus, adaptive
   4th tile, sound + brightness, battery. Build finding: Quickshell v0.3.0 HAS
   a NetworkManager service (`Quickshell.Networking`) — no `nmcli`; but Fedora
   may still package 0.2.1, so Wi-Fi sits behind a `Loader`. No brightness
   service exists anywhere — `brightnessctl` via `Process`, fenced as the
   documented interim. `docs/quick-settings.md`.
-- [x] **Notifications** — the shell IS the freedesktop notification daemon
+- [x] **Notifications** — **PROVEN END TO END 2026-09-01**: notify-send in, toast
+  out, grouped by application in the panel. (Testing it needs a private message
+  bus — GNOME owns the notification service otherwise; `AQ_PRIVATE_BUS=1`.)
+  The shell IS the freedesktop notification daemon
   (`NotificationServer`), with toasts, the 350px stacked-by-app panel off the
   clock, inline actions and reply, and Focus-until-morning (deadline, auto-off
   timer, persisted across restarts). Critical urgency breaks through Focus.
   `docs/notifications.md`.
-- [x] **Flow Search palette** — one box; apps, math, session actions (honest
+- [x] **Flow Search palette** — **RUNS 2026-09-01**: `12.5 * 8` gives 100 with
+  *press Enter to copy*, and letters find real applications with real icons.
+  One box; apps, math, session actions (honest
   scope — no faked file/web search). Summoned by
   `qs ipc -c aquarius-shell call search toggle`; there is NO portable
   global-shortcut path in Quickshell today (its `GlobalShortcut` is
   Hyprland-only), so the compositor binds the key. `docs/flow-search.md`.
-- [x] **The status cluster** — real: live network/sound/battery glyphs, the
+- [x] **The status cluster** — **RUNS 2026-09-01**, and the run found two things:
+  every tray icon was rendering as an empty box (a Row broken by an anchored
+  child), and the bar wore a crossed-out Wi-Fi mark on a machine with no
+  wireless adapter. Both fixed. Real: live network/sound/battery glyphs, the
   system tray (StatusNotifierItem), click opens Quick Settings.
 - [x] **The experimental Aquarius Session** — written, has never booted:
   session entry + loud-failure launcher + configs for BOTH candidate
@@ -88,12 +117,17 @@ list and bench steps.
   `-gtk`+`-wlr` portal mix is right for labwc but wrong for niri, which needs
   the GNOME portal for capture — per-compositor portals.conf, selected by
   `XDG_CURRENT_DESKTOP`. Beginner walkthrough: `docs/session.md`.
-- [x] **Theme follows the system** — `Theme.dark` is now a binding on the
+- [x] **Theme follows the system** — **PROVEN 2026-09-01**: the bench machine is
+  set to dark and the shell came up Midnight. `Theme.dark` is now a binding on the
   appearance portal via `services/SystemAppearance.qml` (`gdbus` under
   `Process`; Quickshell has no portal module), falling back to Ice-light.
-- [ ] **Run it.** The bench boots the nested harness first, then the real
-  session, and works through the five docs' bench lists. Until then P2 is
-  written, not proven — same honest state P1's bar is in.
+- [~] **Run it.** *Half done, 2026-09-01.* The nested harness ran and five of
+  the six pieces drew and read real data — see
+  [`first-run-on-hardware.md`](first-run-on-hardware.md). Still outstanding, and
+  this is the bigger half: **the real session has never been booted**, and
+  nothing has been proven to respond to being USED — no result launched from
+  search, no notification action pressed, no dock tile clicked, no Quick
+  Settings toggle flipped. The five docs' bench lists are still the work.
 
 **Gate (verbatim from the plan):** *OBS records, Steam desktop works, a full
 workday survives on the bench.*

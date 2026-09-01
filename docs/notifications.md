@@ -3,6 +3,14 @@
 *The notification pipeline: the daemon, the toasts that appear on their own, and
 the panel that drops out of the bar clock. Phase P2.*
 
+**Proven end to end 2026-09-01** on the bench PC: `notify-send` in, toast out,
+and the panel grouping them by application with counts, timestamps and the
+footer clock. Testing it needs a message bus of its own — only one program per
+bus can be the notification daemon, and on AquariusOS GNOME already is, so the
+harness has `AQ_PRIVATE_BUS=1`. The inline reply and the action buttons have
+still never been pressed. See
+[`first-run-on-hardware.md`](first-run-on-hardware.md).
+
 ---
 
 ## The one-sentence version

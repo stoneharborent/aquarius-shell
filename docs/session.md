@@ -592,8 +592,11 @@ the order a bench run would hit it:
 4. `session/labwc/rc.xml` has never been parsed by labwc. It is confirmed
    well-formed XML by `tests/test-shell.sh` — which proves the angle brackets
    match and nothing else.
-5. `services/SystemAppearance.qml` has never been run by a QML engine. No
-   `gdbus` command in it has been executed.
+5. ~~`services/SystemAppearance.qml` has never been run by a QML engine.~~
+   **Run 2026-09-01** in the nested harness: the bench machine is set to dark
+   and the shell came up Midnight, so the `gdbus` call and the binding both
+   work. Still unproven IN A REAL SESSION, which is what this page is about —
+   and unproven is *changing* the setting while the shell is running.
 
 **Read from documentation and source, but not observed**
 

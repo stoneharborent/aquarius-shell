@@ -413,9 +413,15 @@ the same way the existing `barXxx` block was.
 
 ## What has actually been tested
 
-**The QML has never been run.** No QML engine has parsed it, no compositor has
-drawn it, and nothing has taken a keystroke. That is the same honest status as
-the rest of this repository.
+**The QML runs — 2026-09-01, on the bench PC.** The palette opens over its
+scrim, takes keystrokes, and answers: `12.5 * 8` gives 100 with *press Enter to
+copy*, and typing letters lists real applications with their real icons. It was
+opened over IPC (`qs -p . ipc call search open`), which is itself the first proof
+the summoning path works.
+
+**What that does not cover:** pressing Enter on a result — launching an
+application, copying a sum, running a session action — has still never been done.
+Everything below the input box is proven to DRAW, not to ACT.
 
 **The JavaScript has been run, and this is new.** `fuzzy.js` and `calc.js` are
 deliberately plain `.pragma library` JavaScript rather than QML, so `node` can
