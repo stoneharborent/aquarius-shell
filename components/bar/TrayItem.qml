@@ -104,28 +104,39 @@ BarItem {
         // These icons are small and change rarely, which is exactly what
         // IconImage is documented as being for.
         asynchronous: true
-    }
 
-    MouseArea {
-        // The scroll gesture. It is a separate MouseArea rather than a change to
-        // BarItem's, because scrolling is meaningless on every other bar item
-        // and a wheel handler that swallows events it does not use is a good way
-        // to break scrolling somewhere else later.
-        //
-        // Note `parent` here is BarItem's content row, not the BarItem — anything
-        // nested inside a BarItem lands in that row. So this covers the icon but
-        // not the item's 8px of side padding, which is the right target anyway.
-        //
-        // BarItem's own MouseArea sits above this one but does not handle wheel
-        // events, and an unhandled wheel event falls through — which is how this
-        // gets to see it at all.
-        anchors.fill: parent
-        acceptedButtons: Qt.NoButton
-        onWheel: function (event) {
-            if (event.angleDelta.y !== 0)
-                root.item.scroll(event.angleDelta.y, false);
-            if (event.angleDelta.x !== 0)
-                root.item.scroll(event.angleDelta.x, true);
+        MouseArea {
+            // The scroll gesture. It is a separate MouseArea rather than a
+            // change to BarItem's, because scrolling is meaningless on every
+            // other bar item and a wheel handler that swallows events it does
+            // not use is a good way to break scrolling somewhere else later.
+            //
+            // IT MUST LIVE INSIDE THE ICON, not beside it.
+            //   Anything nested directly in a BarItem lands in that item's
+            //   content `Row`, and a Row will not accept a child that uses
+            //   anchors — it refuses to lay ANY of its children out and says so:
+            //
+            //     QML Row: Cannot specify left, right, horizontalCenter, fill
+            //     or centerIn anchors for items inside Row. Row will not function.
+            //
+            //   That is what this component did until 2026-09-01, when the shell
+            //   was first run on real hardware with a real tray in it: two tray
+            //   icons on the machine, two broken rows, two warnings a run.
+            //   Sitting inside the icon, `parent` is the icon, the anchor is
+            //   legal, and the target is the same artwork the user is aiming at.
+            //   As a bonus it no longer takes a slot of its own in the row.
+            //
+            // BarItem's own MouseArea sits above this one but does not handle
+            // wheel events, and an unhandled wheel event falls through — which
+            // is how this gets to see it at all.
+            anchors.fill: parent
+            acceptedButtons: Qt.NoButton
+            onWheel: function (event) {
+                if (event.angleDelta.y !== 0)
+                    root.item.scroll(event.angleDelta.y, false);
+                if (event.angleDelta.x !== 0)
+                    root.item.scroll(event.angleDelta.x, true);
+            }
         }
     }
 }
