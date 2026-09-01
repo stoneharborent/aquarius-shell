@@ -1177,6 +1177,59 @@ fi
 
 # ------------------------------------------------------------------------------
 echo ""
+echo "=== 26. no id shadows a property every QML object already has ==="
+# ------------------------------------------------------------------------------
+# THIS SECTION EXISTS BECAUSE OF A BUG THAT COST THREE FEATURES SILENTLY.
+#
+# The search overlay used `id: palette`. Every QML Item ALSO has a built-in
+# `palette` property — Qt 6's colour-group API. When a child object looks up a
+# name, its own properties are found before the enclosing file's ids, so inside
+# a delegate `palette.selectedIndex` did not mean the window with that id. It
+# meant `Item.palette.selectedIndex`, which is undefined.
+#
+# Nothing failed loudly: `index === undefined` is just false. The selected row
+# was never drawn, its Enter hint never appeared, and the confirm-twice guard on
+# destructive actions never armed — for the entire life of the file. See the
+# comment at the PanelWindow in components/search/FlowSearch.qml.
+#
+# Renaming an id is free. Debugging this is not. So: no id may be spelled like a
+# property that EVERY object has.
+#
+# The list below is deliberately limited to those universals. Names like `icon`,
+# `footer`, `popup` and `background` are properties of particular types only
+# (Controls, ListView), so they are safe on a plain Item and are not flagged —
+# but if you use one as an id inside a Control, you are playing the same game.
+aq_reserved_ids="palette data children parent state states anchors clip opacity
+visible enabled focus activeFocus layer scale rotation transform transitions
+smooth antialiasing width height implicitWidth implicitHeight x y z objectName
+baselineOffset childrenRect containmentMask"
+
+aq_ids_ok=1
+while IFS= read -r aq_qml; do
+    while IFS= read -r aq_id; do
+        for aq_reserved in ${aq_reserved_ids}; do
+            if [ "${aq_id}" = "${aq_reserved}" ]; then
+                echo "       ${aq_qml}: id: ${aq_id}"
+                aq_ids_ok=0
+            fi
+        done
+    done < <(sed -E 's,//.*,,' "${aq_qml}" \
+                | grep -oE '^[[:space:]]*id:[[:space:]]*[A-Za-z_][A-Za-z0-9_]*' \
+                | sed -E 's,.*id:[[:space:]]*,,')
+done < <(find components shell.qml theme services -name '*.qml' 2> /dev/null)
+
+if [ "${aq_ids_ok}" -eq 1 ]; then
+    pass "no id collides with a built-in property name"
+else
+    fail "an id above is spelled like a property every QML object has." \
+         "Inside a child object that name resolves to the OBJECT'S property," \
+         "not to your id, and the expression silently evaluates to undefined." \
+         "Rename the id. This is exactly the bug that made the search palette's" \
+         "selected row, its Enter hint and its confirm-twice guard all vanish."
+fi
+
+# ------------------------------------------------------------------------------
+echo ""
 if [ "${aq_failures}" -ne 0 ]; then
     echo "::error::${aq_failures} check(s) failed."
     exit 1
