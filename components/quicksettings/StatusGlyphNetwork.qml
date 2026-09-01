@@ -42,6 +42,27 @@ QsGlyph {
     readonly property bool connected:
         root.wifiDevice !== null && root.wifiDevice.connected
 
+    // WHEN THE MACHINE HAS NO WI-FI AT ALL, SAY NOTHING
+    //   A desktop on an Ethernet cable has no Wi-Fi radio to report on. Drawing
+    //   a permanently crossed-out Wi-Fi mark there is not a status, it is a
+    //   complaint about hardware the machine was never supposed to have — and
+    //   the user cannot act on it. This is the same rule the battery glyph
+    //   already follows: no battery, no battery mark (StatusGlyphBattery.qml).
+    //
+    //   Note the distinction. Wi-Fi hardware that is present but off or
+    //   disconnected DOES still show `wifi-off`, because that is a real state
+    //   with a real fix. Only the absence of the radio hides the glyph.
+    //
+    //   Found on the RTX 4090 bench machine, 2026-09-01: wired desk PC, no
+    //   Wi-Fi adapter, and the bar wore a crossed-out Wi-Fi mark all day.
+    //
+    //   BarItem lays its contents out in a `Row`, and a Row skips invisible
+    //   children outright — no gap, no stray spacing. So `visible` is the whole
+    //   mechanism here; nothing else needs collapsing.
+    readonly property bool haveWifi: root.wifiDevice !== null
+
+    visible: root.haveWifi
+
     glyph: root.connected ? "wifi" : "wifi-off"
     size: Theme.barGlyphSize
 
@@ -52,4 +73,5 @@ QsGlyph {
 
     Accessible.role: Accessible.StaticText
     Accessible.name: root.connected ? qsTr("Wi-Fi connected") : qsTr("Wi-Fi off")
+    Accessible.ignored: !root.haveWifi
 }
