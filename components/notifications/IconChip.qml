@@ -101,11 +101,32 @@ ClippingRectangle {
     }
 
     // ---- 3. the fallback -----------------------------------------------------
+    // A monogram, built the way a monogram is built: the first letter of each of
+    // the first two WORDS, in capitals. "Aquarius Editor" gives AE.
+    //
+    // The obvious version — the first two characters of the whole name — was
+    // what this did until the first notification ever sent to this shell arrived
+    // from `notify-send` and drew a chip that said "no". A chip is a mark, and a
+    // mark that spells a word is reading as that word. Cutting on word
+    // boundaries makes that almost impossible, and NS is a better mark anyway.
+    //
+    // Application names arrive in every shape there is, so the split is generous
+    // about what separates words: spaces, dots, dashes and slashes all count.
+    // That turns notify-send into NS and org.gnome.Nautilus into OG.
+    //
+    // One word gets ONE letter, not two. "Steam" is S, not ST — a single capital
+    // is the cleaner mark, and the second letter of a word carries no meaning.
     readonly property string initials: {
         const name = root.notification ? root.notification.appName : root.label;
         if (!name || name.length === 0)
             return "?";
-        return name.substring(0, 2);
+
+        const words = name.split(/[\s._\-\u2013\u2014/\\]+/).filter(w => w.length > 0);
+        if (words.length === 0)
+            return "?";
+        if (words.length === 1)
+            return words[0].charAt(0).toUpperCase();
+        return (words[0].charAt(0) + words[1].charAt(0)).toUpperCase();
     }
 
     Image {
