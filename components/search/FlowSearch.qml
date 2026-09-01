@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Stone Harbor Entertainment
 // SPDX-License-Identifier: Apache-2.0
 // =============================================================================
-// FlowSearch — the search palette. One box, no commands to learn.
+// FlowSearch — the search overlay. One box, no commands to learn.
 // =============================================================================
 // WHAT IT LOOKS LIKE  (V2 artboard: "AquariusOS Shell Search.html")
 //
@@ -145,7 +145,7 @@ Scope {
         }
 
         // Always open, and reset. Bind this if you would rather the key never
-        // closed the palette.
+        // closed the overlay.
         function open(): void {
             root.openSearch();
         }
@@ -165,7 +165,7 @@ Scope {
     // What it knows how to find
     // =========================================================================
     property SearchEngine engine: SearchEngine {
-        query: palette.query
+        query: overlay.query
     }
 
     // =========================================================================
@@ -183,8 +183,27 @@ Scope {
     // is the only thing that knows which output has your attention. Asking it
     // ourselves would need a compositor-specific "active monitor" call, which is
     // the thing this repo does not do.
+    // ⚠️ THE ID IS `overlay`, NOT `palette`, AND IT MUST NOT GO BACK
+    //   Every QML `Item` has a built-in `palette` property of its own — Qt 6's
+    //   colour-group API. A child object's OWN property is found before this
+    //   file's ids, so inside the result delegate below, `palette.selectedIndex`
+    //   did not mean this window at all. It meant `Item.palette.selectedIndex`,
+    //   which is simply undefined.
+    //
+    //   Nothing failed loudly. `index === undefined` is false, so every row
+    //   quietly decided it was not the selected one, and TWO features were dead
+    //   for as long as this file has existed:
+    //
+    //     * the selected row was never drawn, so nothing on screen said what
+    //       Enter would do or answered the arrow keys — the list looked inert
+    //       even though the keys were working perfectly;
+    //     * `awaitingConfirm` never armed, so the "anything that cannot be
+    //       undone gets asked twice" guard on destructive actions was gone.
+    //
+    //   Found on the bench 2026-09-01, by painting the selected row bright red
+    //   and seeing nothing change.
     PanelWindow {
-        id: palette
+        id: overlay
 
         readonly property string query: field.text
 
@@ -235,14 +254,14 @@ Scope {
         // remembers last time's query makes you delete something before you can
         // start, every single time.
         onVisibleChanged: {
-            palette.selectedIndex = 0;
-            palette.confirmIndex = -1;
+            overlay.selectedIndex = 0;
+            overlay.confirmIndex = -1;
             field.text = "";
 
             // The surface has to exist before anything in it can hold focus, so
             // the focus grab is deferred by one turn of the event loop rather
             // than attempted while the window is still being shown.
-            if (palette.visible)
+            if (overlay.visible)
                 Qt.callLater(field.takeFocus);
         }
 
@@ -257,37 +276,37 @@ Scope {
         readonly property var results: root.engine.results
 
         onResultsChanged: {
-            palette.selectedIndex = 0;
-            palette.confirmIndex = -1;
+            overlay.selectedIndex = 0;
+            overlay.confirmIndex = -1;
         }
 
         function moveSelection(delta: int): void {
-            const count = palette.results.length;
+            const count = overlay.results.length;
             if (count === 0)
                 return;
             // Wraps, because a list this short is faster to go round than to
             // stop at the end of.
-            palette.selectedIndex = ((palette.selectedIndex + delta) % count + count) % count;
-            palette.confirmIndex = -1;
+            overlay.selectedIndex = ((overlay.selectedIndex + delta) % count + count) % count;
+            overlay.confirmIndex = -1;
         }
 
         function activateSelection(): void {
-            const count = palette.results.length;
+            const count = overlay.results.length;
             if (count === 0) {
                 root.closeSearch();
                 return;
             }
 
-            const index = palette.selectedIndex;
-            const result = palette.results[index];
+            const index = overlay.selectedIndex;
+            const result = overlay.results[index];
             if (!result)
                 return;
 
             // Anything that cannot be undone gets asked twice. The row says so
             // while it is armed; nothing moves on screen, so the second Enter
             // lands where you are already looking.
-            if (result.confirm && palette.confirmIndex !== index) {
-                palette.confirmIndex = index;
+            if (result.confirm && overlay.confirmIndex !== index) {
+                overlay.confirmIndex = index;
                 return;
             }
 
@@ -351,8 +370,8 @@ Scope {
 
                     width: parent.width
 
-                    onMoveSelection: delta => palette.moveSelection(delta)
-                    onAccept: palette.activateSelection()
+                    onMoveSelection: delta => overlay.moveSelection(delta)
+                    onAccept: overlay.activateSelection()
                     onDismiss: root.closeSearch()
                 }
 
@@ -366,7 +385,7 @@ Scope {
                 Item {
                     width: parent.width
                     height: list.implicitHeight + Theme.searchListPaddingV * 2
-                    visible: palette.results.length > 0
+                    visible: overlay.results.length > 0
 
                     Column {
                         id: list
@@ -380,7 +399,7 @@ Scope {
                         spacing: 0
 
                         Repeater {
-                            model: palette.results
+                            model: overlay.results
 
                             delegate: ResultRow {
                                 required property int index
@@ -388,12 +407,12 @@ Scope {
 
                                 width: list.width
                                 result: modelData
-                                selected: index === palette.selectedIndex
-                                awaitingConfirm: index === palette.confirmIndex
+                                selected: index === overlay.selectedIndex
+                                awaitingConfirm: index === overlay.confirmIndex
 
                                 onActivated: {
-                                    palette.selectedIndex = index;
-                                    palette.activateSelection();
+                                    overlay.selectedIndex = index;
+                                    overlay.activateSelection();
                                 }
                             }
                         }
@@ -404,7 +423,7 @@ Scope {
                 Item {
                     width: parent.width
                     height: emptyLabel.implicitHeight + Theme.searchRowPaddingV * 2
-                    visible: palette.results.length === 0 && field.text.length > 0
+                    visible: overlay.results.length === 0 && field.text.length > 0
 
                     Text {
                         id: emptyLabel
