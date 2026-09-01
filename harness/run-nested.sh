@@ -134,9 +134,16 @@ fi
 # inside the container, where that directory does not exist. So the variable is
 # set, and every path in it is wrong. Checking whether it was empty was not
 # enough; that version of this block silently did nothing.
+#
+# The variable is copied into aq_data_dirs first because this script runs under
+# `set -u`, and `${XDG_DATA_DIRS#...}` — a substitution without a default — is an
+# error when the variable is unset, not an empty string. `distrobox enter`
+# happens to always set it, so the version without this copy ran fine for weeks
+# and then killed the script the first time it was started any other way.
 # ---------------------------------------------------------------------------
-if [ -d /run/host/usr/share ] && [ "${XDG_DATA_DIRS:-}" = "${XDG_DATA_DIRS#*/run/host}" ]; then
-    export XDG_DATA_DIRS="/run/host/usr/share:/run/host/var/lib/flatpak/exports/share:${XDG_DATA_DIRS:-/usr/local/share:/usr/share}"
+aq_data_dirs="${XDG_DATA_DIRS:-}"
+if [ -d /run/host/usr/share ] && [ "${aq_data_dirs}" = "${aq_data_dirs#*/run/host}" ]; then
+    export XDG_DATA_DIRS="/run/host/usr/share:/run/host/var/lib/flatpak/exports/share:${aq_data_dirs:-/usr/local/share:/usr/share}"
     echo "  (using the host's applications and icons, so the dock and search are real)"
 fi
 
