@@ -53,6 +53,12 @@ pragma Singleton
 
 import Quickshell
 
+// QtQuick is imported for its VALUE TYPES, not for anything visible. `color` is
+// not a built-in QML type — it arrives with QtQuick — so a file that declares
+// `property color` without this line fails to load with the unhelpful message
+// "color is not a type". Nothing is drawn from here; this is a palette.
+import QtQuick
+
 import "../services"
 
 Singleton {
@@ -108,7 +114,7 @@ Singleton {
     readonly property color starred: root.colors.starred
 
     readonly property color accent: root.colors.accent
-    readonly property color onAccent: root.colors.onAccent
+    readonly property color inkOnAccent: root.colors.inkOnAccent
     readonly property color accentWash: root.colors.accentWash
 
     // Quick Settings washes. See the note beside them in Ice.qml.
@@ -345,14 +351,34 @@ Singleton {
     // =========================================================================
     // The OS installs Sora, Inter and JetBrains Mono as system fonts. In the
     // nested test harness on somebody else's machine they may be missing, so
-    // each family below ends in a generic name — the shell then falls back to
+    // each family has a generic partner below — the shell then falls back to
     // whatever that machine has rather than rendering boxes. See harness/README.md.
-    readonly property string fontDisplay: "Sora"
-    readonly property string fontBody: "Inter"
-    readonly property string fontMono: "JetBrains Mono"
+    //
+    // The choosing happens ONCE, here, when the shell starts: `Qt.fontFamilies()`
+    // is the list of families this machine actually has, and `pickFont` returns
+    // the wanted one if it is in that list and the generic one if it is not. So
+    // `Theme.fontBody` is always a family that exists, and every component can
+    // keep writing the ordinary `font.family: Theme.fontBody`.
+    //
+    // Why not `font.families: [wanted, generic]`, which is the obvious Qt way to
+    // say the same thing? Because the Quickshell build AquariusOS runs
+    // (quickshell 0.2.1 on Qt 6.11) does not expose `families` on the font group
+    // at all — assigning it stops the whole shell from loading with "Cannot
+    // assign to non-existent property families". Found on the first real run,
+    // 2026-09-01. `font.family` works everywhere; this file absorbs the rest.
     readonly property string fontDisplayFallback: "sans-serif"
     readonly property string fontBodyFallback: "sans-serif"
     readonly property string fontMonoFallback: "monospace"
+
+    readonly property var installedFonts: Qt.fontFamilies()
+
+    function pickFont(wanted: string, generic: string): string {
+        return root.installedFonts.indexOf(wanted) !== -1 ? wanted : generic
+    }
+
+    readonly property string fontDisplay: root.pickFont("Sora", root.fontDisplayFallback)
+    readonly property string fontBody: root.pickFont("Inter", root.fontBodyFallback)
+    readonly property string fontMono: root.pickFont("JetBrains Mono", root.fontMonoFallback)
 
     // The scale, from tokens/typography.css. Sizes are in points-as-pixels the
     // same way the design draws them; Qt's `font.pixelSize` is the matching

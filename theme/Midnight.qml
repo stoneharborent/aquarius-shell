@@ -22,6 +22,12 @@ pragma Singleton
 
 import Quickshell
 
+// QtQuick is imported for its VALUE TYPES, not for anything visible. `color` is
+// not a built-in QML type — it arrives with QtQuick — so a file that declares
+// `property color` without this line fails to load with the unhelpful message
+// "color is not a type". Nothing is drawn from here; this is a palette.
+import QtQuick
+
 Singleton {
     readonly property string name: "Midnight"
     readonly property bool isDark: true
@@ -84,7 +90,12 @@ Singleton {
     readonly property color turquoise: "#40E0D0"
     readonly property color aquamarine: "#7FFFD4"
 
-    readonly property color onAccent: "#08121E"
+    // The ink that goes ON TOP of an accent-coloured surface — a pressed tile,
+    // a selected row. NOT named `onAccent`: QML reads any name shaped `onSomething`
+    // as a signal handler for the signal `Something`, so `onAccent` refuses to
+    // load at all ("Cannot assign a value to a signal"). Learned the hard way,
+    // first run on hardware, 2026-09-01.
+    readonly property color inkOnAccent: "#08121E"
 
     // The accent as a wash. Ice's twin — see the long note beside `accentWash`
     // in Ice.qml for what it is for and the one thing it does not do.

@@ -86,11 +86,10 @@ ColumnLayout {
             text: Math.round(root.value * 100) + "%"
             color: Theme.ink
 
-            // `font.families` rather than `font.family`: the OS installs
-            // JetBrains Mono, but the bench machine running the nested harness
-            // may not have it. fontconfig always resolves "monospace" to
-            // something, so the number can never fall back to nothing.
-            font.families: [Theme.fontMono, Theme.fontMonoFallback]
+            // Theme.fontMono is already resolved against the fonts this machine
+            // actually has — see the TYPE section of Theme.qml — so the number
+            // can never fall back to nothing.
+            font.family: Theme.fontMono
             font.pixelSize: Theme.fsMicro
             font.weight: Font.Medium
             textFormat: Text.PlainText

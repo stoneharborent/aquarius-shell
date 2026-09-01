@@ -124,7 +124,7 @@ Rectangle {
                 // On a lit chip the glyph sits on solid accent, so it has to be
                 // the colour the theme keeps for exactly that: text drawn on top
                 // of a filled accent shape.
-                color: root.active ? Theme.onAccent : Theme.ink
+                color: root.active ? Theme.inkOnAccent : Theme.ink
             }
         }
 

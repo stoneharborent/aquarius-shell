@@ -75,7 +75,7 @@ Item {
             font.pixelSize: Theme.fsMicro
             color: Theme.ink
             selectionColor: Theme.accent
-            selectedTextColor: Theme.onAccent
+            selectedTextColor: Theme.inkOnAccent
 
             clip: true
             selectByMouse: true
