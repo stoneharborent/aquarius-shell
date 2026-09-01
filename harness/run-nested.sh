@@ -114,6 +114,33 @@ if [ -z "${DBUS_SYSTEM_BUS_ADDRESS:-}" ] && [ -S /run/host/run/dbus/system_bus_s
 fi
 
 # ---------------------------------------------------------------------------
+# The machine's applications, when we are inside a distrobox.
+#
+# The dock and the search palette both ask the standard question "what
+# applications does this machine have?", and the answer comes from the .desktop
+# files in XDG_DATA_DIRS. Inside a distrobox that variable is EMPTY, so the only
+# entries either of them could see were the ones in the user's home directory —
+# which is why the dock came up holding nothing but its `+` tile, and why search
+# could find a Steam game but not Firefox.
+#
+# The applications are right there; the container just is not looking. Both of
+# the host's application directories are visible under /run/host, so put them at
+# the FRONT of the list. The icon themes come along for free, which is what makes
+# the tiles show real artwork instead of generic squares.
+#
+# Prepending rather than only filling an empty value is deliberate. `distrobox
+# enter` hands the container the HOST's XDG_DATA_DIRS verbatim — paths like
+# /var/lib/flatpak/exports/share, which mean something on the host and nothing
+# inside the container, where that directory does not exist. So the variable is
+# set, and every path in it is wrong. Checking whether it was empty was not
+# enough; that version of this block silently did nothing.
+# ---------------------------------------------------------------------------
+if [ -d /run/host/usr/share ] && [ "${XDG_DATA_DIRS:-}" = "${XDG_DATA_DIRS#*/run/host}" ]; then
+    export XDG_DATA_DIRS="/run/host/usr/share:/run/host/var/lib/flatpak/exports/share:${XDG_DATA_DIRS:-/usr/local/share:/usr/share}"
+    echo "  (using the host's applications and icons, so the dock and search are real)"
+fi
+
+# ---------------------------------------------------------------------------
 # A private message bus, for testing notifications.
 #
 # THE PROBLEM
