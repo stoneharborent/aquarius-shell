@@ -95,6 +95,61 @@ if [ -z "${WAYLAND_DISPLAY:-}" ]; then
     exit 1
 fi
 
+# ---------------------------------------------------------------------------
+# The system message bus, when we are inside a distrobox.
+#
+# The status cluster asks the machine real questions — is there battery, is
+# Wi-Fi up, is Bluetooth on — and every one of those answers lives on the
+# system message bus (D-Bus). A distrobox does not connect to it by default, so
+# without this the shell starts fine but every one of those readings is blank,
+# and the terminal fills with "Could not connect to DBus".
+#
+# distrobox mounts the whole host machine under /run/host, and the bus socket is
+# in there. Pointing at it is all that is needed. Outside a distrobox this
+# socket does not exist and the line below does nothing.
+# ---------------------------------------------------------------------------
+if [ -z "${DBUS_SYSTEM_BUS_ADDRESS:-}" ] && [ -S /run/host/run/dbus/system_bus_socket ]; then
+    export DBUS_SYSTEM_BUS_ADDRESS="unix:path=/run/host/run/dbus/system_bus_socket"
+    echo "  (using the host's system message bus, so battery, network and Bluetooth read real values)"
+fi
+
+# ---------------------------------------------------------------------------
+# A private message bus, for testing notifications.
+#
+# THE PROBLEM
+#   This shell wants to BE the machine's notification daemon. Only one program
+#   on a session message bus may hold that job, and on AquariusOS the GNOME
+#   session already holds it. So in the harness our shell asks, is refused, and
+#   says so:
+#
+#     Could not register notification server at org.freedesktop.Notifications,
+#     presumably because one is already registered.
+#
+#   Everything else in the shell works; notifications simply never arrive,
+#   because they all go to GNOME.
+#
+# THE FIX, WHEN YOU ARE TESTING NOTIFICATIONS
+#     AQ_PRIVATE_BUS=1 ./harness/run-nested.sh
+#
+#   That gives the nested session a message bus of its very own. Nothing else
+#   is on it, so our shell gets the job, and any notification sent from inside
+#   that session arrives in our panel. To send one, from another terminal:
+#
+#     distrobox enter aq-shell
+#     DBUS_SESSION_BUS_ADDRESS=$(cat /tmp/aquarius-harness-bus) \
+#         notify-send "Hello" "from the harness"
+#
+# WHAT YOU GIVE UP WHILE IT IS ON
+#   A private bus is private in both directions, so the system tray goes empty —
+#   the host's applications are all on the host's bus and cannot see this one.
+#   Expected. Leave this OFF unless notifications are what you are working on.
+#
+#   The light/dark setting survives, which is worth knowing: a fresh
+#   xdg-desktop-portal starts on the private bus, reads the same saved
+#   preference, and answers. The shell still follows the system theme in here.
+# ---------------------------------------------------------------------------
+AQ_PRIVATE_BUS="${AQ_PRIVATE_BUS:-0}"
+
 echo ""
 echo "=== Starting ==="
 echo "  shell:      ${AQ_SHELL_DIR}"
@@ -126,7 +181,21 @@ case "${AQ_COMPOSITOR}" in
         # nested session's environment into systemd and D-Bus globally, and niri's
         # own help says not to use it for a nested window — it would confuse the
         # real desktop you are sitting in.
-        exec niri -- qs -p "${AQ_SHELL_DIR}"
+        # -c points niri at OUR config, next to this script. Without it niri
+        # reads ~/.config/niri, and niri's own default config starts waybar and
+        # a hotkey card that then appear in every screenshot of our shell.
+        # See the comments in harness/niri-nested.kdl.
+        if [ "${AQ_PRIVATE_BUS}" != "0" ]; then
+            # `dbus-run-session` starts a bus, puts its address in the
+            # environment, runs the command, and tears the bus down after. The
+            # address is also written to a file so another terminal can send
+            # notifications into this session — see the note above.
+            exec dbus-run-session -- sh -c '
+                printf %s "$DBUS_SESSION_BUS_ADDRESS" > /tmp/aquarius-harness-bus
+                exec niri -c "$1/harness/niri-nested.kdl" -- qs -p "$1"
+            ' sh "${AQ_SHELL_DIR}"
+        fi
+        exec niri -c "${AQ_SHELL_DIR}/harness/niri-nested.kdl" -- qs -p "${AQ_SHELL_DIR}"
         ;;
     labwc)
         # labwc's -s/--startup takes a command to run once it is up. (There is

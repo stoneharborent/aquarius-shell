@@ -1,0 +1,65 @@
+// =============================================================================
+// niri-nested.kdl — the window manager config the HARNESS uses, and only it
+// =============================================================================
+// WHY THIS FILE EXISTS
+//   run-nested.sh starts niri to get a real desktop with a real layer-shell in
+//   it. Left alone, niri reads ~/.config/niri/config.kdl — and niri's own
+//   default config starts waybar and pops a big "Important Hotkeys" card over
+//   everything. Both then appear in every screenshot of our shell, which makes
+//   it impossible to tell what the Aquarius Shell actually drew.
+//
+//   So the harness passes this file with `niri -c`, and the nested desktop
+//   contains nothing but our shell. Your own ~/.config/niri is never read and
+//   never touched.
+//
+// WHAT IS DELIBERATELY NOT HERE
+//   No bar, no launcher, no wallpaper, no startup programs. Every pixel that
+//   appears is ours, or it is a bug.
+// =============================================================================
+
+// Don't cover the shell with the hotkey card on every start.
+hotkey-overlay {
+    skip-at-startup
+}
+
+// Apps draw their own frames; no window manager decoration on top.
+prefer-no-csd
+
+// The size of the nested window. Roughly a laptop screen, so the bar and dock
+// are laid out against realistic proportions rather than a tiny box.
+output "winit" {
+    mode "1600x1000"
+    scale 1
+}
+
+layout {
+    gaps 12
+    // Leave room at the top and bottom so tiled windows never sit underneath
+    // the bar or the dock — the same job the real session's struts do.
+    struts {
+        top 40
+        bottom 96
+    }
+}
+
+// niri opens its own overview when the pointer touches the top-left corner.
+// That is a good desktop behaviour and a bad testing one: anything that parks
+// the pointer at 0,0 — including the usual trick of slamming it to a corner to
+// get a known position before clicking — silently drops the overview over the
+// shell, and the screenshot you take next is of niri, not of us. It cost an
+// afternoon of "what is that grey rectangle" on 2026-09-01.
+gestures {
+    hot-corners {
+        off
+    }
+}
+
+binds {
+    // Enough to drive the nested desktop by hand while testing, and no more.
+    Mod+Shift+Slash { show-hotkey-overlay; }
+    Mod+Shift+E { quit skip-confirmation=true; }
+    Mod+Q { close-window; }
+    Mod+T { spawn "alacritty"; }
+    Mod+Left  { focus-column-left; }
+    Mod+Right { focus-column-right; }
+}
