@@ -90,14 +90,19 @@ inside it works. Each component's doc still ends with its own unproven list.
   `ToplevelManager` and `DesktopEntries`. The centred running dot the KDE fork
   couldn't draw. Pinned list in `~/.config/aquarius-shell/dock.json`, watched
   live. `docs/dock.md`.
-- [x] **Quick Settings** — **RUNS 2026-09-01**, reading the real machine: Wi-Fi
-  *No adapter*, Bluetooth naming the connected MX Vertical, Performance
-  *Balanced*, sound at the system's true 38%. The 330px panel: Wi-Fi, Bluetooth, Focus, adaptive
-  4th tile, sound + brightness, battery. Build finding: Quickshell v0.3.0 HAS
-  a NetworkManager service (`Quickshell.Networking`) — no `nmcli`; but Fedora
-  may still package 0.2.1, so Wi-Fi sits behind a `Loader`. No brightness
-  service exists anywhere — `brightnessctl` via `Process`, fenced as the
-  documented interim. `docs/quick-settings.md`.
+- [x] **Quick Settings** — **RUNS 2026-09-01**, reading the real machine:
+  Bluetooth naming the connected MX Vertical, Performance *Balanced*, sound at
+  the system's true 38%. The Wi-Fi tile read *No adapter* that day, and **that
+  reading was a bug, found and fixed 2026-09-01 (`bf23870`)**: the bench PC has
+  a wireless adapter (`wlp7s0`); the tile's subtitle threw a `ReferenceError`
+  the moment the adapter appeared and froze on its start-up text. The 330px
+  panel: Wi-Fi, Bluetooth, Focus, adaptive 4th tile, sound + brightness,
+  battery. Build finding, corrected: Fedora's `quickshell` is a **0.2.1 git
+  snapshot that already ships `Quickshell.Networking`**, under older enum names
+  (`DeviceConnectionState`, not 0.3.x's `ConnectionState`); the tile now
+  resolves whichever exists. No brightness service exists anywhere —
+  `brightnessctl` via `Process`, fenced as the documented interim.
+  `docs/quick-settings.md`.
 - [x] **Notifications** — **PROVEN END TO END 2026-09-01**: notify-send in, toast
   out, grouped by application in the panel. (Testing it needs a private message
   bus — GNOME owns the notification service otherwise; `AQ_PRIVATE_BUS=1`.)
@@ -115,8 +120,9 @@ inside it works. Each component's doc still ends with its own unproven list.
   Hyprland-only), so the compositor binds the key. `docs/flow-search.md`.
 - [x] **The status cluster** — **RUNS 2026-09-01**, and the run found two things:
   every tray icon was rendering as an empty box (a Row broken by an anchored
-  child), and the bar wore a crossed-out Wi-Fi mark on a machine with no
-  wireless adapter. Both fixed. Real: live network/sound/battery glyphs, the
+  child), and the bar wore a crossed-out Wi-Fi mark that was read at the time
+  as "on a machine with no wireless adapter" — the machine has one, disconnected
+  (see Quick Settings above). Both fixed. Real: live network/sound/battery glyphs, the
   system tray (StatusNotifierItem), click opens Quick Settings.
 - [x] **The experimental Aquarius Session** — written, has never booted.
   **Pre-flight 2026-09-01** on the bench PC (which runs AquariusOS itself,
