@@ -23,7 +23,9 @@ palette since the day that file was written. All are fixed and committed, one
 commit each, and the last one now has a test that catches its whole class.
 
 Three defects remain open because they need a decision rather than a fix — they
-are listed at the end of the interaction pass below.
+are listed at the end of the interaction pass below. One of the three, the
+keyboard-grab clash between Quick Settings and the search palette, has since
+been decided and fixed in code; it has **not** been re-run on this machine.
 
 ---
 
@@ -122,6 +124,9 @@ every QML object has, so this class cannot come back quietly.
 
 ### Found, not fixed — these need a decision
 
+*(Defect 1 has since been decided and fixed in code — see the note under it. The
+fix has not been re-run on hardware.)*
+
 1. **Quick Settings open stops the search palette receiving any keys.**
    Reproducible. Quick Settings is a `PopupWindow` with `grabFocus: true`, which
    takes an input grab from the compositor. Open it, then open the palette: the
@@ -129,6 +134,44 @@ every QML object has, so this class cannot come back quietly.
    somewhere else. Nothing says so. The obvious intent is that opening the
    palette should dismiss Quick Settings — but the panel lives inside the bar's
    per-screen `Variants`, so wiring that is a real change, not a one-liner.
+
+   **DECIDED AND FIXED — NOT RE-RUN ON HARDWARE (2026-09-01, Royce's call).**
+   The rule is *one exclusive overlay at a time*: opening Flow Search, Quick
+   Settings or the notifications panel closes the other two, in every direction,
+   on every screen. It lives in a new shared singleton, `services/Overlays.qml`
+   — each overlay registers a way to be closed when it is created, unregisters
+   when it is destroyed, and calls `Overlays.claim()` on its open path before
+   its surface goes up. A list rather than a single "which one is open" value,
+   because Quick Settings exists once per monitor and "close it" has to mean all
+   of them.
+
+   Symmetric on purpose, so the mirror case (palette open, click the status
+   cluster) is not left for somebody to re-find. The notifications panel is
+   included even though it takes no compositor grab: it lands in the same corner
+   and covers the screen with a click-catcher.
+
+   **What was verified, and how:** the singleton's own logic was *executed*
+   under Quickshell 0.2.1 on Qt 6.11 — registering, refusing a duplicate,
+   `claim()` closing everybody but the caller, `closeAll()`, `unregister()` —
+   and the whole shell was loaded in the nested niri harness, where all three
+   overlays were seen registering themselves at start-up and the configuration
+   loaded with no errors. `tests/test-shell.sh` gained section 27, which fails
+   if any of the three stops registering, unregistering or claiming.
+
+   **What was NOT verified — the thing the defect is actually about.** Nobody
+   has opened Quick Settings on this machine and then pressed the search key to
+   see whether the keystrokes now land. Driving the palette from outside was not
+   possible in that session (`qs ipc` would not attach to the harness's
+   instance from inside the container), so the behaviour stays unproven until
+   the next bench run. `docs/flow-search.md` step 9b and
+   `docs/quick-settings.md` step 6b are that test, written out.
+
+   One thing found by running it, worth knowing on its own:
+   **`Component.onCompleted` needs `import QtQuick`.** It is an attached type.
+   `NotificationLayer.qml` draws nothing and so had never imported QtQuick, and
+   giving it a `Component.onCompleted` made Quickshell refuse the entire file
+   with "Non-existent attached object" — a message that says nothing about
+   imports. Section 27 checks for that too.
 
 2. **The Bluetooth tile can stick in a transitional state indefinitely.** After
    a toggle it read "Turning on..." with an off glyph, for half an hour, while

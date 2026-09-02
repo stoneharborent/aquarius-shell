@@ -77,6 +77,14 @@
 // The surface only exists while the palette is open — closing it destroys the
 // window and with it the keyboard grab, so a crash cannot leave a grab behind.
 //
+// ⚠️ ASKING FOR THE KEYBOARD IS NOT ENOUGH IF SOMETHING ELSE ALREADY HAS IT
+//   None of the above helps while another shell surface is holding a compositor
+//   INPUT GRAB — which Quick Settings does, being a PopupWindow with
+//   `grabFocus: true`. Open Quick Settings, then open this palette, and it
+//   draws perfectly and receives nothing. So opening this palette first tells
+//   every other exclusive overlay to close: see `Overlays.claim()` below and
+//   the header of services/Overlays.qml.
+//
 // NOT PROVEN. No QML engine has run this. See docs/flow-search.md.
 // =============================================================================
 import QtQuick
@@ -85,6 +93,7 @@ import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
 
+import "../../services"
 import "../../theme"
 
 Scope {
@@ -99,10 +108,28 @@ Scope {
     signal opened()
     signal closed()
 
+    // ---- one overlay at a time ----------------------------------------------
+    // Quick Settings is a PopupWindow with `grabFocus: true`, which means the
+    // compositor is holding an input grab for it. While that grab is held, this
+    // palette can put a surface on screen, dim the desktop and blink a cursor —
+    // and not receive a single keystroke. That is exactly what happened on the
+    // bench on 2026-09-01 (defect 1 in docs/first-run-on-hardware.md).
+    //
+    // The rule the shell settled on: opening any exclusive overlay closes the
+    // others. services/Overlays.qml holds it, in both directions, for every
+    // screen. Read the header of that file before changing anything here.
+    Component.onCompleted: Overlays.register(root, () => root.closeSearch())
+    Component.onDestruction: Overlays.unregister(root)
+
     // ---- the public API, used by the bar, the IPC handler and anything else --
     function openSearch() {
         if (root.isOpen)
             return;
+
+        // BEFORE the surface goes up, not after: the old grab has to be dropped
+        // while there is still nothing new asking for the keyboard.
+        Overlays.claim(root);
+
         root.isOpen = true;
         root.opened();
     }

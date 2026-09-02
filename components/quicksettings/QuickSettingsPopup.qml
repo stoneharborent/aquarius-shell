@@ -53,6 +53,7 @@ import QtQuick
 
 import Quickshell
 
+import "../../services"
 import "../../theme"
 
 // A Scope, not an Item, and that matters: this thing has no size and must not
@@ -78,9 +79,32 @@ Scope {
     // without being long enough for a person to deliberately click twice.
     readonly property int reopenGuardMs: 250
 
+    // ---- one overlay at a time ----------------------------------------------
+    // This popup's `grabFocus: true` is the thing that broke the search palette
+    // on the bench (defect 1 in docs/first-run-on-hardware.md): a compositor
+    // input grab is exclusive, so while this is open nothing else in the shell
+    // can be typed into. The shell's answer is a rule rather than a special
+    // case — opening any exclusive overlay closes the others — and
+    // services/Overlays.qml holds it. Read that file's header first.
+    //
+    // Registering happens per INSTANCE, and there is one instance per monitor
+    // (TopBar builds a whole bar per screen with Variants, and each bar carries
+    // one of these anchored to its own status cluster). That is exactly why the
+    // registry keeps a list: "close Quick Settings" has to mean every screen's.
+    // Unregistering matters for the same reason — unplug a monitor and this
+    // object is destroyed while the registry would otherwise still hold it.
+    Component.onCompleted: Overlays.register(root, () => root.hide())
+    Component.onDestruction: Overlays.unregister(root)
+
     function show() {
         if (Date.now() - root.lastDismissedAt < root.reopenGuardMs)
             return;
+
+        // Before the surface goes up, so the palette (or the notifications
+        // panel) has already let go of the keyboard by the time this asks the
+        // compositor for its grab.
+        Overlays.claim(root);
+
         popup.visible = true;
     }
 

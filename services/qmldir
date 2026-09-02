@@ -14,4 +14,5 @@
 # =============================================================================
 
 singleton FocusState 1.0 FocusState.qml
+singleton Overlays 1.0 Overlays.qml
 singleton SystemAppearance 1.0 SystemAppearance.qml

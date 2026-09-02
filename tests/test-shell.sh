@@ -88,6 +88,7 @@ for aq_file in \
     components/bar/TrayItem.qml \
     services/qmldir \
     services/FocusState.qml \
+    services/Overlays.qml \
     components/quicksettings/QuickSettingsPanel.qml \
     components/quicksettings/QuickSettingsPopup.qml \
     components/quicksettings/QsTile.qml \
@@ -363,8 +364,8 @@ echo "=== 6c. every Theme.<name> a component uses actually exists ==="
 # quietly evaluates to undefined, and a piece of text renders at size 0, or a
 # rectangle renders in the default white, somewhere nobody is looking.
 #
-# The same check runs for FocusState, for the same reason: it is the one piece of
-# state two different components have to agree about.
+# The same check runs for FocusState and Overlays, for the same reason: they are
+# the pieces of state that several different components have to agree about.
 
 if python3 - <<'PYTHON'
 import pathlib
@@ -391,6 +392,7 @@ def strip_comments(text):
 singletons = {
     'Theme': declared('theme/Theme.qml'),
     'FocusState': declared('services/FocusState.qml'),
+    'Overlays': declared('services/Overlays.qml'),
 }
 
 bad = 0
@@ -1227,6 +1229,107 @@ else
          "Rename the id. This is exactly the bug that made the search palette's" \
          "selected row, its Enter hint and its confirm-twice guard all vanish."
 fi
+
+# ------------------------------------------------------------------------------
+echo ""
+echo "=== 27. only one overlay can own the keyboard ==="
+# ------------------------------------------------------------------------------
+# THIS SECTION EXISTS BECAUSE OF DEFECT 1 FROM THE FIRST RUN ON HARDWARE.
+#
+# Quick Settings is a PopupWindow with `grabFocus: true` — a compositor INPUT
+# GRAB, which is exclusive. Open it, then open the search palette: the palette
+# draws, dims the desktop and blinks a cursor, and receives nothing. Neither
+# component can fix that alone, so the shell has a rule instead:
+#
+#   ONE EXCLUSIVE OVERLAY AT A TIME. Opening Flow Search, Quick Settings or the
+#   notifications panel closes the other two.
+#
+# services/Overlays.qml holds the rule. This checks the wiring is still there,
+# because the failure mode if somebody removes one `claim()` is silent: the
+# overlay opens and looks perfect and simply cannot be typed into.
+#
+# Comments are blanked before matching, for the same reason as sections 13 and
+# 25: all three files explain this at length, and a check that passed on the
+# explanation rather than on the code would be worse than no check at all.
+
+if [ -f services/Overlays.qml ]; then
+    for aq_fn in register unregister claim; do
+        if grep -qE "function ${aq_fn}\(" services/Overlays.qml; then
+            pass "services/Overlays.qml exposes ${aq_fn}()"
+        else
+            fail "services/Overlays.qml no longer exposes ${aq_fn}()." \
+                 "The three overlays call it by that name."
+        fi
+    done
+fi
+
+# Every overlay must do BOTH halves: register a way to be closed, and claim on
+# the way open. One without the other is the bug half-fixed.
+#
+#   file : what registers it : what claims on open
+aq_overlay_rows="components/search/FlowSearch.qml
+components/quicksettings/QuickSettingsPopup.qml
+components/notifications/NotificationLayer.qml"
+
+while IFS= read -r aq_overlay; do
+    aq_code="$(sed -E 's,//.*,,' "${aq_overlay}")"
+
+    if printf '%s' "${aq_code}" | grep -q 'Overlays\.register('; then
+        pass "${aq_overlay} registers with Overlays"
+    else
+        fail "${aq_overlay} does not call Overlays.register()." \
+             "Without it, the other overlays cannot close this one, and two" \
+             "surfaces end up both believing they have the keyboard."
+    fi
+
+    if printf '%s' "${aq_code}" | grep -q 'Overlays\.unregister('; then
+        pass "${aq_overlay} unregisters when destroyed"
+    else
+        fail "${aq_overlay} does not call Overlays.unregister()." \
+             "Variants destroys a screen's windows when a monitor is unplugged;" \
+             "a closer left behind would be called on a destroyed object."
+    fi
+
+    if printf '%s' "${aq_code}" | grep -q 'Overlays\.claim('; then
+        pass "${aq_overlay} claims the keyboard on its open path"
+    else
+        fail "${aq_overlay} does not call Overlays.claim() when it opens." \
+             "This is exactly defect 1 in docs/first-run-on-hardware.md: the" \
+             "overlay appears, and every keystroke goes to somebody else's grab."
+    fi
+
+    if printf '%s' "${aq_code}" | grep -qE '^\s*import\s+"\.\./\.\./services"'; then
+        pass "${aq_overlay} imports services/"
+    else
+        fail "${aq_overlay} uses Overlays but does not import \"../../services\"." \
+             "QML fails at load with 'Overlays is not defined'."
+    fi
+
+    # `Component.onCompleted` is an ATTACHED type and it arrives with QtQuick.
+    # A file that registers without importing QtQuick is refused ENTIRELY, with
+    # "Non-existent attached object" and no mention of imports. Found by running
+    # it on 2026-09-01; NotificationLayer.qml drew nothing and so had no reason
+    # to import QtQuick until it gained a Component.onCompleted.
+    if printf '%s' "${aq_code}" | grep -qE '^\s*import\s+QtQuick'; then
+        pass "${aq_overlay} imports QtQuick, so Component.onCompleted exists"
+    else
+        fail "${aq_overlay} uses Component.onCompleted without importing QtQuick." \
+             "The Component attached type comes from QtQuick. Without it the" \
+             "whole file is refused with 'Non-existent attached object'."
+    fi
+done <<< "${aq_overlay_rows}"
+
+# The rule has to be written down where a person looking at either overlay will
+# find it, not only in the singleton nobody opens.
+for aq_doc in docs/quick-settings.md docs/flow-search.md; do
+    if grep -q 'Overlays' "${aq_doc}"; then
+        pass "${aq_doc} documents the one-overlay-at-a-time rule"
+    else
+        fail "${aq_doc} does not mention Overlays." \
+             "The exclusivity rule is shared behaviour; both pages have to say" \
+             "what happens when the other overlay is already open."
+    fi
+done
 
 # ------------------------------------------------------------------------------
 echo ""

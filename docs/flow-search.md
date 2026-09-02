@@ -261,6 +261,35 @@ If `Exclusive` misbehaves on the bench, set `exclusiveKeyboard: false` on the
 runs after `focusable` has had its say and there is no argument about which one
 wrote the property last.
 
+### Asking for the keyboard is not enough if something else already has it
+
+Everything above is about *asking politely*. None of it helps while another
+shell surface is holding a compositor **input grab** — and Quick Settings holds
+one, being a `PopupWindow` with `grabFocus: true`.
+
+That is defect 1 from the first run on hardware, reproduced on 2026-09-01: open
+Quick Settings, then press the search key. The palette appears. The desktop
+dims. The cursor blinks. And not one keystroke arrives, with nothing on screen
+to say why.
+
+**The rule the shell settled on:** opening any exclusive overlay closes the
+others — Flow Search, Quick Settings and the notifications panel, in every
+direction, on every screen. It lives in `services/Overlays.qml`, and the palette
+takes part in three lines:
+
+- `Overlays.register(root, () => root.closeSearch())` when it is created;
+- `Overlays.unregister(root)` when it is destroyed;
+- `Overlays.claim(root)` at the top of `openSearch()` — **before** `isOpen`
+  becomes true, so the old grab has been told to let go while there is still
+  nothing new asking for the keyboard.
+
+Read the header of `services/Overlays.qml` for why the registry is a list rather
+than a single "which one is open" value (Quick Settings exists once per monitor),
+and `docs/quick-settings.md` for the same rule written from the other side.
+`tests/test-shell.sh` section 27 fails if any of the three stops taking part.
+
+**This has not been re-run on hardware.** See the unproven list below.
+
 **Which screen it appears on.** The palette deliberately does *not* set `screen`
 and is deliberately *not* wrapped in `Variants` the way the bar is. The bar wants
 to exist once per monitor; a search box wants to exist once, where you are
@@ -480,6 +509,24 @@ that is the change that would silently stop node being able to test them.
     runtime rather than at parse time.
 14. **Every string in the interface.** No `qsTr` call has been through a
     translator or been seen at a real font size.
+15. **That dismissing Quick Settings on the way open actually gets the keyboard
+    back.** This is the fix for defect 1 (see the keyboard-focus section above),
+    and it is the one that matters most on the next bench run. `openSearch()`
+    calls `Overlays.claim()` before the surface goes up, which is the right
+    order to ask in — but whether the compositor has released the grab by the
+    time this palette's layer surface asks for focus is the compositor's
+    business, and **it has not been re-tested on hardware**.
+
+    What *has* been checked: the `Overlays` singleton's own logic was executed
+    under Quickshell 0.2.1 on Qt 6.11 (register, refuse a duplicate, `claim()`
+    closing everybody but the caller, `closeAll()`, `unregister()`), and the
+    whole shell was loaded in the nested harness with all three overlays seen
+    registering at start-up. That proves the wiring exists, not that the
+    keystrokes land.
+16. **That the palette closing does not leave the notifications panel's
+    full-screen click-catcher behind**, or vice versa. Both are full-screen
+    layer surfaces; they are now never open at the same time, which is the
+    point, but the transition itself is unobserved.
 
 ---
 
@@ -532,6 +579,15 @@ Then, in order — each step is a thing that can fail on its own:
 
 9. **Does Escape close, and does clicking the dimmed area close?**
 
+9b. **Does it survive Quick Settings being open? (Defect 1.)** Click the bar's
+    status cluster to open Quick Settings, then summon the palette without
+    closing it. Quick Settings must vanish, and **typing must reach the search
+    box** — that second half is the whole test; a palette that appears and
+    ignores the keyboard is exactly the failure this was written to kill. Then
+    the reverse: with the palette open, click the status cluster. The palette
+    must close and the panel must open on that one click. Same both ways with
+    the notifications panel from the clock.
+
 10. **Does opening reset?** Type something, close, reopen. The box must be empty.
 
 11. **Does the compositor keybind reach it?** Add the niri bind from the section
@@ -558,6 +614,7 @@ Then, in order — each step is a thing that can fail on its own:
 | `components/search/fuzzy.js` | the matcher — pure JavaScript, tested |
 | `components/search/calc.js` | the calculator — pure JavaScript, tested |
 | `tests/search-js-tests.mjs` | the 73 assertions, run by node |
+| `services/Overlays.qml` | the one-overlay-at-a-time rule, shared with Quick Settings and the notifications panel |
 | `theme/Theme.qml` | gained the `searchXxx` measurements and `fsMonoSm` |
 | `theme/Ice.qml`, `theme/Midnight.qml` | each gained `scrim` and `accentWash` |
 | `shell.qml` | gained `FlowSearch { id: flowSearch }` and the bar's launcher wiring |

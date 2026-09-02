@@ -291,6 +291,53 @@ The V2 footer ends with an "All settings" link; the KDE port pointed it at
 that opens nothing is worse than no link. When P3 ships one it goes on the right
 of the battery line.
 
+### One overlay at a time — the rule, and the bug that bought it
+
+**The rule:** opening Quick Settings, the Flow Search palette or the
+notifications panel closes the other two. Whichever way round it happens, on
+every screen.
+
+**The bug it came from** (defect 1 in `first-run-on-hardware.md`, reproduced on
+the bench on 2026-09-01): Quick Settings is a `PopupWindow` with
+`grabFocus: true`, which is a request to the **compositor** for an input grab —
+"send me the next click wherever it lands, so I can dismiss myself". A grab is
+exclusive by definition. So with Quick Settings open, pressing the search key
+put the palette on screen, dimmed the desktop and blinked a cursor at you, and
+**every keystroke went to the grab instead**. Nothing said so.
+
+Neither window could fix that alone, so the rule lives in a shared singleton,
+`services/Overlays.qml`, the same way Focus lives in `services/FocusState.qml`.
+Each overlay does exactly two things:
+
+1. `Overlays.register(...)` when it is created, handing over a function that
+   closes it — and `Overlays.unregister(...)` when it is destroyed.
+2. `Overlays.claim(...)` on its open path, **before** the surface goes up.
+
+`claim()` calls every other registered closer. That is the whole mechanism.
+
+**Why it is symmetric.** "The palette dismisses Quick Settings, but not the
+other way round" is one more thing to learn about your own desktop, and it would
+have left the mirror-image bug alive — palette open, click the status cluster.
+One rule, both directions.
+
+**Why the registry is a list and not a `whichOneIsOpen` string.** Quick Settings
+is not one object. `TopBar` builds a whole bar per monitor with `Variants`, and
+each bar carries its own `QuickSettingsPopup` anchored to its own status cluster.
+On a two-monitor desk there are two, and "close Quick Settings" has to mean
+both. Unregistering matters for the same reason: unplug a monitor and that
+screen's popup is destroyed, and a closer left behind would be called on a dead
+object.
+
+The notifications panel is in the rule too, even though it is a layer-shell
+`PanelWindow` with `focusable: true` and takes **no** grab — so it is not what
+caused defect 1. It joins because it lands in the same corner as this panel and
+because it covers the screen with a click-to-dismiss catcher, which would
+otherwise swallow the click meant to dismiss something else. And a rule with an
+exception is not a rule anybody remembers.
+
+`tests/test-shell.sh` section 27 fails if any of the three stops registering,
+unregistering or claiming.
+
 ### Deviations from the design, in full
 
 | Design | What was built | Why |
@@ -399,6 +446,30 @@ That is real, and it is not the same as working. Specifically unproven:
 21. The battery duration strings ("6 hr", "45 min") are marked for translation
     but assembled in English shapes. A proper localisation pass is P3.
 
+**The one-overlay-at-a-time rule**
+
+22. **That closing this popup actually releases the compositor's grab in time
+    for the next surface to take the keyboard.** The palette calls
+    `Overlays.claim()` before it makes its own window visible, which is the
+    right order to ask in — but "the grab is gone by the time the layer surface
+    asks" is the compositor's business, not ours, and it has **not** been
+    re-tested on hardware. This is the fix for defect 1 and it is unverified.
+    See `first-run-on-hardware.md`.
+23. Whether closing this popup out from under a click — the mirror case, where
+    the palette is open and you click the status cluster — trips the 250ms
+    reopen guard (unproven item 6) and swallows the click that was meant to
+    open this panel. Reasoned to be fine, because the guard only counts the
+    popup's *own* self-dismissals, and a claim-driven close is one of them.
+    Watch for a first click on the status cluster that does nothing.
+
+    *What has been checked, and how:* the singleton's own logic was executed
+    under Quickshell 0.2.1 on Qt 6.11 — registering, refusing a duplicate,
+    `claim()` skipping the caller and closing everybody else, `closeAll()` and
+    `unregister()` — and the whole shell was loaded in the nested harness with
+    all three overlays seen registering themselves at start-up. That is the
+    wiring, not the behaviour. Nobody has opened Quick Settings and then pressed
+    the search key.
+
 ---
 
 ## How to test it on the bench
@@ -450,8 +521,19 @@ Work through this list, in order, and write down what actually happens:
 6. Click the status button **again while it is open**. Does it close and stay
    closed? (This is unproven item 6. If it flickers or refuses to close, the
    250ms guard needs tuning — the number is in `QuickSettingsPopup.qml`.)
+6b. **The one-overlay-at-a-time rule — this is the defect-1 test.** Open this
+    panel, then press the search key (or click the Aquarius mark). Quick
+    Settings must vanish, and — the part that actually matters — **typing must
+    reach the search box**. Then the other way round: open the palette, click
+    the status cluster; the palette must vanish and this panel open on the
+    first click, not the second. Then the same with the notifications panel
+    from the clock, both directions. Any two of them on screen together, or a
+    box with a cursor in it that will not take a keystroke, means the rule is
+    not working — start at `services/Overlays.qml`.
+
 7. Plug in a second monitor. Does each bar get its own panel, anchored to its own
-   screen?
+   screen? With two open at once — one per screen — does opening the palette
+   close **both**?
 
 **The tiles**
 
