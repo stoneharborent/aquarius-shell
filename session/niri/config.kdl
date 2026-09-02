@@ -76,13 +76,41 @@ layout {
 // -----------------------------------------------------------------------------
 // Start the shell
 // -----------------------------------------------------------------------------
-// A bare `qs`. See rule 2 at the top: QS_CONFIG_PATH is already exported.
+// Still a bare `qs` — no path. See rule 2 at the top: QS_CONFIG_PATH is already
+// exported by ../aquarius-session, so `qs` finds our configuration by itself.
+//
+// WHY THIS LINE HAS A REDIRECT ON IT NOW (2026-09-02).
+//
+// It used to be `spawn-at-startup "qs"`. On the first real boot the session
+// came up, niri ran for eighteen minutes, and the session log contained ONLY
+// niri's own output. The shell had crashed on start-up and said so — into
+// nowhere.
+//
+// niri gives every program it starts /dev/null for stdin, stdout AND stderr.
+// That was measured on niri 26.04 on 2026-09-02, not assumed: a spawned shell
+// asked what its own three file descriptors pointed at, and the answer was
+// /dev/null three times. So anything the shell prints — QML errors with file
+// and line, a missing library, a crash — is thrown away before anybody can
+// read it.
+//
+// `spawn-sh-at-startup` runs the string through `sh`, which means the shell's
+// output can be redirected the way it would be in a terminal. It appends to the
+// SAME log the launcher writes, so one file holds the whole story of a boot.
+//
+// Rule 2 still holds: there is no path here. $AQ_LOG is a variable that
+// ../aquarius-session exports, so this line is identical on every machine. The
+// `:-/dev/null` fallback only matters if somebody starts niri with this config
+// BY HAND, without the launcher — then there is no session log to append to,
+// and the shell still starts rather than dying on an empty redirect.
+//
+// The `[shell]` prefix is so that, reading the log later, it is obvious at a
+// glance which lines came from the shell and which from niri.
 //
 // If the shell crashes, niri keeps running and you keep your windows — you get
 // a session with no bar, which is ugly but survivable, and `qs` from a terminal
 // brings it back. That is deliberately better than the alternative, where a
 // broken bar logs you out.
-spawn-at-startup "qs"
+spawn-sh-at-startup "qs 2>&1 | sed -u 's/^/[shell] /' >> \"${AQ_LOG:-/dev/null}\""
 
 // -----------------------------------------------------------------------------
 // Session chrome

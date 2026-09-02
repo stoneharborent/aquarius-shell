@@ -267,6 +267,81 @@ Not bugs — decisions.
 
 ---
 
+## 2026-09-02 — the session boots
+
+*The second real milestone, and it is worth being precise about which half
+succeeded.*
+
+**The session boots. The shell did not start.**
+
+What was seen, on the AquariusOS bench PC (`aquarius-os-gnome-nvidia`, built
+2026-09-01, Fedora 44, GDM):
+
+- `session/install-session.sh` ran and put its five pieces in place.
+- **GDM listed the session**, from
+  `/usr/local/share/wayland-sessions/aquarius.desktop`. This was the single
+  assumption the whole "no changes to the OS image" story rested on, and it
+  holds — GDM walks `/usr/local/share` as well as `/usr/share`.
+- The launcher ran, found its configuration and the shell, and started niri.
+- **niri 26.04 came up** with our config on a 4K output and stayed up for
+  eighteen minutes. Windows, keys, the compositor: fine.
+- **No bar.** And `~/.local/state/aquarius-session/session.log` contained
+  *only* niri's output — not one line from the shell.
+
+### Why: the layered Quickshell could not start at all
+
+```
+qs: symbol lookup error: qs: undefined symbol: _ZN23QUntypedPropertyBindingC1EP23QPropertyBindingPrivate, version Qt_6
+```
+
+Fedora rebuilt `quickshell` on 2026-08-31 against `qt6-qtbase` **6.11.2**, which
+had just reached the updates repository. The AquariusOS image contains
+**6.11.1**. `rpm-ostree` can layer a package on top of the image; it cannot
+change the Qt underneath it. So the layered `-5.fc44` build asks the image's
+older Qt for a private function it does not have and dies instantly.
+
+This is **structural, not bad luck**: a layered Quickshell works only when the
+repository's build happens to have been compiled against the image's Qt, and
+nothing coordinates those two things. The `-3.fc44` build (against 6.11.1) works
+— it is what the `aq-shell` distrobox has been running all along, which is why
+every harness run has been fine.
+
+Both fixes, with copy-pasteable commands, are in
+[`session.md` § The Qt ABI trap](session.md#the-qt-abi-trap): layer the matching
+older RPM from Koji (quick, and undone by the next update), or bake `quickshell`
+into the OS image so it is built against the image's own Qt (proper).
+
+### Two blind spots made an eighteen-minute failure invisible
+
+Neither of these is the Qt problem. Both are ours, and both are fixed.
+
+1. **The pre-flight only looked for the file.** `aq_need qs` ran `command -v qs`,
+   which passes for a binary that cannot start. The launcher now **runs
+   `qs --version`** (with a timeout) and refuses to start the session if that
+   fails, printing the real error text and both fixes.
+
+2. **The compositor threw the shell's output away.** `spawn-at-startup "qs"`
+   gave the shell `/dev/null` for stdout and stderr, so its error never reached
+   the log. This was **measured, not assumed**: on niri 26.04 a spawned program
+   was asked what its own three file descriptors pointed at and answered
+   `/dev/null` for stdin, stdout and stderr. Both compositor configurations now
+   start the shell through `sh` and append its output to the session log, with
+   every line prefixed `[shell]` so it is tellable from the compositor's.
+
+   Verified end to end the same day: niri 26.04 started with this repo's own
+   config and `AQ_LOG` set, and the shell's start-up lines arrived in that file,
+   prefixed. Nested, from a terminal — not yet from GDM.
+
+`tests/test-shell.sh` section 29 now fails if either blind spot comes back.
+
+### Still not proven
+
+Everything the shell does in a real session. The bar has never drawn outside the
+nested harness. Fix the Qt mismatch, log in again, and this page gets its third
+entry.
+
+---
+
 ## Correction, 2026-09-02: the Wi-Fi readings on this page are wrong
 
 Defects 5 and the "Wi-Fi *No adapter*" reading above both rest on the belief that

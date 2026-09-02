@@ -1484,6 +1484,104 @@ else
 fi
 # ------------------------------------------------------------------------------
 echo ""
+echo "=== 29. the session can actually SEE the shell fail ==="
+# ------------------------------------------------------------------------------
+# THIS SECTION EXISTS BECAUSE OF THE FIRST REAL BOOT, 2026-09-02.
+#
+# The session started. niri came up on a 4K screen and ran for eighteen minutes.
+# There was no bar, and the log held ONLY niri's output — not one line from the
+# shell. Two blind spots, either of which alone would have hidden the problem:
+#
+#   1. The launcher's pre-flight asked `command -v qs`, which only answers "is
+#      there a file with that name". There was. It could not start:
+#      `qs: symbol lookup error: qs: undefined symbol: ...` — the layered
+#      quickshell had been rebuilt against a newer Qt than the OS image's.
+#      A program that dies before its first line of output passes `command -v`.
+#
+#   2. niri gives every program it starts /dev/null for stdin, stdout AND
+#      stderr. Measured on niri 26.04 the same day: a spawned shell was asked
+#      what its own three file descriptors pointed at, and answered /dev/null
+#      three times. So the shell's error message went nowhere.
+#
+# Both fixes are cheap and both are easy to undo by accident, so both are
+# checked here. Comments are stripped before matching, because all three files
+# explain this at length and a check that passes on the explanation is worse
+# than no check at all.
+
+# --- the launcher must RUN qs, not just find it -------------------------------
+aq_launcher_code="$(sed -E 's,^[[:space:]]*#.*,,' session/aquarius-session)"
+
+if printf '%s' "${aq_launcher_code}" | grep -q 'qs --version'; then
+    pass "the launcher runs 'qs --version' rather than only looking for the file"
+else
+    fail "session/aquarius-session no longer runs 'qs --version'." \
+         "'command -v qs' passes for a binary that cannot start at all — which" \
+         "is exactly what happened on 2026-09-02. The pre-flight has to START" \
+         "the program. See docs/session.md, 'The Qt ABI trap'."
+fi
+
+# The die message is the whole value of the check: a person at a black login
+# screen needs to be told what to do, not just that something failed.
+if printf '%s' "${aq_launcher_code}" | grep -q 'symbol lookup error'; then
+    pass "the launcher's failure message names the Qt-mismatch symptom"
+else
+    fail "session/aquarius-session no longer mentions 'symbol lookup error'." \
+         "That is the exact wording the Qt mismatch prints, and the message" \
+         "shown to the user is supposed to recognise it and say what to do."
+fi
+
+# --- the launcher must export the log path ------------------------------------
+# The compositor configs append to \$AQ_LOG by name. If it stops being exported,
+# they fall back to /dev/null and the shell goes silent again — quietly.
+if printf '%s' "${aq_launcher_code}" | grep -qE '^\s*export AQ_LOG'; then
+    pass "the launcher exports AQ_LOG for the compositor configs to append to"
+else
+    fail "session/aquarius-session does not export AQ_LOG." \
+         "Both compositor configurations redirect the shell's output to" \
+         "\"\${AQ_LOG}\". Without the export they silently write to /dev/null" \
+         "and the shell's errors vanish, which is the 2026-09-02 failure again."
+fi
+
+# --- both compositors must route the shell's output somewhere -----------------
+#   file : how comments start in it
+aq_spawn_rows="session/niri/config.kdl://
+session/labwc/autostart:#"
+
+while IFS= read -r aq_row; do
+    aq_spawn_file="${aq_row%%:*}"
+    aq_spawn_comment="${aq_row##*:}"
+
+    if [ "${aq_spawn_comment}" = "#" ]; then
+        aq_spawn_code="$(sed -E 's,^[[:space:]]*#.*,,' "${aq_spawn_file}")"
+    else
+        aq_spawn_code="$(sed -E 's,//.*,,' "${aq_spawn_file}")"
+    fi
+
+    # The line that starts the shell has to carry a redirect to the log.
+    if printf '%s' "${aq_spawn_code}" | grep -q 'qs' \
+       && printf '%s' "${aq_spawn_code}" | grep -q '>>' \
+       && printf '%s' "${aq_spawn_code}" | grep -q 'AQ_LOG'; then
+        pass "${aq_spawn_file} appends the shell's output to \$AQ_LOG"
+    else
+        fail "${aq_spawn_file} starts the shell without capturing its output." \
+             "A compositor hands its children /dev/null, so a bare 'qs' means" \
+             "every QML error, every missing library and every crash is thrown" \
+             "away. Start it through a shell and append to \"\${AQ_LOG}\"." \
+             "This is the 2026-09-02 blind spot; see docs/session.md."
+    fi
+
+    # And the lines have to be tellable apart from the compositor's own.
+    if printf '%s' "${aq_spawn_code}" | grep -qF '[shell]'; then
+        pass "${aq_spawn_file} prefixes the shell's lines with [shell]"
+    else
+        fail "${aq_spawn_file} does not prefix the shell's log lines." \
+             "One file holds both the compositor's output and the shell's." \
+             "Without a prefix, reading it means guessing which is which."
+    fi
+done <<< "${aq_spawn_rows}"
+
+# ------------------------------------------------------------------------------
+echo ""
 if [ "${aq_failures}" -ne 0 ]; then
     echo "::error::${aq_failures} check(s) failed."
     exit 1

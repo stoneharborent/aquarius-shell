@@ -8,10 +8,24 @@ bottom that undoes all of it.*
 
 ## Read this first
 
-**The session itself has never been logged into.** This page was written on a
-Mac, where there is no Wayland, no compositor, no Quickshell, no systemd and no
-D-Bus — so most of it is a *prediction*, checked line by line against the
-documentation and source code of the projects involved.
+**The session has now been logged into — once, on 2026-09-02.** It started. The
+login screen listed it, the launcher ran, niri came up on a 4K screen and stayed
+up for eighteen minutes. **The bar did not appear**, for a reason that had
+nothing to do with the session: the `quickshell` package layered onto the OS
+could not start at all. That whole story, with the fix, is in
+[The Qt ABI trap](#the-qt-abi-trap) below — read it before you try again.
+
+So: the session boots, the shell did not. Everything on this page about *getting
+to a login* is now observed rather than predicted. Everything about *what you
+see once you are in* is still a prediction.
+
+Below is the older note, kept because most of this page was written the way it
+describes.
+
+**This page was written on a Mac**, where there is no Wayland, no compositor, no
+Quickshell, no systemd and no D-Bus — so much of it began as a *prediction*,
+checked line by line against the documentation and source code of the projects
+involved.
 
 **Pre-flight done 2026-09-01, on the bench PC, without installing anything.**
 Before the first login, the assumptions that could be checked from a terminal
@@ -109,15 +123,16 @@ The login screen on AquariusOS is **GDM** — GNOME's, version 50 on the bench
 PC. (An earlier version of this page said SDDM. SDDM is what Bazzite's KDE
 variant uses; our image is built on the GNOME variant and has never had it.)
 
-Whether GDM reads the second folder is the one thing this plan now rests on.
-Looking inside GDM's own binary on the bench PC: it hardcodes
+**GDM does read the second folder. Proven 2026-09-02.** This used to be the one
+assumption the whole no-image-changes story rested on: GDM's binary hardcodes
 `/usr/share/wayland-sessions/`, but it *also* walks the standard system data
-directories — which, when nothing overrides them, are
-`/usr/local/share` then `/usr/share`. So `/usr/local/share/wayland-sessions`
-should be picked up. That is read from GDM's source and its binary, not yet seen
-on the login screen. See [What is unproven](#what-is-unproven), item 6.
+directories, which default to `/usr/local/share` then `/usr/share`. That was
+read from GDM's source. On 2026-09-02 it was **seen**: with
+`aquarius.desktop` in `/usr/local/share/wayland-sessions/` and nothing else
+changed, "Aquarius Session (experimental)" appeared in GDM's session chooser and
+logging into it started the launcher.
 
-If it holds, the Aquarius Session can be added to a real AquariusOS machine,
+So it holds: the Aquarius Session can be added to a real AquariusOS machine,
 appear on the real login screen, and be removed again by deleting five files —
 with the OS image never modified, never rebuilt, and never even aware.
 
@@ -198,6 +213,120 @@ sudo dnf copr enable errornointernet/quickshell
 ```
 
 (and then `dnf install` or `rpm-ostree install` as above).
+
+---
+
+## The Qt ABI trap
+
+**This is what stopped the first real boot, on 2026-09-02, and it will stop
+yours too unless you deal with it. Read this section before Step 2.**
+
+### The symptom
+
+The session starts. You get a desktop — a wallpaper-less one, with niri's own
+behaviour — and **no bar at all**. The log
+(`~/.local/state/aquarius-session/session.log`) is full of niri's chatter and
+contains nothing whatsoever from the shell.
+
+Open a terminal and type:
+
+```bash
+qs --version
+```
+
+If you see this, you are in this section:
+
+```
+qs: symbol lookup error: qs: undefined symbol: _ZN23QUntypedPropertyBindingC1EP23QPropertyBindingPrivate, version Qt_6
+```
+
+### What is actually wrong
+
+Nothing is broken or corrupted. Two pieces simply do not match.
+
+Quickshell is a Qt program. It is **compiled against one exact version of Qt**,
+and it calls functions inside Qt by name. Some of those names are private —
+Qt's own internals — and they change between Qt releases.
+
+- The AquariusOS image contains **qt6-qtbase 6.11.1**.
+- Fedora 44's repositories rebuilt **quickshell** on 2026-08-31 against
+  **qt6-qtbase 6.11.2**, which had just landed in the updates repository. That
+  is the `-5.fc44` build.
+
+When you `rpm-ostree install quickshell`, you get the `-5` build. It asks the
+image's 6.11.1 for a function that only exists in 6.11.2, does not find it, and
+dies before printing a single line of its own.
+
+**And layering cannot fix it**, which is the part worth understanding. On an
+atomic system the Qt inside the image is part of the image. `rpm-ostree` can add
+packages on top; it cannot swap out what is underneath. So this is not a
+one-off unlucky day — it is **structural**. A layered `quickshell` works only
+when the repository's build happens to match the image's Qt, and nobody
+coordinates those two things.
+
+### Fix 1 — the quick one: layer the older build that matches
+
+Fedora keeps every build it has ever made on its build server, Koji. The `-3`
+build of the same Quickshell was compiled against 6.11.1 — the version in our
+image. (It is also exactly what the `aq-shell` distrobox runs, which is why the
+shell has worked in the harness the whole time.)
+
+Download it:
+
+```bash
+curl -L -O "https://kojipkgs.fedoraproject.org/packages/quickshell/0.2.1%5Egit20260209.dacfa9d/3.fc44/x86_64/quickshell-0.2.1%5Egit20260209.dacfa9d-3.fc44.x86_64.rpm"
+```
+
+Then install that file *instead of* the repository's, in one step:
+
+```bash
+rpm-ostree install --uninstall=quickshell ./quickshell-0.2.1^git20260209.dacfa9d-3.fc44.x86_64.rpm
+```
+
+```bash
+systemctl reboot
+```
+
+`--uninstall=PKG` removes an already-layered package in the same operation that
+adds the new one, so you never have a moment with two quickshells or none.
+(Checked on the bench PC, 2026-09-02: `rpm-ostree install --help` on rpm-ostree
+2026.2 lists `--uninstall=PKG` — *"Remove overlayed additional package"*.)
+
+After the reboot, prove it before logging out:
+
+```bash
+qs --version
+```
+
+It should print a version line. If it does, the launcher's own pre-flight will
+be happy too.
+
+**The catch, stated plainly:** the next time Fedora's `quickshell` updates,
+`rpm-ostree upgrade` may pull the repository build back on top and break it
+again. This fix is a patch, not a resting place.
+
+### Fix 2 — the proper one: bake quickshell into the image
+
+Put `quickshell` in the AquariusOS Containerfile, in the `os-image` repo. Then
+it is built against **the image's own Qt**, by the same build, at the same time.
+The two cannot drift apart, because there is no longer an "on top" and an
+"underneath" — there is one image.
+
+That is a change in `os-image`, not in this repository, and it is the honest
+answer for a shell that is meant to ship as part of the OS. It moves the
+Quickshell dependency from "a package the user layers" to "part of AquariusOS",
+which is what it always was in spirit.
+
+### What the launcher does about it now
+
+Since 2026-09-02, `session/aquarius-session` does not merely check that a file
+called `qs` exists — it **runs `qs --version`** and refuses to start the session
+if that fails, printing the real error and both fixes above. The old check was
+`command -v qs`, which happily passes for a binary that cannot start at all.
+That is precisely how eighteen minutes were spent looking at a bar-less desktop
+with no explanation anywhere.
+
+---
 
 ### Fonts
 
@@ -499,6 +628,14 @@ It says, in words, which of the three cases you are in.
 The previous run is kept next to it as `session.log.1`, which is exactly enough
 to compare the time it worked with the time it did not.
 
+**Lines that begin `[shell]` came from the Aquarius Shell; everything else came
+from the compositor.** That prefix was added on 2026-09-02, along with the
+redirect that puts the shell's output in this file at all. Before that, a
+compositor handed the shell `/dev/null` for its output — proven by measurement
+on niri 26.04, not assumed — so on the first real boot the shell crashed and the
+log said nothing about it. If you see no `[shell]` lines at all, the shell never
+got far enough to print anything: see the first row of the table below.
+
 ### The session does not appear
 
 The login screen is not reading `/usr/local/share/wayland-sessions`.
@@ -528,7 +665,8 @@ and it would move from Phase P3 to "now".
 | What you see | What is wrong | What to do |
 |---|---|---|
 | A black screen, then back to the login screen | The launcher failed its checks | Read the log. It names exactly what was missing. |
-| The session starts but there is **no bar** | The compositor came up and `qs` did not | Look for QML errors in the log — Quickshell prints them in full with file and line. |
+| The session starts, there is **no bar**, and the log shows **only niri** — not one line from the shell | `qs` died before it could print anything. On AquariusOS this is almost always the Qt mismatch. | Open a terminal and run `qs --version`. If it says *symbol lookup error* / *undefined symbol*, go to [The Qt ABI trap](#the-qt-abi-trap). |
+| The session starts but there is **no bar**, and the log has `[shell]` lines in it | The shell started and then failed | Read the `[shell]` lines — Quickshell prints QML errors in full, with file and line. |
 | The bar is there but windows go **underneath** it | The reserved-space request was refused | Note which compositor and file it. Both niri and labwc should honour it. |
 | The app name stays **Desktop** with a window open | The compositor is not reporting windows | It needs `wlr-foreign-toplevel-management`. Both should have it. |
 | **Super + Space** does nothing | The search palette's IPC name does not match | `qs ipc show`, then fix the binding. See [above](#about-super--space). |
@@ -641,16 +779,33 @@ patching those files. What changes is which lines the patch touches.
 ## What is unproven
 
 Less than there was. The pre-flight on 2026-09-01 (bench PC, from a terminal,
-nothing installed) settled the items struck through below. Here is what remains,
-in the order a bench run would hit it:
+nothing installed) and **the first real login on 2026-09-02** settled the items
+struck through below. Here is what remains, in the order a bench run would hit
+it:
 
 **Never executed at all**
 
-1. `session/aquarius-session` has never run. Not once, on any machine.
-2. `session/install-session.sh` has never run. Not once.
+1. ~~`session/aquarius-session` has never run.~~ **PROVEN 2026-09-02**: it ran,
+   from GDM, on the bench PC. It found its configuration and the shell, printed
+   its pre-flight, chose niri, and handed over. It also failed to notice that
+   `qs` could not start — which is why it now runs `qs --version` (see
+   [The Qt ABI trap](#the-qt-abi-trap)).
+2. ~~`session/install-session.sh` has never run.~~ **PROVEN 2026-09-02**: it ran
+   on the bench PC and installed all five pieces into `/usr/local` and
+   `~/.config`. Nothing needed patching afterwards.
+2b. **The shell itself has never drawn in a real login session.** On
+   2026-09-02 the session booted and `qs` could not start (see
+   [The Qt ABI trap](#the-qt-abi-trap)), so everything on this page from
+   "What you should see" onwards — the bar, the bindings, the portals, the
+   light/dark following — is still only proven in the nested harness.
+2c. **The new log redirect has not been seen in a real login.** The line that
+   captures the shell's output was proven by running niri 26.04 with this
+   repo's own config and watching `[shell]` lines arrive in `$AQ_LOG` — but
+   nested, from a terminal, not from GDM.
 3. ~~`session/niri/config.kdl` has never been parsed by niri.~~ **Validated
    2026-09-01**: `niri validate` (niri 26.04) reports *config is valid*, after
-   the Super + Space fix.
+   the Super + Space fix — and again on 2026-09-02, after the `spawn-sh-at-startup`
+   change.
 4. `session/labwc/rc.xml` has never been parsed by labwc. It is confirmed
    well-formed XML by `tests/test-shell.sh` — which proves the angle brackets
    match and nothing else.
@@ -662,16 +817,17 @@ in the order a bench run would hit it:
 
 **Read from documentation and source, but not observed**
 
-6. That **GDM** reads `/usr/local/share/wayland-sessions`. *(Rewritten
-   2026-09-01 — it used to say SDDM, which AquariusOS does not have.)* GDM's
-   daemon binary on the bench PC hardcodes `/usr/share/wayland-sessions/` and
-   also joins `wayland-sessions` onto each standard system data directory,
-   which default to `/usr/local/share:/usr/share` when the `XDG_DATA_DIRS`
-   variable is unset — and GDM's service does not set it. So it should work.
-   **This is now the single assumption the whole no-image-changes story rests
-   on**, and it is settled by logging out and looking at the session list.
-7. ~~That `/usr/local` is writable on Bazzite.~~ **Confirmed 2026-09-01**:
-   `/usr/local -> ../var/usrlocal` on the bench PC.
+6. ~~That **GDM** reads `/usr/local/share/wayland-sessions`.~~ **PROVEN
+   2026-09-02.** It was the single assumption the whole no-image-changes story
+   rested on, and it holds: with `aquarius.desktop` installed only into
+   `/usr/local/share/wayland-sessions/`, GDM listed **Aquarius Session
+   (experimental)** in its session chooser, and picking it ran our launcher.
+   No change to the OS image, none needed. *(This item said SDDM until
+   2026-09-01; SDDM is Bazzite's KDE variant, which AquariusOS is not.)*
+7. ~~That `/usr/local` is writable on Bazzite.~~ **Confirmed 2026-09-01**
+   (`/usr/local -> ../var/usrlocal` on the bench PC) and **proven by use
+   2026-09-02**: the installer wrote all four system pieces there and GDM read
+   them back.
 8. ~~That `qs ipc call aquarius-shell search toggle` is the correct spelling.~~
    **It was not.** Fixed 2026-09-01 to `qs ipc call search toggle` after
    reading `qs ipc call --help`; the target is the IpcHandler's `target:

@@ -77,8 +77,10 @@ parallel tracks, merged the same day).
 **FIVE OF THE SIX NOW RUN — 2026-09-01, on the bench PC.** The dock, Quick
 Settings, notifications, Flow Search and the status cluster were all executed by
 a QML engine, drew on screen, and read real data from the real machine. The
-sixth, the login session, has still never been booted. The full record of what
-that run proved and what it did not is
+sixth, the login session, **booted on 2026-09-02 — and the shell did not start
+inside it**, because the layered Quickshell cannot run on this image at all
+(`docs/session.md` § *The Qt ABI trap*). The full record of what
+those runs proved and what they did not is
 **[`first-run-on-hardware.md`](first-run-on-hardware.md)** — read it before
 trusting any tick below, because "runs" is not "finished": what was checked was
 that each piece draws and shows true information, not that every interaction
@@ -124,7 +126,27 @@ inside it works. Each component's doc still ends with its own unproven list.
   as "on a machine with no wireless adapter" — the machine has one, disconnected
   (see Quick Settings above). Both fixed. Real: live network/sound/battery glyphs, the
   system tray (StatusNotifierItem), click opens Quick Settings.
-- [x] **The experimental Aquarius Session** — written, has never booted.
+- [~] **The experimental Aquarius Session** — **IT BOOTS. THE SHELL DID NOT
+  START. 2026-09-02, bench PC.** Be precise about the halves: GDM listed the
+  session from `/usr/local/share/wayland-sessions` (the one assumption the whole
+  no-image-changes story rested on — proven), the installer had put all five
+  pieces in place, the launcher ran, and niri 26.04 came up with our config on a
+  4K output and stayed up eighteen minutes. **No bar**, and the session log held
+  only niri's output.
+  The cause was not the session: the layered `quickshell` cannot start at all on
+  this image — `qs: symbol lookup error: ... undefined symbol ... version Qt_6`.
+  Fedora rebuilt quickshell (`-5.fc44`) against qt6-qtbase **6.11.2**; the image
+  has **6.11.1**, and `rpm-ostree` cannot change the Qt underneath a layer. So a
+  layered Quickshell only ever works by coincidence. Fixes: layer the matching
+  `-3.fc44` build from Koji (a patch), or **bake quickshell into the OS image**
+  (the answer) — `docs/session.md` § *The Qt ABI trap*.
+  Two of our own blind spots hid it for eighteen minutes and are now fixed: the
+  pre-flight only ran `command -v qs` (it now runs `qs --version` and dies loudly
+  with the real error), and the compositor gave the shell `/dev/null` for its
+  output (measured on niri 26.04) so nothing it printed reached the log — both
+  compositor configs now append the shell's output to the session log, prefixed
+  `[shell]`. `tests/test-shell.sh` section 29 guards both.
+  Still unproven: everything the shell does in a real session.
   **Pre-flight 2026-09-01** on the bench PC (which runs AquariusOS itself,
   build 44.20260901): `/usr/local` is writable, the niri config validates, both
   portal back ends are already in the image, and two things were wrong — the
@@ -149,8 +171,9 @@ inside it works. Each component's doc still ends with its own unproven list.
   reply verified on the bus. Full record, including the three defects left open
   for a decision: [`first-run-on-hardware.md`](first-run-on-hardware.md).
 
-  **Still outstanding, and it is the bigger half: the real session has never
-  been booted.** Also untested: dragging a dock tile, the Focus timer expiring,
+  **Still outstanding, and it is the bigger half: the real session BOOTS
+  (2026-09-02) but the shell has never drawn inside it** — the layered
+  Quickshell cannot start on this image (see the session entry above). Also untested: dragging a dock tile, the Focus timer expiring,
   launching a pinned dock app, and the destructive session actions (deliberately
   never triggered on Royce's own machine).
 

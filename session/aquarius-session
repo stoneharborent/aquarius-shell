@@ -48,6 +48,20 @@ aq_prog="aquarius-session"
 AQ_STATE_DIR="${XDG_STATE_HOME:-${HOME}/.local/state}/aquarius-session"
 AQ_LOG="${AQ_STATE_DIR}/session.log"
 
+# EXPORTED on purpose, and this is load-bearing.
+#
+# The compositor starts the shell, not this script — and a compositor throws its
+# children's output away (proven for niri on 2026-09-02: a program started by
+# niri gets /dev/null on its stdin, stdout AND stderr). So on the first real
+# boot, the shell crashed on start-up and the log contained nothing but niri's
+# own lines. Not one word from the thing that failed.
+#
+# The fix is that the compositor configurations append the shell's output to
+# THIS file by name — `qs 2>&1 | ... >> "$AQ_LOG"`. Exporting the variable is
+# what lets them do that without writing a path of their own, which keeps the
+# "no machine-specific path in any compositor config" rule intact.
+export AQ_LOG
+
 mkdir -p "${AQ_STATE_DIR}"
 
 # Keep the log from growing forever. One previous run is kept as .log.1, which
@@ -238,6 +252,75 @@ if [ -n "${aq_missing}" ]; then
         "" \
         "A distrobox will NOT work for a login session — the compositor has to" \
         "be on the host. See docs/session.md."
+fi
+
+# -----------------------------------------------------------------------------
+# Does `qs` actually RUN?
+#
+# THIS CHECK EXISTS BECAUSE OF THE FIRST REAL BOOT, 2026-09-02.
+#
+# The check above only asks "is there a file called qs on the PATH". There was.
+# It could not start:
+#
+#   qs: symbol lookup error: qs: undefined symbol:
+#   _ZN23QUntypedPropertyBindingC1EP23QPropertyBindingPrivate, version Qt_6
+#
+# The session came up, niri ran for eighteen minutes, and there was no bar and
+# no explanation, because a program that dies before its first line of output is
+# invisible to a check that only looks for its name.
+#
+# So: run it. `qs --version` starts the whole program — it loads every Qt
+# library — and then prints one line and exits. If that works, the shell can at
+# least get off the ground. If it does not, we stop HERE, with the real error
+# text on screen, rather than handing a person a black desktop.
+#
+# `timeout` is there so that a `qs` which hangs instead of failing cannot wedge
+# the login. If the machine has no `timeout` (it is part of coreutils, so this
+# is very unlikely), run it plain rather than skipping the check.
+# -----------------------------------------------------------------------------
+echo ""
+echo "=== Checking the shell runtime can actually start ==="
+
+if command -v timeout > /dev/null 2>&1; then
+    aq_qs_runner=(timeout 10 qs --version)
+else
+    aq_qs_runner=(qs --version)
+fi
+
+aq_qs_status=0
+aq_qs_output="$("${aq_qs_runner[@]}" 2>&1)" || aq_qs_status=$?
+
+if [ "${aq_qs_status}" -eq 0 ]; then
+    echo "  runs     qs — ${aq_qs_output}"
+else
+    die "The Quickshell runtime (qs) is installed but cannot start." \
+        "Running 'qs --version' failed with exit code ${aq_qs_status} and said:" \
+        "" \
+        "  ${aq_qs_output}" \
+        "" \
+        "IF THAT MESSAGE SAYS 'symbol lookup error' OR 'undefined symbol'," \
+        "this is the Qt mismatch, and it is worth understanding once:" \
+        "" \
+        "  Quickshell is built against one exact version of Qt. AquariusOS is an" \
+        "  atomic system, so the Qt inside the OS image cannot be changed by" \
+        "  layering a package on top. When Fedora rebuilds quickshell against a" \
+        "  NEWER Qt than the one in our image, the layered quickshell asks the" \
+        "  image's older Qt for functions it does not have, and dies instantly." \
+        "  Nothing is broken or corrupted — the two pieces simply do not match." \
+        "" \
+        "  TWO WAYS OUT." \
+        "" \
+        "  1. THE QUICK ONE — layer the older quickshell that matches this" \
+        "     image's Qt. Download the build from Fedora's build server and" \
+        "     install that file instead of the repository's. The exact commands" \
+        "     are in docs/session.md, section 'The Qt ABI trap'." \
+        "" \
+        "  2. THE PROPER ONE — bake quickshell into the AquariusOS image, where" \
+        "     it is built against the image's own Qt and the two can never drift" \
+        "     apart again. That is a change in the os-image repo, not here." \
+        "" \
+        "To see the failure for yourself, in a terminal:" \
+        "  qs --version"
 fi
 
 # -----------------------------------------------------------------------------

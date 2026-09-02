@@ -29,6 +29,21 @@ systemctl --user --no-block start labwc-session.target 2>/dev/null || true
 # ---------------------------------------------------------------------------
 # 2. The Aquarius Shell.
 #
+# WHY THE REDIRECT (2026-09-02). On the first real boot, on niri, the session
+# log held nothing but the compositor's own output — the shell had crashed at
+# start-up and its error went nowhere, because a compositor hands its children
+# /dev/null for stdout and stderr. (Measured on niri 26.04; labwc's autostart is
+# a plain shell script and is friendlier than that, but relying on where a
+# compositor happens to point its own output is how the first boot was wasted.)
+#
+# So the shell's output is appended, explicitly, to the SAME log the launcher
+# writes, and every line is prefixed so it cannot be confused with the
+# compositor's. One file holds the whole story of a boot.
+#
+# NO PATH HERE EITHER — see the note at the top. $AQ_LOG is exported by
+# ../aquarius-session, so this line is identical on every machine. The
+# `:-/dev/null` fallback covers starting labwc by hand without the launcher.
+#
 # If it crashes, labwc keeps running and you keep your windows — you get a
 # session with no bar, which is ugly but survivable, and typing `qs` in a
 # terminal brings it back. That is deliberately better than the alternative,
@@ -36,4 +51,4 @@ systemctl --user --no-block start labwc-session.target 2>/dev/null || true
 # labwc without its -S/--session flag, which would tie the compositor's life to
 # the shell's.)
 # ---------------------------------------------------------------------------
-qs &
+qs 2>&1 | sed -u 's/^/[shell] /' >> "${AQ_LOG:-/dev/null}" &
