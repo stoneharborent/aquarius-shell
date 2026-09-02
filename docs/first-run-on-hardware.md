@@ -40,7 +40,7 @@ was five runs, not one.
 | 2 | `Cannot assign a value to a signal` | A palette entry was named `onAccent`. QML reads any name shaped `onSomething` as a handler for the signal `Something`. |
 | 3 | `Cannot assign to non-existent property "families"` | `font.families` does not exist in the Quickshell build the OS runs (0.2.1 on Qt 6.11). |
 | 4 | `Row will not function` | `TrayItem`'s wheel-gesture MouseArea sat directly in a `BarItem`, which puts it in that item's `Row`, anchored. A Row refuses anchored children and then stops laying out **all** of them. |
-| 5 | *(no error — it just looked wrong)* | The bar wore a crossed-out Wi-Fi mark on a desk PC that has no wireless adapter at all. |
+| 5 | *(no error — it just looked wrong)* | The bar wore a crossed-out Wi-Fi mark on a desk PC that appeared to have no wireless adapter at all. **See the correction below — it has one.** |
 
 Number 4 is the instructive one. It printed a warning rather than an error, so
 the shell started and looked more or less right — while every tray icon on the
@@ -74,7 +74,8 @@ Each of these was seen on screen, with a screenshot, on this machine.
   Steam, Aquarius Editor, Aquarius Writer, Settings — with their real artwork,
   the hairline rule, and the `+` tile. Opening an app added a tile **with the
   running dot underneath it**.
-- **Quick Settings reads the real machine**: Wi-Fi *No adapter*, Bluetooth
+- **Quick Settings reads the real machine**: Wi-Fi *No adapter* (**wrong — see
+  the correction below**), Bluetooth
   showing the actually-connected MX Vertical, Performance *Balanced*, and a
   sound slider at the system's real 38%.
 - **Flow Search works.** `12.5 * 8` gives 100 with *press Enter to copy*; typing
@@ -263,3 +264,32 @@ Not bugs — decisions.
 3. **Text truncation in the Quick Settings tiles.** *MX Vertical ·…* and
    *Notifications…* both clip. Live with it, widen the tiles, or shorten what
    they say?
+
+---
+
+## Correction, 2026-09-02: the Wi-Fi readings on this page are wrong
+
+Defects 5 and the "Wi-Fi *No adapter*" reading above both rest on the belief that
+the bench PC has no wireless card. It has one. Probed against the host's system
+bus, NetworkManager reports **`wlp7s0`**, `DeviceType.Wifi`,
+`wifiHardwareEnabled: true`, disconnected.
+
+Two things conspired to hide it:
+
+1. **`Networking.devices` is empty for the first moment of the shell's life** and
+   fills in asynchronously. Any reading taken at start-up says "no wireless".
+2. **`TileWifi.qml` said `ConnectionState.Connecting`**, which is the Quickshell
+   0.3.x spelling. The shipped build calls that enum `DeviceConnectionState`, so
+   the moment the adapter arrived and the subtitle re-evaluated, QML threw
+   `ReferenceError: ConnectionState is not defined` and killed the binding —
+   freezing the tile on the start-up value, *No adapter*, for good.
+
+So this was a sixth defect on the day, sitting under a fifth that was not really
+a defect at all. It is fixed; the whole story is in
+[`quick-settings.md`](quick-settings.md), and `tests/test-shell.sh` section 28
+now fails the build if any file names an enum namespace the shipped Quickshell
+does not have.
+
+The lesson worth keeping: **a reading taken from a service at start-up is not a
+reading of the machine.** The bench list on this page should be worked through
+again a few seconds after the bar appears, not at the first frame.

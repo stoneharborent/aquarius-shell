@@ -142,9 +142,13 @@ A window opens with a small desktop in it. In that window:
   yet. They are drawn deliberately un-clickable so they cannot pretend to work.
 - **The status icons**, which tell the truth about the machine and so differ
   from machine to machine. On the bench PC that is a speaker and nothing else:
-  no battery glyph (a desktop has no battery) and no Wi-Fi glyph (no wireless
-  adapter in it). A laptop shows all three. Any system-tray icons appear here
-  too.
+  no battery glyph, because a desktop has no battery. It was also recorded as
+  having no Wi-Fi glyph, on the belief that the machine had no wireless card —
+  **it has one, `wlp7s0`** (corrected 2026-09-02, see
+  [`../docs/quick-settings.md`](../docs/quick-settings.md)), so a quiet
+  crossed-out Wi-Fi mark should appear a moment after the bar draws. Whether it
+  does has not been looked at yet. A laptop shows all three. Any system-tray
+  icons appear here too.
 - **The dock**, centred at the bottom.
 
 **Which theme you get is not a choice the shell makes.** It follows the system's
@@ -250,7 +254,7 @@ from.
 | The bar is there but the text is **boxes or the wrong font** | Sora / Inter are not installed | Harmless. Install the fonts, or point fontconfig at the host's — Step 1. |
 | The window opens with **a bar, and a waybar above it, and a big "Important Hotkeys" card** | niri read your personal config instead of the harness's | The script passes `-c harness/niri-nested.kdl` precisely so this cannot happen. If you are starting niri by hand, pass it too. |
 | **A grey rectangle** sits in the middle of the screen | niri's overview is open — something touched the top-left hot corner | Press Escape. It belongs to niri, not to the shell; the harness config turns hot corners off. |
-| Quick Settings reads **"No adapter"**, or the battery/Wi-Fi glyphs are missing | Nothing. That is the machine being described accurately | The desk PC has no battery and no wireless card. On a laptop they appear. |
+| Quick Settings reads **"No adapter"**, or the battery/Wi-Fi glyph is missing | The battery one is nothing — a desk PC has no battery. **The Wi-Fi one was a bug**, fixed 2026-09-02 | The bench PC does have a wireless card (`wlp7s0`); a ReferenceError froze the tile on its start-up reading. If you see *No adapter* on a machine that has Wi-Fi, read docs/quick-settings.md. |
 | Every reading is blank and the log repeats **"Could not connect to DBus"** | You are in a container with no system message bus | The script wires the host's in automatically when it can see `/run/host`. Outside a distrobox, check the machine really is running one. |
 | **Notifications never arrive** | GNOME owns the notification service on this bus | `AQ_PRIVATE_BUS=1 ./harness/run-nested.sh` — see Step 3. |
 | The bar shows but **windows go underneath it** | The reserved-space request was refused | Note which window manager, and file it. Both niri and labwc should honour it. |

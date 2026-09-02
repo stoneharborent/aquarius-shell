@@ -7,11 +7,16 @@
 // Wi-Fi tile reads. It holds no state of its own, which is the only way to be
 // sure the bar and the panel can never disagree.
 //
-// ⚠️ This file is loaded, never imported. `Quickshell.Networking` arrived in
-// Quickshell v0.3.0 and Fedora's package was a 0.2.1 snapshot when this was
-// written, so on some machines this file simply will not load — and if it were
-// imported into StatusCluster.qml, the whole bar would go with it. See the
-// header of QsTileSlot.qml.
+// ⚠️ This file is loaded, never imported — because if it were imported into
+// StatusCluster.qml, a Quickshell without `Quickshell.Networking` would cost the
+// bar its tray and its clock as well as this glyph. The module IS present on the
+// build AquariusOS ships (checked 2026-09-02; the header of QsTileSlot.qml has
+// the details and the correction), but the version floor is not ours to hold.
+//
+// The two names used here — the `Networking` singleton and `DeviceType.Wifi` —
+// are spelled the same on Quickshell 0.2.1 and 0.3.x. The device's `state` enum
+// is NOT, which is why this file does not read it and TileWifi.qml has to look
+// its namespace up at run time.
 //
 // WHY THERE IS NO SIGNAL-STRENGTH LADDER
 //   `WifiNetwork.signalStrength` is a real 0..1 and drawing three or four
@@ -53,8 +58,21 @@ QsGlyph {
     //   disconnected DOES still show `wifi-off`, because that is a real state
     //   with a real fix. Only the absence of the radio hides the glyph.
     //
-    //   Found on the RTX 4090 bench machine, 2026-09-01: wired desk PC, no
-    //   Wi-Fi adapter, and the bar wore a crossed-out Wi-Fi mark all day.
+    //   Written on 2026-09-01 because the RTX 4090 bench machine appeared to
+    //   have no Wi-Fi adapter and the bar wore a crossed-out Wi-Fi mark all day.
+    //
+    //   ⚠️ THAT MACHINE DOES HAVE ONE. Probed on 2026-09-02 against the host's
+    //   system bus, NetworkManager reports `wlp7s0`, DeviceType.Wifi,
+    //   wifiHardwareEnabled true, disconnected. `Networking.devices` is simply
+    //   EMPTY FOR THE FIRST MOMENT of the shell's life and fills in
+    //   asynchronously, so the first evaluation of any of this says "no radio"
+    //   and a later one says otherwise. The rule below is still right — a
+    //   machine with no radio should say nothing — but on this desk it should
+    //   now draw `wifi-off`, not nothing.
+    //
+    //   Everything here is a BINDING for that reason. Anything that reads
+    //   Networking.devices once, at Component.onCompleted, will conclude forever
+    //   that the machine has no wireless.
     //
     //   BarItem lays its contents out in a `Row`, and a Row skips invisible
     //   children outright — no gap, no stray spacing. So `visible` is the whole

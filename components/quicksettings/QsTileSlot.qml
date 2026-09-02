@@ -10,22 +10,29 @@
 //   the panel does not open. If it is `import`ed by the panel's own file, the
 //   PANEL fails. One missing module takes everything with it.
 //
-//   That is not hypothetical here. It is the situation today:
+//   ⚠️ THIS FILE USED TO CLAIM Quickshell.Networking WAS MISSING ON THE BUILD WE
+//   SHIP. It is not. Checked on the machine on 2026-09-02: Fedora's
+//   `quickshell-0.2.1^git20260209.dacfa9d-5.fc44` is a git snapshot from long
+//   after the 0.2.1 tag, and it carries
+//   /usr/lib64/qt6/qml/Quickshell/Networking. Every module all four tiles import
+//   — Networking, Bluetooth, UPower — is present. No tile falls back today.
 //
-//     Quickshell.Networking — which the Wi-Fi tile needs — LANDED IN QUICKSHELL
-//     v0.3.0. The changelog's v0.3.0 entry reads "Added network management
-//     support", and the v0.2.1 type index has no Quickshell.Networking module at
-//     all. Fedora's `quickshell` package is a 0.2.1 snapshot (checked when
-//     docs/adr/0001-framework.md was written). Arch has 0.3.1.
+//   That does not retire this file, for two reasons:
 //
-//   So on a plain Fedora box today, `import Quickshell.Networking` fails. With
-//   this file in the way, that costs a dimmed Wi-Fi tile. Without it, it costs
-//   the whole Quick Settings panel — and the person seeing that has no way to
-//   tell which of the twelve files caused it.
+//     1. The version floor is not ours to hold. Bazzite is rebased continuously
+//        and this shell is also run on plain Fedora, Arch and a copr build. "The
+//        module happens to be there right now" is a fact about one machine on
+//        one day, which is exactly the kind of fact that stops being true
+//        quietly and takes a whole panel with it.
+//     2. It is the difference between one dimmed square and a blank panel, and
+//        the person looking at a blank panel has no way to tell which of the
+//        twelve files caused it.
 //
-//   The other three tiles' modules (Bluetooth, UPower) are present in v0.2.1, so
-//   they do not need this today. They get it anyway, because "which of these is
-//   safe" is exactly the kind of thing that stops being true quietly.
+//   What this file could NOT have saved us from is the bug it was written for's
+//   near cousin: a module that IS installed but spells one of its enums
+//   differently. That file loads perfectly and then throws a ReferenceError deep
+//   inside one binding. See the `connState` note in TileWifi.qml, and section 28
+//   of tests/test-shell.sh, which is what actually guards against it.
 //
 //   This pattern is lifted from the KDE Wave-2 widget's AqTileSlot.qml, which
 //   solved the same problem for the same reason.

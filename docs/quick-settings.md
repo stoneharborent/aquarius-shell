@@ -1,13 +1,18 @@
 # Quick Settings, and the bar's status cluster
 
 *Phase P2. Written on a Mac; first run 2026-09-01 on the bench PC, where the
-panel opened and read the real machine — Wi-Fi "No adapter", Bluetooth naming the
-connected MX Vertical, Performance "Balanced", sound at the system's true 38%.
-The run also found that the bar's status cluster was drawing every tray icon as
-an empty box, and wearing a crossed-out Wi-Fi mark on a machine with no wireless
-adapter; both are fixed. Toggling anything in the panel is still unproven — read
-the "What is not proven" section, and
+panel opened and read the real machine — Bluetooth naming the connected MX
+Vertical, Performance "Balanced", sound at the system's true 38%. The run also
+found that the bar's status cluster was drawing every tray icon as an empty box;
+that is fixed. Toggling anything in the panel is still unproven — read the "What
+is not proven" section, and
 [`first-run-on-hardware.md`](first-run-on-hardware.md).*
+
+*Corrected 2026-09-02. Two things this page said about Wi-Fi were wrong, and they
+were wrong together. `Quickshell.Networking` **is** present on the build
+AquariusOS ships, and the bench PC **does** have a wireless adapter. The tile
+read "No adapter" all day because a ReferenceError killed its subtitle binding
+the instant NetworkManager reported the adapter — see "Wi-Fi" below.*
 
 ---
 
@@ -78,14 +83,82 @@ What is used: `Networking.wifiEnabled` (writable — the software rfkill switch)
 `type` is `DeviceType.Wifi`, then that device's `networks` walked for the one
 that is `connected`, whose `name` is the SSID.
 
-**⚠️ It arrived in Quickshell v0.3.0.** The changelog's v0.3.0 entry is "Added
-network management support", and the v0.2.1 type index has no
-`Quickshell.Networking` module at all. ADR 0001 records that Fedora's
-`quickshell` package is a 0.2.1 snapshot; Arch has 0.3.1. **So on a plain Fedora
-box today, the Wi-Fi tile will not load.** That is the entire reason
-`QsTileSlot.qml` exists — see "The quarantine pattern" below.
-
 No `nmcli` was needed. Good.
+
+#### ⚠️ What this page used to say here, and why it was wrong
+
+It said the module arrived in v0.3.0, that the v0.2.1 type index has no
+`Quickshell.Networking`, and therefore that "on a plain Fedora box today, the
+Wi-Fi tile will not load". That was read off the published changelog and the
+released-version type index. **Nobody looked at the machine.**
+
+What is on the machine, checked on 2026-09-02 inside the `aq-shell` distrobox:
+
+```
+$ qs --version
+quickshell 0.2.1, revision dacfa9de829ac7cb173825f593236bf2c21f637e,
+distributed by: Fedora Project
+
+$ ls /usr/lib64/qt6/qml/Quickshell/
+Bluetooth  DBusMenu  Hyprland  I3  Io  Networking  Services  Wayland  Widgets …
+```
+
+Fedora's package is `quickshell-0.2.1^git20260209.dacfa9d-5.fc44` — **a git
+snapshot taken long after the 0.2.1 tag**, which is why it carries work the 0.2.1
+release notes do not mention. The module is there. The Wi-Fi tile loads. The
+placeholder path has never been taken on this hardware.
+
+#### What actually differs between the two builds: one enum's name
+
+The module is present on both, and everything this shell reads off it —
+`Networking.wifiEnabled`, `wifiHardwareEnabled`, `devices`, a device's `type` /
+`connected` / `state` / `networks`, a network's `name` / `connected` — exists on
+both, under the same names. One thing does not:
+
+| | Quickshell 0.2.1 git (what we ship) | Quickshell 0.3.x |
+|---|---|---|
+| the device's connection-state enum | `DeviceConnectionState` | `ConnectionState` |
+| a network's connection-state enum | `NetworkState` | `ConnectionState` |
+| why a connection failed | `NMConnectionStateReason` | `ConnectionFailReason` |
+| wired devices | not modelled (`DeviceType` is `None`/`Wifi`) | `WiredDevice`, `DeviceType.Wired` |
+| connectivity / captive-portal checks | absent | `Networking.connectivity` |
+
+The variants of the state enum are the same five words in both — `Unknown`,
+`Connecting`, `Connected`, `Disconnecting`, `Disconnected` — but they are **not
+declared in the same order**, so the numbers behind them are not portable even
+though the words are.
+
+`TileWifi.qml` was written from the v0.3.1 documentation and said
+`ConnectionState.Connecting`. On the shipped build that is a **ReferenceError**,
+which in QML does not warn and carry on — it kills the binding that touched it.
+So the tile drew, and its subtitle froze on whatever it last computed. The fix is
+one guarded lookup, `connState`, which asks `typeof` for whichever namespace this
+build has and reads the variant off that; both paths are commented with the build
+they serve. `typeof` on a QML type that does not exist answers `"undefined"`
+rather than throwing — that was run under 0.2.1 on Qt 6.11, not assumed.
+
+**This is the failure the Loader cannot catch**, and it is worth being clear
+about why: `QsTileSlot.qml` protects against a module that is not *installed*.
+This was a module that is installed and spells one name differently. Section 28
+of `tests/test-shell.sh` is the guard that would have caught it, and now does.
+
+#### And the bench PC has a Wi-Fi adapter after all
+
+The 2026-09-01 run recorded "No adapter" and a bar with no Wi-Fi glyph, and this
+page and `StatusGlyphNetwork.qml` were both written around that. It is not true.
+Probed against the host's system bus on 2026-09-02, NetworkManager reports
+**`wlp7s0`**, `DeviceType.Wifi`, `wifiHardwareEnabled: true`, disconnected.
+
+What made it look absent is a detail worth remembering: **`Networking.devices` is
+empty for the first moment of the shell's life and fills in asynchronously.** The
+first evaluation of the subtitle correctly says "No adapter"; the second, once
+the adapter arrives, is the one that reached the bad line and died. So the tile
+was frozen on its own start-up value. Post-fix the same probe walks through
+"No adapter" → **"Not connected"**, which is the truth about that machine.
+
+The rule this leaves behind: **anything that reads `Networking.devices` must be
+correct while it is empty AND after it fills.** A one-shot read at
+`Component.onCompleted` will always say a machine has no wireless.
 
 ### Bluetooth — clean, and simpler than the Plasma version
 
@@ -218,6 +291,17 @@ bar its **tray and its clock** as well as its Wi-Fi glyph.
 
 This pattern is lifted from the KDE Wave-2 widget's `AqTileSlot.qml`, which
 solved the same problem for the same reason.
+
+**As of 2026-09-02 no tile actually falls back.** Every module the four tiles and
+three glyphs import — Networking, Bluetooth, UPower, Pipewire — is present on the
+build we ship. The pattern stays anyway: Bazzite is rebased continuously, this
+shell is also run on plain Fedora and on Arch, and "the module happens to be
+there right now" is exactly the kind of fact that stops being true quietly.
+
+**And note what it does not cover.** A Loader catches a module that is *missing*.
+It cannot catch a module that is present and spells one of its names differently
+— that file loads, draws, and then throws inside a binding. See the Wi-Fi section
+above, and section 28 of `tests/test-shell.sh`.
 
 ### The icons are drawn, not loaded from an icon theme
 
@@ -367,6 +451,12 @@ Plus, in `Theme.qml`: the whole `QUICK SETTINGS` geometry block (`qs*`),
 
 ## What is NOT proven
 
+*Written when nothing here had run. Since then the shell has been loaded in the
+nested harness several times on the bench PC and the log read line by line, so
+"unproven" below now means "loads without complaining, and nobody has pressed
+it" — not "never executed". The Wi-Fi entries at the end of this list are new,
+and they are the honest limit of what one desk PC can tell us.*
+
 **Nothing in this branch has been executed.** There is no QML engine, no Wayland
 compositor, no D-Bus and no PipeWire on macOS. What has been checked is that
 `tests/test-shell.sh` passes — brackets balance, no compositor-specific imports,
@@ -470,6 +560,35 @@ That is real, and it is not the same as working. Specifically unproven:
     wiring, not the behaviour. Nobody has opened Quick Settings and then pressed
     the search key.
 
+**Wi-Fi — what the bench PC cannot tell us**
+
+*Added 2026-09-02, after the `ConnectionState` fix. The bench PC's `wlp7s0` is
+present and disconnected, and it is not joined to a network. So everything below
+the word "disconnected" is still theory.*
+
+24. **The connected state has never been seen.** Nobody has watched
+    `activeNetwork` become non-null, so "the subtitle is the SSID" is a
+    documented behaviour that has never once been observed. Test: connect the
+    bench PC's `wlp7s0` to a network, or run the harness on a laptop, and read
+    the tile.
+25. **The Connecting state has never been seen either** — which is the state the
+    broken line was about. What has been proven is only that the guarded lookup
+    resolves to a real enum object under 0.2.1 (`DeviceConnectionState`) and that
+    reading `.Connecting` off it no longer throws. Whether the device actually
+    passes through `Connecting` long enough for the subtitle to show it, rather
+    than snapping from disconnected to the SSID, is unknown.
+26. **The toggle has never been pressed.** `Networking.wifiEnabled = !...` is a
+    writable property on both builds; whether writing it lifts NetworkManager's
+    software rfkill on this machine is the same open question item 7 asks about
+    Bluetooth.
+27. **The 0.3.x path has never run at all.** `connState` picks `ConnectionState`
+    when it exists, and no machine here has a Quickshell that has it. That branch
+    is reasoned, not executed.
+28. Whether `WifiDevice.networks` fills in on the same delay `devices` does, and
+    whether the subtitle therefore shows "Not connected" for a moment before the
+    SSID on a machine that is connected. Nothing breaks either way; it may just
+    flicker.
+
 ---
 
 ## How to test it on the bench
@@ -481,18 +600,26 @@ the long version):
 sudo dnf install quickshell niri brightnessctl
 ```
 
-**⚠️ Check the Quickshell version first. This matters.**
+**⚠️ Check the Quickshell version, and check the module list — not the version
+alone.**
 
 ```bash
 qs --version
+ls /usr/lib64/qt6/qml/Quickshell/
 ```
 
-- **0.3.0 or newer** — everything in this branch can work.
-- **0.2.1 (what Fedora's package was)** — `Quickshell.Networking` does not exist.
-  The Wi-Fi tile will show a dimmed "Wi-Fi — Unavailable" placeholder and the
-  bar's Wi-Fi glyph will be missing. **That is the designed behaviour, not a
-  bug** — but do not spend an afternoon debugging it. To get 0.3.x:
-  `sudo dnf copr enable errornointernet/quickshell`.
+The version number is not the answer on its own. Fedora ships
+`quickshell-0.2.1^git20260209.dacfa9d`, which calls itself 0.2.1 and contains
+work released after it — including `Quickshell.Networking`. So the directory
+listing is the fact; the version string is a hint. If `Networking` is in that
+listing, the Wi-Fi tile and the bar's Wi-Fi glyph work.
+
+If it is genuinely absent, the tile shows a dimmed "Wi-Fi — Unavailable" and the
+bar's glyph is missing. **That is the designed behaviour, not a bug.** A newer
+Quickshell on Fedora: `sudo dnf copr enable errornointernet/quickshell`.
+
+**If you move to 0.3.x, re-read the enum table above.** Names moved between the
+two, and the shell handles that in one place (`connState` in `TileWifi.qml`).
 
 Then:
 

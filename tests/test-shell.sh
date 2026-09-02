@@ -20,6 +20,9 @@
 #   * the shell scripts pass shellcheck (if shellcheck is installed)
 #   * the search palette's JavaScript stays plain JavaScript
 #   * the IPC summoning contract says the same thing everywhere it is written
+#   * every capitalised `Name.something` is a name somebody probed on the
+#     Quickshell build AquariusOS actually ships (section 28 — the one that
+#     catches a module that IS installed and spells a name differently)
 #
 # WHAT THIS CAN ACTUALLY RUN (added with the Flow Search palette)
 #   Section 12 is different in kind from everything above it. The search
@@ -1331,6 +1334,154 @@ for aq_doc in docs/quick-settings.md docs/flow-search.md; do
     fi
 done
 
+# ------------------------------------------------------------------------------
+echo ""
+echo "=== 28. every enum namespace is one the shipped build actually has ==="
+# ------------------------------------------------------------------------------
+# THIS SECTION EXISTS BECAUSE OF A BUG THE LOADER PATTERN COULD NOT CATCH.
+#
+# components/quicksettings/TileWifi.qml said:
+#
+#     if (root.wifiDevice.state === ConnectionState.Connecting)
+#
+# `ConnectionState` is the name Quickshell 0.3.x gives that enum. On the build
+# AquariusOS ships — Fedora's quickshell-0.2.1^git20260209.dacfa9d, Qt 6.11 —
+# the same five variants live under `DeviceConnectionState`. The module loads,
+# the file loads, the tile draws, and then the FIRST TIME that line is reached
+# QML throws:
+#
+#     TileWifi.qml[100]: ReferenceError: ConnectionState is not defined
+#
+# and the binding that touched it dies. Not the file, not the panel: one
+# binding, in a log nobody is reading. It survived the bench run only because
+# the bench PC has no Wi-Fi adapter, so the subtitle returns "No adapter" four
+# lines earlier and never gets there.
+#
+# QsTileSlot.qml cannot help with this. A Loader catches a module that is not
+# INSTALLED. This is a module that is installed and spells one name differently.
+#
+# So: every capitalised name used as `Name.something` in this repo's QML has to
+# be in the register below, which says where it comes from and — for the
+# Quickshell ones — that it was PROBED on the shipped build, not read off the
+# 0.3.1 documentation. Adding a name you have not checked is the whole failure
+# mode, so adding a name to this list is the thing that makes you check.
+#
+# How to check one. In the aq-shell distrobox, with a throwaway shell.qml:
+#
+#     ShellRoot { Component.onCompleted: console.warn(typeof TheName) }
+#     QT_QPA_PLATFORM=offscreen qs -p .
+#
+# "object" means it is there. "undefined" means it is not, and `typeof` is safe
+# either way — it answers rather than throwing, which is what makes the guarded
+# form below work.
+#
+# Reading the module's .qmltypes is NOT sufficient and was misleading here: that
+# file only lists the C++-registered types, so `ToplevelManager` and
+# `PerformanceDegradationReason` are absent from it and present in the engine.
+# Run the probe.
+
+# Names that come from this repo. Singletons in theme/ and services/, and the
+# two .pragma library JavaScript files.
+aq_ns_ours="Theme FocusState Overlays SystemAppearance Fuzzy Calc"
+
+# Names Qt itself provides — globals, value types and attached types.
+aq_ns_qt="Qt Math JSON Date Object Locale Accessible Component Keys Easing Font
+Text TextInput Image Flickable Loader Layout Shape ShapePath"
+
+# Quickshell's own. EVERY ONE OF THESE WAS PROBED under 0.2.1 git on 2026-09-02
+# and answered "object". Do not add to this list from the documentation.
+aq_ns_quickshell="Quickshell Networking DeviceType Edges DesktopEntries
+SystemClock SystemTray Pipewire UPower UPowerDeviceState PowerProfiles
+PowerProfile PerformanceDegradationReason Bluetooth BluetoothAdapterState
+NotificationUrgency ExclusionMode WlrKeyboardFocus WlrLayershell
+ToplevelManager"
+
+# Names that exist on ONE build and not the other. Mentioning one is fine —
+# reaching through one for a variant is the bug above.
+aq_ns_guarded="ConnectionState DeviceConnectionState"
+
+if python3 - "${aq_ns_ours} ${aq_ns_qt} ${aq_ns_quickshell}" "${aq_ns_guarded}" <<'PYTHON'
+import pathlib
+import re
+import sys
+
+known = set(sys.argv[1].split())
+guarded = set(sys.argv[2].split())
+
+# Comments and string literals are stripped first. Both matter here: the files
+# EXPLAIN this problem at length and name both spellings while doing it, and the
+# tile sources ("TileWifi.qml") and SVG path data ("M12.5 3") are strings full of
+# capital letters followed by dots.
+def strip(text):
+    out = []
+    i = 0
+    n = len(text)
+    while i < n:
+        c = text[i]
+        if c == '/' and i + 1 < n and text[i + 1] == '/':
+            while i < n and text[i] != '\n':
+                i += 1
+        elif c == '/' and i + 1 < n and text[i + 1] == '*':
+            i += 2
+            while i + 1 < n and not (text[i] == '*' and text[i + 1] == '/'):
+                i += 1
+            i += 2
+        elif c in ('"', "'", '`'):
+            quote = c
+            i += 1
+            while i < n and text[i] != quote:
+                if text[i] == '\\':
+                    i += 1
+                i += 1
+            i += 1
+        else:
+            out.append(c)
+            i += 1
+    return ''.join(out)
+
+member = re.compile(r'(?:^|[^A-Za-z0-9_.$])([A-Z][A-Za-z0-9_]*)\s*\.\s*[A-Za-z_]')
+bad = 0
+
+for root in ('components', 'services', 'theme'):
+    paths = sorted(pathlib.Path(root).rglob('*.qml'))
+    for path in paths + ([pathlib.Path('shell.qml')] if root == 'components' else []):
+        code = strip(path.read_text(encoding='utf-8'))
+        # `import Quickshell.Services.UPower` is not a member access.
+        code = '\n'.join(l for l in code.split('\n')
+                         if not l.lstrip().startswith('import '))
+        for name in sorted(set(member.findall(code))):
+            # Note what is and is not flagged. The regex only finds a name used
+            # as `Name.member`. A build-dependent name may still be MENTIONED —
+            # `typeof ConnectionState !== "undefined" ? ConnectionState : ...` is
+            # the whole point — because a bare mention cannot throw and a member
+            # access can. So: reaching THROUGH one of these names is the bug.
+            if name in guarded:
+                print("  FAIL %s reads %s.<variant> directly." % (path, name))
+                print("       That namespace exists on one Quickshell build and"
+                      " not the other,")
+                print("       and naming the missing one is a ReferenceError"
+                      " that kills the")
+                print("       binding. Look it up once with typeof — the way"
+                      " TileWifi.qml's")
+                print("       `connState` does — and read the variant off that.")
+                bad += 1
+            elif name not in known:
+                print("  FAIL %s names %s, which is not in section 28's register."
+                      % (path, name))
+                print("       Probe it on the shipped build and add it, or fix"
+                      " the spelling.")
+                bad += 1
+
+sys.exit(1 if bad else 0)
+PYTHON
+then
+    pass "every enum namespace used is one that was checked on the shipped build"
+else
+    fail "a QML file names something the shipped Quickshell may not have." \
+         "This is the ConnectionState bug: the file loads, the tile draws, and" \
+         "one binding dies with a ReferenceError nobody sees. The register and" \
+         "the probe command are in the comment above this check."
+fi
 # ------------------------------------------------------------------------------
 echo ""
 if [ "${aq_failures}" -ne 0 ]; then

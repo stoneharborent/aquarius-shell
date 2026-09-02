@@ -3,17 +3,28 @@
 // =============================================================================
 // TileWifi — the Wi-Fi switch, and the name of the network you are on
 // =============================================================================
-// ⚠️ THIS FILE NEEDS QUICKSHELL 0.3.0 OR NEWER, AND IT IS THE ONLY ONE THAT DOES
+// ⚠️ THIS FILE HAS TO RUN ON TWO DIFFERENT QUICKSHELL BUILDS
 //
-//   `Quickshell.Networking` did not exist before v0.3.0. The changelog's v0.3.0
-//   entry says "Added network management support", and the v0.2.1 type index
-//   lists no such module. Fedora's `quickshell` package was a 0.2.1 snapshot
-//   when docs/adr/0001-framework.md was written; Arch ships 0.3.1.
+//   For a while this header said `Quickshell.Networking` needed Quickshell
+//   0.3.0. That was wrong, and it was wrong in the expensive direction. The
+//   build AquariusOS actually ships — Fedora's
+//   `quickshell-0.2.1^git20260209.dacfa9d-5.fc44`, a git snapshot taken well
+//   after the 0.2.1 tag — HAS the module. It was found installed at
+//   /usr/lib64/qt6/qml/Quickshell/Networking on 2026-09-02, and this tile does
+//   load there.
 //
-//   On a build without it, this file fails to load and QsTileSlot puts a dimmed
-//   "Wi-Fi — Unavailable" placeholder in its square. That is why this tile is
-//   loaded rather than imported, and it is the whole reason QsTileSlot exists.
-//   Read the long note at the top of that file before changing this arrangement.
+//   What the two builds do NOT share is the name of one enum:
+//
+//     the device's connection state    0.2.1 git   `DeviceConnectionState`
+//                                      0.3.x       `ConnectionState`
+//
+//   Same five variants in both (Unknown, Connecting, Connected, Disconnecting,
+//   Disconnected) — only the namespace was renamed. This file named the 0.3.x
+//   one, and on the shipped build that is a ReferenceError, which kills the
+//   binding it appears in. On the bench PC nothing noticed, because that machine
+//   has no Wi-Fi adapter and the subtitle returns "No adapter" long before the
+//   line is reached. On a laptop or a handheld it would have cost the subtitle.
+//   See `connState` below for how both builds are served at once.
 //
 // WHAT WAS ACTUALLY CHECKED, AND WHAT THE ROADMAP SAID
 //   The roadmap's P2 entry says "NetworkManager over D-Bus", which read as "we
@@ -23,13 +34,21 @@
 //   same way it is for the tray: through a published interface, spoken by a
 //   service that already exists.
 //
-//   Verified against https://quickshell.org/docs/v0.3.1/types/Quickshell.Networking/:
+//   Checked twice over: against
+//   https://quickshell.org/docs/v0.3.1/types/Quickshell.Networking/, and against
+//   the module as installed on the shipped 0.2.1 git build, by reading its
+//   `quickshell-network.qmltypes` and by running a QML probe under it.
+//
 //     Networking (singleton)  wifiEnabled (writable), wifiHardwareEnabled,
-//                             devices : ObjectModel<NetworkDevice>, connectivity
-//     NetworkDevice           type : DeviceType, networks : ObjectModel<Network>,
-//                             connected, state
-//     Network                 name, connected, state, known, connect(), disconnect()
-//     WifiNetwork : Network   signalStrength (0..1), security, connectWithPsk()
+//                             devices : ObjectModel<NetworkDevice>
+//     NetworkDevice           type : DeviceType, connected, state
+//     WifiDevice              networks : ObjectModel<WifiNetwork>
+//     Network                 name, connected, state
+//     WifiNetwork : Network   signalStrength (0..1), security, connect()
+//
+//   Everything on that list is on BOTH builds. `Networking.connectivity` is
+//   0.3.x only and is not used here. Neither is `WifiNetwork.connectWithPsk()`,
+//   which on 0.2.1 is just `connect()` — a Phase P3 problem, noted below.
 //
 //   `Networking` says of itself: "An interface to a network backend (currently
 //   only NetworkManager)". So it IS NetworkManager, reached through a QML
@@ -38,9 +57,10 @@
 // WHAT THIS TILE DELIBERATELY DOES NOT DO
 //   Pick a network. The design's tile is a switch with a name under it, and that
 //   is what this is. Choosing between networks, and typing a password for one,
-//   is a list and a text field — a Settings surface, which is Phase P3
-//   (`WifiNetwork.connectWithPsk()` is the call it will make). A half-built
-//   picker in a 165px-wide tile would be worse than none.
+//   is a list and a text field — a Settings surface, which is Phase P3. The call
+//   it will make is `WifiNetwork.connect()` on 0.2.1 and `connectWithPsk()` on
+//   0.3.x, so whoever builds it gets to solve the same two-builds problem again.
+//   A half-built picker in a 165px-wide tile would be worse than none.
 // =============================================================================
 import QtQuick
 
@@ -66,6 +86,29 @@ QsTile {
         }
         return null;
     }
+
+    // ---- the enum whose name moved -------------------------------------------
+    // `NetworkDevice.state` is an enum, and the enum's NAMESPACE is spelled
+    // differently on the two builds this shell has to run on:
+    //
+    //   Quickshell 0.2.1 git (what AquariusOS ships)   DeviceConnectionState
+    //   Quickshell 0.3.x     (Arch, the copr build)    ConnectionState
+    //
+    // Naming the missing one is a ReferenceError, and a ReferenceError in QML
+    // does not warn and carry on — it kills the binding that touched it. So look
+    // the namespace up once, by name, and read everything downstream off that.
+    //
+    // `typeof` is safe on a QML type that does not exist: it answers "undefined"
+    // rather than throwing. That was not assumed — it was run under 0.2.1 on
+    // Qt 6.11 on 2026-09-02, along with the two names below.
+    //
+    // Do NOT replace this with the raw numbers. The variants are not declared in
+    // the same order on the two builds, so the numbers are not portable even
+    // though the words are.
+    readonly property var connState:
+        (typeof ConnectionState !== "undefined") ? ConnectionState             // 0.3.x
+        : (typeof DeviceConnectionState !== "undefined") ? DeviceConnectionState // 0.2.1
+        : null                                                                  // neither: say nothing
 
     // The network this device is actually on, if any.
     readonly property var activeNetwork: {
@@ -97,7 +140,11 @@ QsTile {
             return qsTr("Off");
         if (root.activeNetwork !== null)
             return root.activeNetwork.name;
-        if (root.wifiDevice.state === ConnectionState.Connecting)
+        // If neither build's enum is there, fall through to "Not connected"
+        // rather than guess — it is the true state either way, just less
+        // specific about how it got there.
+        if (root.connState !== null
+                && root.wifiDevice.state === root.connState.Connecting)
             return qsTr("Connecting…");
         return qsTr("Not connected");
     }

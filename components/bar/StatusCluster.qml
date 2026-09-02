@@ -36,11 +36,13 @@
 //
 // ⚠️ WHY THE THREE GLYPHS ARE IN THREE SEPARATE LOADED FILES
 //
-//   Same reason the tiles are. `Quickshell.Networking` needs Quickshell 0.3.0 or
-//   newer (it is not in the v0.2.1 type index) and Fedora's package was a 0.2.1
-//   snapshot when this was written. A file that imports a missing module fails
-//   to load ENTIRELY — and if that file were this one, the bar would lose its
-//   tray and its clock along with its Wi-Fi glyph.
+//   Same reason the tiles are. A file that imports a missing module fails to
+//   load ENTIRELY — and if that file were this one, the bar would lose its tray
+//   and its clock along with its Wi-Fi glyph. `Quickshell.Networking` is the
+//   module this was written for; it turns out to be present on the build
+//   AquariusOS ships (corrected 2026-09-02 — see QsTileSlot.qml), but a bar that
+//   survives a missing module is worth keeping whether or not one is missing
+//   today.
 //
 //   So each glyph that touches a service is its own tiny file behind a Loader.
 //   A missing module costs one glyph. Read the header of
