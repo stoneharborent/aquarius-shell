@@ -116,19 +116,22 @@ binds {
     // message to the shell that is ALREADY running, telling it to show or hide
     // its search box.
     //
-    // `qs ipc call <target> <function> <argument>` is Quickshell's own
-    // mechanism for talking to a running configuration. The target name
-    // "aquarius-shell" is declared by an IpcHandler inside the shell.
+    // `qs ipc call <target> <function> [arguments]` is Quickshell's own
+    // mechanism for talking to a running configuration. The target "search"
+    // and its function "toggle" are declared by the IpcHandler in
+    // components/search/FlowSearch.qml.
     //
-    // No path is needed on `qs` here for the same reason as everywhere else:
-    // QS_CONFIG_PATH is in the environment niri inherited.
+    // WHICH shell instance gets the message is not an argument: `qs ipc`
+    // picks the instance running the config named by QS_CONFIG_PATH, which is
+    // in the environment niri inherited from the launcher. (Checked against
+    // `qs ipc --help` on Quickshell 0.2.1, 2026-09-01. An earlier version of
+    // this line passed "aquarius-shell" as a first positional, which `qs`
+    // would have read as the target name — and no such target exists.)
     //
-    // UNVERIFIED: the exact function/argument spelling comes from the search
-    // branch and has not been run together with this file yet. If the palette
-    // does not open, ask the running shell what it actually offers:
+    // If the palette does not open, ask the running shell what it offers:
     //     qs ipc show
     Mod+Space hotkey-overlay-title="Aquarius Search" {
-        spawn "qs" "ipc" "call" "aquarius-shell" "search" "toggle";
+        spawn "qs" "ipc" "call" "search" "toggle";
     }
 
     // ---- stock niri, kept minimal on purpose ------------------------------

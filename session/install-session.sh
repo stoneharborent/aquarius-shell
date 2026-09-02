@@ -23,17 +23,19 @@
 #
 #   /usr/local is different. On these systems it is a link to /var/usrlocal,
 #   which is ordinary writable storage that survives updates and is not part of
-#   the image. And SDDM, the login screen Bazzite uses, looks for sessions in
-#   BOTH /usr/local/share/wayland-sessions AND /usr/share/wayland-sessions by
-#   default.
+#   the image. (Confirmed on the bench PC, 2026-09-01: /usr/local -> ../var/usrlocal.)
 #
-#   So: a new session can be added to a Bazzite machine without rebuilding or
-#   modifying the OS image at all, and removed again by deleting five files.
-#   That is the property this script is built around.
+#   The login screen on AquariusOS is GDM (the GNOME one — the bench PC runs
+#   gdm 50; SDDM is what Bazzite's KDE variant uses, not ours). GDM's daemon
+#   hardcodes /usr/share/wayland-sessions but also walks the standard system
+#   data directories, which default to /usr/local/share:/usr/share, so
+#   /usr/local/share/wayland-sessions SHOULD be picked up. That is read from
+#   GDM's source, not yet seen on the login screen — see docs/session.md,
+#   "what is unproven".
 #
-#   (Verified from SDDM's own source; the default SessionDir list for Wayland is
-#   /usr/local/share/wayland-sessions,/usr/share/wayland-sessions. NOT verified
-#   on a real machine — see docs/session.md, "what is unproven".)
+#   If it holds: a new session can be added to an AquariusOS machine without
+#   rebuilding or modifying the OS image at all, and removed again by deleting
+#   five files. That is the property this script is built around.
 #
 # WHAT IT DOES NOT DO
 #   It does not install packages, touch the OS image, change any system setting,
@@ -243,10 +245,9 @@ echo "  Log out. At the login screen there is usually a small gear or"
 echo "  a session name near the password box — that is the session"
 echo "  chooser. Pick \"Aquarius Session (experimental)\"."
 echo ""
-echo "  If it is NOT in the list, the login screen is not reading"
-echo "  ${aq_prefix}/share/wayland-sessions."
-echo "  SDDM (Bazzite's login screen) reads it by default. GDM may"
-echo "  not. See docs/session.md, 'the session does not appear'."
+echo "  If it is NOT in the list, the login screen (GDM, on AquariusOS)"
+echo "  is not reading ${aq_prefix}/share/wayland-sessions."
+echo "  See docs/session.md, 'the session does not appear'."
 echo ""
 echo "  Which compositor it starts:  niri (the default)"
 echo "  To use labwc instead:"

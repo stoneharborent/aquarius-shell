@@ -77,19 +77,22 @@
 
       This does not launch a program. It sends a message to the shell that is
       ALREADY running, telling it to show or hide its search box.
-      `qs ipc call <target> <function> <argument>` is Quickshell's own
-      mechanism for that, and "aquarius-shell" is the target name declared by
-      an IpcHandler inside the shell.
+      `qs ipc call <target> <function> [arguments]` is Quickshell's own
+      mechanism for that. The target "search" and its function "toggle" are
+      declared by the IpcHandler in components/search/FlowSearch.qml.
 
-      No path on `qs`: QS_CONFIG_PATH is in the environment labwc inherited.
+      Which shell instance gets the message is not an argument: `qs ipc`
+      picks the instance running the config named by QS_CONFIG_PATH, which
+      labwc inherited from the launcher. (Checked against the help text of
+      `qs ipc` on Quickshell 0.2.1, 2026-09-01. An earlier version of this line passed
+      "aquarius-shell" as a first positional, which `qs` would have read as
+      the target name — and no such target exists.)
 
-      UNVERIFIED: the exact function and argument spelling comes from the
-      search branch and has not been run together with this file yet. If the
-      palette does not open, ask the running shell what it actually offers:
+      If the palette does not open, ask the running shell what it offers:
           qs ipc show
     -->
     <keybind key="W-space">
-      <action name="Execute" command="qs ipc call aquarius-shell search toggle" />
+      <action name="Execute" command="qs ipc call search toggle" />
     </keybind>
 
     <!-- Leave the session and go back to the login screen. -->

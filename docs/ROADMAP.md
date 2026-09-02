@@ -110,7 +110,7 @@ inside it works. Each component's doc still ends with its own unproven list.
   *press Enter to copy*, and letters find real applications with real icons.
   One box; apps, math, session actions (honest
   scope — no faked file/web search). Summoned by
-  `qs ipc -c aquarius-shell call search toggle`; there is NO portable
+  `qs ipc call search toggle` (instance chosen by `QS_CONFIG_PATH`); there is NO portable
   global-shortcut path in Quickshell today (its `GlobalShortcut` is
   Hyprland-only), so the compositor binds the key. `docs/flow-search.md`.
 - [x] **The status cluster** — **RUNS 2026-09-01**, and the run found two things:
@@ -118,8 +118,14 @@ inside it works. Each component's doc still ends with its own unproven list.
   child), and the bar wore a crossed-out Wi-Fi mark on a machine with no
   wireless adapter. Both fixed. Real: live network/sound/battery glyphs, the
   system tray (StatusNotifierItem), click opens Quick Settings.
-- [x] **The experimental Aquarius Session** — written, has never booted:
-  session entry + loud-failure launcher + configs for BOTH candidate
+- [x] **The experimental Aquarius Session** — written, has never booted.
+  **Pre-flight 2026-09-01** on the bench PC (which runs AquariusOS itself,
+  build 44.20260901): `/usr/local` is writable, the niri config validates, both
+  portal back ends are already in the image, and two things were wrong — the
+  login screen is **GDM, not SDDM**, and the Super + Space binding named a
+  non-existent IPC target. Both corrected in `docs/session.md`; what remains
+  needs a person at the login screen.
+  Session entry + loud-failure launcher + configs for BOTH candidate
   compositors. Build finding that feeds the compositor gate: the plan's
   `-gtk`+`-wlr` portal mix is right for labwc but wrong for niri, which needs
   the GNOME portal for capture — per-compositor portals.conf, selected by

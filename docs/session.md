@@ -8,16 +8,33 @@ bottom that undoes all of it.*
 
 ## Read this first
 
-**None of this has ever been run.** It was written on a Mac, where there is no
-Wayland, no compositor, no Quickshell, no systemd and no D-Bus — so not one line
-of it has been executed by the thing it is written for. Every command below is a
-*prediction*, checked line by line against the documentation and source code of
-the projects involved, and no further than that.
+**The session itself has never been logged into.** This page was written on a
+Mac, where there is no Wayland, no compositor, no Quickshell, no systemd and no
+D-Bus — so most of it is a *prediction*, checked line by line against the
+documentation and source code of the projects involved.
 
-That means: expect the first bench run to find something. That is what the bench
-run is *for*. The list of specific things most likely to be wrong is at the very
-bottom, under **[What is unproven](#what-is-unproven)** — read it before you
-start, not after.
+**Pre-flight done 2026-09-01, on the bench PC, without installing anything.**
+Before the first login, the assumptions that could be checked from a terminal
+were checked, and some of them were wrong. In short:
+
+- The bench PC is running **AquariusOS itself** (`aquarius-os-gnome-nvidia`,
+  build 44.20260901). Not Bazzite, not plain Fedora — our own image.
+- The login screen is **GDM, not SDDM.** Everything this page used to say about
+  SDDM was true of Bazzite's KDE variant and never applied to ours. Corrected
+  throughout, and "the session does not appear" below is the section to read
+  if GDM turns out not to look in `/usr/local`.
+- `/usr/local` **is** a link to `/var/usrlocal`. That assumption held.
+- `session/niri/config.kdl` **is valid** — `niri validate` says so.
+- The **Super + Space binding was wrong** in both compositor configs, and would
+  never have opened the palette. Fixed; see [About Super + Space](#about-super--space).
+- Both portal back ends the niri route needs are **already on the OS**. The
+  only packages to layer are `quickshell` and `niri` (plus `labwc` and
+  `xdg-desktop-portal-wlr` if you want to try labwc). Fedora 44 ships
+  Quickshell 0.2.1 — the same version every harness run has used.
+
+What is left is exactly the part that needs a person at the login screen. The
+full list is at the bottom, under **[What is unproven](#what-is-unproven)** —
+read it before you start, not after.
 
 **Nothing here removes or replaces GNOME.** The Aquarius Session is added *next
 to* it on the login screen. If it does not start, you log out and pick GNOME and
@@ -85,17 +102,24 @@ document possible:
 
 On an atomic system `/usr/local` is a link to `/var/usrlocal`, which is
 ordinary writable storage. It survives OS updates. It is not part of the image.
-And **SDDM — the login screen Bazzite uses — reads sessions from both folders by
-default.**
+**Confirmed on the bench PC 2026-09-01:** `ls -ld /usr/local` shows
+`/usr/local -> ../var/usrlocal`.
 
-So the Aquarius Session can be added to a real Bazzite machine, appear on the
-real login screen, and be removed again by deleting five files — with the OS
-image never modified, never rebuilt, and never even aware.
+The login screen on AquariusOS is **GDM** — GNOME's, version 50 on the bench
+PC. (An earlier version of this page said SDDM. SDDM is what Bazzite's KDE
+variant uses; our image is built on the GNOME variant and has never had it.)
 
-*(Both of those facts were read from source: SDDM's default Wayland
-`SessionDir` is `/usr/local/share/wayland-sessions,/usr/share/wayland-sessions`.
-Neither has been confirmed on a running machine. See
-[What is unproven](#what-is-unproven).)*
+Whether GDM reads the second folder is the one thing this plan now rests on.
+Looking inside GDM's own binary on the bench PC: it hardcodes
+`/usr/share/wayland-sessions/`, but it *also* walks the standard system data
+directories — which, when nothing overrides them, are
+`/usr/local/share` then `/usr/share`. So `/usr/local/share/wayland-sessions`
+should be picked up. That is read from GDM's source and its binary, not yet seen
+on the login screen. See [What is unproven](#what-is-unproven), item 6.
+
+If it holds, the Aquarius Session can be added to a real AquariusOS machine,
+appear on the real login screen, and be removed again by deleting five files —
+with the OS image never modified, never rebuilt, and never even aware.
 
 ---
 
@@ -120,19 +144,38 @@ sudo dnf install labwc xdg-desktop-portal-wlr
 
 Bazzite's system is read-only, so `dnf install` does not work the way it does
 elsewhere. Packages are **layered** onto the image instead, which needs one
-reboot:
+reboot.
+
+**On AquariusOS the two portal back ends are already in the image**
+(`xdg-desktop-portal-gnome` and `xdg-desktop-portal-gtk` — checked on the bench
+PC 2026-09-01), so the niri route needs only two packages:
 
 ```bash
-rpm-ostree install quickshell niri xdg-desktop-portal-gtk xdg-desktop-portal-gnome
+rpm-ostree install quickshell niri
+```
+
+```bash
 systemctl reboot
+```
+
+If you also want to try labwc, it needs its own screen-capture back end, which
+is **not** in the image:
+
+```bash
+rpm-ostree install labwc xdg-desktop-portal-wlr
 ```
 
 To undo it later:
 
 ```bash
-rpm-ostree uninstall quickshell niri xdg-desktop-portal-gtk xdg-desktop-portal-gnome
-systemctl reboot
+rpm-ostree uninstall quickshell niri
 ```
+
+(add `labwc xdg-desktop-portal-wlr` if you installed them), then reboot.
+
+Fedora 44's repositories carry Quickshell **0.2.1**, niri **26.04** and labwc
+**0.9.6** — the same Quickshell every harness run has used, so nothing about the
+shell changes between the harness and the real session.
 
 > **A distrobox will not work here, and this is worth understanding.**
 >
@@ -297,11 +340,20 @@ message to the shell that is **already running**, telling it to show or hide its
 search box. The command is:
 
 ```
-qs ipc call aquarius-shell search toggle
+qs ipc call search toggle
 ```
 
-`qs ipc call` is Quickshell's own way of calling a function inside a running
-configuration. `aquarius-shell` is the name the shell registers itself under.
+`qs ipc call <target> <function>` is Quickshell's own way of calling a function
+inside a running configuration. `search` is the target the palette registers
+and `toggle` is its function. *Which* running shell gets the message is decided
+by `QS_CONFIG_PATH`, which the launcher exports and the compositor passes down —
+so no name and no path appears in the binding.
+
+**This line was wrong until 2026-09-01.** Both compositor configs used to run
+`qs ipc call aquarius-shell search toggle`, which Quickshell would have read as
+target `aquarius-shell`, function `search` — and there is no such target. It
+was caught by reading `qs ipc call --help` on the bench PC. Unproven item 8
+was exactly this, and it would have shown up as "Super + Space does nothing".
 
 If Super + Space does nothing, ask the running shell what it actually offers:
 
@@ -451,24 +503,25 @@ to compare the time it worked with the time it did not.
 
 The login screen is not reading `/usr/local/share/wayland-sessions`.
 
-SDDM — which Bazzite uses — reads it by default. **GDM may not**, and on a plain
-Fedora Workstation you are on GDM. Check what you have:
+On AquariusOS the login screen is GDM. It should walk `/usr/local/share` (see
+"Why this is not as scary" above), but that has not been seen yet. Check the
+file is actually there first:
 
 ```bash
-ls /usr/local/share/wayland-sessions/     # is our file actually there?
-systemctl status display-manager          # which login screen is running?
+ls /usr/local/share/wayland-sessions/
 ```
 
-If it is GDM, install into `/usr` instead. On plain Fedora that is allowed:
+If it is there and the session still is not offered, GDM is not looking in
+`/usr/local`. On a plain Fedora machine the fix is to install into `/usr`:
 
 ```bash
 ./session/install-session.sh --prefix /usr
 ```
 
-On Bazzite `/usr` is read-only and that will fail — which is the honest answer:
-on an atomic system with GDM, adding a session may genuinely require a change to
-the OS image. That is the case the *"when this ships in the image"* section
-below is about.
+On AquariusOS `/usr` is read-only and that will fail — which is the honest
+answer: adding a session would then genuinely require a change to the OS image.
+That is the case the *"when this ships in the image"* section below is about,
+and it would move from Phase P3 to "now".
 
 ### Other symptoms
 
@@ -504,12 +557,13 @@ below is about.
 That removes the five installed files and nothing else. The Aquarius Session
 disappears from the login screen; GNOME was never touched and is unchanged.
 
-To also remove the packages, on Bazzite:
+To also remove the packages, on AquariusOS:
 
 ```bash
-rpm-ostree uninstall quickshell niri xdg-desktop-portal-gtk xdg-desktop-portal-gnome
-systemctl reboot
+rpm-ostree uninstall quickshell niri
 ```
+
+(add `labwc xdg-desktop-portal-wlr` if you layered them), then reboot.
 
 ---
 
@@ -527,8 +581,15 @@ Bazzite is a gaming OS. It can boot straight into Steam's Game Mode, and Steam's
 what "desktop" means:
 
 - `/usr/libexec/os-session-select` — what Steam calls when you leave Game Mode.
-- `/usr/libexec/bazzite-autologin` — what sets the session SDDM logs into
-  automatically.
+- `/usr/libexec/bazzite-autologin` — what sets the session the login screen
+  logs into automatically.
+
+*Checked on the bench PC 2026-09-01: **neither script is present** on
+`aquarius-os-gnome-nvidia` — not in `/usr/libexec`, not in `/usr/bin`. They
+belong to Bazzite's handheld/HTPC ("deck") images, which boot into Game Mode;
+our desktop image does not. So on the images that exist today this obstacle
+does not exist. It becomes real only if AquariusOS ever ships a deck variant,
+and the rest of this section is kept for that day.*
 
 Both pick the desktop session **by looking at which Bazzite variant is
 installed**, from `/usr/share/ublue-os/image-info.json`:
@@ -579,16 +640,17 @@ patching those files. What changes is which lines the patch touches.
 
 ## What is unproven
 
-Everything. But specifically, here is what would have to be checked first, in
-the order a bench run would hit it:
+Less than there was. The pre-flight on 2026-09-01 (bench PC, from a terminal,
+nothing installed) settled the items struck through below. Here is what remains,
+in the order a bench run would hit it:
 
 **Never executed at all**
 
 1. `session/aquarius-session` has never run. Not once, on any machine.
 2. `session/install-session.sh` has never run. Not once.
-3. `session/niri/config.kdl` has never been parsed by niri. `niri validate -c
-   session/niri/config.kdl` on a Linux box is the cheap first check and takes a
-   second.
+3. ~~`session/niri/config.kdl` has never been parsed by niri.~~ **Validated
+   2026-09-01**: `niri validate` (niri 26.04) reports *config is valid*, after
+   the Super + Space fix.
 4. `session/labwc/rc.xml` has never been parsed by labwc. It is confirmed
    well-formed XML by `tests/test-shell.sh` — which proves the angle brackets
    match and nothing else.
@@ -600,20 +662,31 @@ the order a bench run would hit it:
 
 **Read from documentation and source, but not observed**
 
-6. That SDDM reads `/usr/local/share/wayland-sessions`. Read from SDDM's own
-   default configuration. Not seen working.
-7. That `/usr/local` is writable on Bazzite. This is standard for ostree-based
-   systems, and is the assumption the entire no-image-changes story rests on.
-   **Check it first**: `ls -ld /usr/local` should show a link to
-   `/var/usrlocal`. If it does not, none of Step 2 will work.
-8. That `qs ipc call aquarius-shell search toggle` is the correct spelling. It
-   came from the search branch's description and the two have not been merged
-   and run together. `qs ipc show` settles it in one command.
+6. That **GDM** reads `/usr/local/share/wayland-sessions`. *(Rewritten
+   2026-09-01 — it used to say SDDM, which AquariusOS does not have.)* GDM's
+   daemon binary on the bench PC hardcodes `/usr/share/wayland-sessions/` and
+   also joins `wayland-sessions` onto each standard system data directory,
+   which default to `/usr/local/share:/usr/share` when the `XDG_DATA_DIRS`
+   variable is unset — and GDM's service does not set it. So it should work.
+   **This is now the single assumption the whole no-image-changes story rests
+   on**, and it is settled by logging out and looking at the session list.
+7. ~~That `/usr/local` is writable on Bazzite.~~ **Confirmed 2026-09-01**:
+   `/usr/local -> ../var/usrlocal` on the bench PC.
+8. ~~That `qs ipc call aquarius-shell search toggle` is the correct spelling.~~
+   **It was not.** Fixed 2026-09-01 to `qs ipc call search toggle` after
+   reading `qs ipc call --help`; the target is the IpcHandler's `target:
+   "search"` in `components/search/FlowSearch.qml`. Still unproven: that the
+   binding fires it in a real session (item 9).
 9. That `QS_CONFIG_PATH` is inherited all the way down to a `qs` started by a
-   compositor key binding. It is documented as the environment name for
-   `--path`, and environments are inherited, but the whole chain is untested.
-10. That the portal configurations name back ends that are actually installed.
-    A name for a back end that is not present is not an error; it is silence.
+   compositor key binding. `qs ipc --help` on 0.2.1 confirms the variable is
+   the environment form of `--path` for `ipc` as well as for launching, and
+   environments are inherited, but the whole chain is untested.
+10. ~~That the portal configurations name back ends that are actually
+    installed.~~ **Checked 2026-09-01** against the bench PC: the niri config
+    names `gnome` and `gtk`, and both `xdg-desktop-portal-gnome` 50.0 and
+    `xdg-desktop-portal-gtk` 1.15.3 are in the image. The labwc config names
+    `wlr`, which is **not** in the image — layer `xdg-desktop-portal-wlr`
+    with labwc or its screen capture will be silent.
 11. That `gdbus monitor` output has the exact shape the line-matching in
     `SystemAppearance.qml` expects. The parser is deliberately forgiving —
     it looks for three substrings and a number — but "forgiving" is not
