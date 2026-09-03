@@ -1582,6 +1582,102 @@ done <<< "${aq_spawn_rows}"
 
 # ------------------------------------------------------------------------------
 echo ""
+echo "=== 30. the size knob reaches every size ==="
+# ------------------------------------------------------------------------------
+# THIS SECTION EXISTS BECAUSE OF THE BENCH TEST, 2026-09-03.
+#
+# The shell drew correctly and read too small on a 55" 4K monitor. Part of that
+# was the session running the output at scale 1.0; the rest is a design question
+# only Royce can answer, and answering it means trying 1.15, 1.25 and 1.5 on the
+# real machine. AQ_UI_SCALE is how he does that: Theme.ui reads it, Theme.px()
+# applies it, and every size token in theme/Theme.qml is written root.px(N).
+#
+# A PARTIAL multiplier is worse than none. If one token stays a bare number, the
+# bar grows and its icons do not, or the panel grows and its corners stay sharp,
+# and the design comes apart at exactly the setting Royce was trying to judge.
+# So: no bare numeric size token in Theme.qml, ever. The exemption list below is
+# short and each entry says why it is not a size.
+
+if python3 - <<'PYTHON'
+import pathlib
+import re
+import sys
+
+text = pathlib.Path('theme/Theme.qml').read_text(encoding='utf-8')
+
+# Things that are numbers but are NOT sizes, so must NOT be multiplied.
+#   durFast/durMed  milliseconds. A taller bar must not animate more slowly.
+#   uiScaleMin/Max  the clamp on the knob itself.
+#   dock*Opacity    0..1 opacity.
+#   dockHoverScale  already a multiplier.
+exempt = {'durFast', 'durMed', 'uiScaleMin', 'uiScaleMax',
+          'dockDotOpacity', 'dockDotOpacityActive', 'dockHoverScale'}
+
+bad = 0
+scaled = 0
+
+for line in text.split('\n'):
+    m = re.match(r'\s*readonly\s+property\s+(int|real)\s+(\w+)\s*:\s*(.+?)\s*(?://.*)?$', line)
+    if not m:
+        continue
+    name, value = m.group(2), m.group(3)
+    if name in exempt:
+        continue
+    if not re.match(r'^-?[\d.]+$', value):
+        continue
+    print("  FAIL %s is a bare number (%s). Write it root.px(%s)." % (name, value, value))
+    bad += 1
+
+for line in text.split('\n'):
+    if 'root.px(' in line and 'function px' not in line:
+        scaled += 1
+
+# The knob's own machinery has to still be there and still do the two things it
+# claims: read the environment variable, and multiply by it.
+if 'Quickshell.env("AQ_UI_SCALE")' not in text:
+    print("  FAIL Theme.ui no longer reads AQ_UI_SCALE from the environment.")
+    bad += 1
+
+if not re.search(r'function\s+px\s*\([^)]*\)[^{]*\{', text):
+    print("  FAIL theme/Theme.qml has no px() function.")
+    bad += 1
+elif 'Math.round(n * root.ui)' not in text:
+    print("  FAIL px() no longer multiplies by root.ui.")
+    bad += 1
+
+# One multiplier, in one place. If a second file starts doing its own scaling
+# arithmetic the knob stops being one number and starts being a convention.
+others = 0
+for path in sorted(pathlib.Path('.').rglob('*.qml')):
+    if '.git' in path.parts or path == pathlib.Path('theme/Theme.qml'):
+        continue
+    # Comments are stripped first: a file is allowed to EXPLAIN the knob (and
+    # StatusCluster.qml does), it is just not allowed to read it.
+    code = path.read_text(encoding='utf-8')
+    code = re.sub(r'/\*.*?\*/', '', code, flags=re.S)
+    code = re.sub(r'//[^\n]*', '', code)
+    if 'AQ_UI_SCALE' in code:
+        print("  FAIL %s reads AQ_UI_SCALE itself. Only Theme.qml may." % path)
+        others += 1
+bad += others
+
+if bad == 0:
+    print("  OK   %d size tokens all go through the one multiplier" % scaled)
+
+sys.exit(1 if bad else 0)
+PYTHON
+then
+    :
+else
+    fail "the AQ_UI_SCALE knob does not reach every size (listed above)." \
+         "Every numeric size in theme/Theme.qml is written root.px(N) so that" \
+         "one environment variable resizes the whole design at once. A token" \
+         "left bare refuses to grow with the rest. See the SIZE KNOB block at" \
+         "the top of theme/Theme.qml."
+fi
+
+# ------------------------------------------------------------------------------
+echo ""
 if [ "${aq_failures}" -ne 0 ]; then
     echo "::error::${aq_failures} check(s) failed."
     exit 1

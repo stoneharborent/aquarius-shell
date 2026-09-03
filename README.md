@@ -112,6 +112,24 @@ Colour lives in exactly two files — `theme/Ice.qml` and `theme/Midnight.qml` �
 and nowhere else. Every role in one has a twin in the other with the same name,
 which is what lets a component be written once and be right in both.
 
+Sizes live in exactly one file — `theme/Theme.qml` — and every one of them is
+written `root.px(N)`, so a single environment variable can resize the entire
+design at once:
+
+```bash
+AQ_UI_SCALE=1.25 qs -p .
+```
+
+That is a **dial for deciding**, not a setting anybody should have to live on.
+It exists because the design read too small on a 55" monitor on 2026-09-03 and
+the only useful way to answer "how much bigger?" is to look at 1.15, 1.25 and
+1.5 on the real machine. On AquariusOS the same dial is `aq display ui 1.25`.
+Unset means 1, which is the design exactly as drawn.
+
+Note what it does **not** do: it does not touch other applications. Those get
+their size from the compositor's output scale, which is a different setting
+entirely and belongs to the session, not to us.
+
 ---
 
 ## Honest status

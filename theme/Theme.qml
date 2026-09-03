@@ -129,33 +129,118 @@ Singleton {
     readonly property color handleShadow: root.colors.handleShadow
 
     // =========================================================================
+    // THE SIZE KNOB — one number that makes the whole shell bigger or smaller
+    // =========================================================================
+    // WHY THIS EXISTS
+    //   On the bench, 2026-09-03, the shell drew correctly and read TOO SMALL.
+    //   Two separate things can cause that and they are worth keeping apart:
+    //
+    //     1. The OUTPUT SCALE. The compositor was running the monitor at 1.0
+    //        when the same monitor under GNOME had been scaled up. That is not
+    //        a design problem — everything on screen is small, not just us —
+    //        and it is fixed in the session, not here (see the AquariusOS
+    //        os-image repo, `aquarius-display-scale`).
+    //
+    //     2. The DESIGN's OWN BASE SIZES. Even at a correct output scale, a
+    //        30px bar and a 12px caption may simply be smaller than Royce
+    //        wants on a big desktop monitor. That is a design judgement, and
+    //        it is HIS to make — which means he has to be able to try 1.15,
+    //        1.25 and 1.5 on the real machine in seconds, without an edit, a
+    //        rebuild, or a person on a Mac guessing for him.
+    //
+    //   This knob is for case 2. Set AQ_UI_SCALE in the environment before the
+    //   shell starts and every size, gap, corner and font size in the design
+    //   is multiplied by it:
+    //
+    //       AQ_UI_SCALE=1.25 qs -p .
+    //
+    //   The Aquarius Session exports it from ~/.config/aquarius/display.conf
+    //   (`ui=1.25`), so on AquariusOS the way to change it is `aq display ui
+    //   1.25` and log back in. Unset or unreadable means 1.0, which is exactly
+    //   the design as drawn — this knob changes nothing by default.
+    //
+    // THE RULE THAT KEEPS IT HONEST
+    //   Every numeric size token below is written `root.px(N)`, where N is the
+    //   artboard's number. Not one of them is a bare number. That is what makes
+    //   the multiplier total rather than partial — a single token left bare
+    //   would refuse to grow with the rest and the design would come apart at
+    //   1.5. tests/test-shell.sh section 30 fails the build if one appears.
+    //
+    //   Colours, durations, opacities and the two motion multipliers are NOT
+    //   sizes and are deliberately left alone. Making an animation 1.25x longer
+    //   because the bar got taller would be a bug, not a feature.
+    //
+    // WHAT IT DOES NOT DO
+    //   It does not touch other applications. Firefox, Resolve and every GTK or
+    //   Qt app get their size from the compositor's output scale, which is case
+    //   1 above. This number moves the Aquarius shell only.
+
+    // The multiplier. 1.0 = the design exactly as drawn.
+    //
+    // Clamped to 0.5–3.0 on purpose: a typo of `AQ_UI_SCALE=125` should give a
+    // shell that is comically large but still usable and still fixable, not one
+    // whose top bar is taller than the monitor and cannot be clicked away.
+    readonly property real uiScaleMin: 0.5
+    readonly property real uiScaleMax: 3.0
+
+    readonly property real ui: {
+        const raw = Quickshell.env("AQ_UI_SCALE");
+        if (!raw)
+            return 1.0;
+        const asked = parseFloat(raw);
+        // parseFloat("banana") is NaN, and NaN fails every comparison — so this
+        // one test covers both "not a number" and "a negative number".
+        if (!(asked > 0))
+            return 1.0;
+        return Math.min(root.uiScaleMax, Math.max(root.uiScaleMin, asked));
+    }
+
+    // Turn an artboard number into the number to actually draw.
+    //
+    // Rounded, because a 30.75px bar is a blurry bar: Qt will happily lay out
+    // on a fraction and the result is a half-lit row of pixels along the
+    // bottom edge. Whole numbers here, and the compositor's own fractional
+    // output scale (a different thing, applied after this) does the smooth
+    // part properly.
+    //
+    // The floor of 1 protects the hairlines. `hairline` is 1, and at 0.5x
+    // Math.round(0.5) is 0 — a border that exists in the design and does not
+    // exist on screen. Anything the design says is visible stays visible.
+    function px(n: int): int {
+        if (root.ui === 1.0)
+            return n;
+        const scaled = Math.round(n * root.ui);
+        return (n > 0 && scaled < 1) ? 1 : scaled;
+    }
+
+    // =========================================================================
     // SPACING — the step ladder every gap in the shell is built from
     // =========================================================================
     // Straight out of tokens/spacing.css. If a gap in a design is not on this
     // ladder, the design is wrong or the measurement is wrong — check before
     // inventing a number.
-    readonly property int sp1: 4
-    readonly property int sp2: 8
-    readonly property int sp3: 12
-    readonly property int sp4: 16
-    readonly property int sp5: 24
-    readonly property int sp6: 32
-    readonly property int sp7: 48
-    readonly property int sp8: 64
+    readonly property int sp1: root.px(4)
+    readonly property int sp2: root.px(8)
+    readonly property int sp3: root.px(12)
+    readonly property int sp4: root.px(16)
+    readonly property int sp5: root.px(24)
+    readonly property int sp6: root.px(32)
+    readonly property int sp7: root.px(48)
+    readonly property int sp8: root.px(64)
 
     // =========================================================================
     // CORNERS
     // =========================================================================
-    readonly property int radiusSm: 7    // inputs, toggles
-    readonly property int radiusMd: 9    // buttons
-    readonly property int radiusLg: 12   // cards
-    readonly property int radiusXl: 16   // panels, windows
+    readonly property int radiusSm: root.px(7)    // inputs, toggles
+    readonly property int radiusMd: root.px(9)    // buttons
+    readonly property int radiusLg: root.px(12)   // cards
+    readonly property int radiusXl: root.px(16)   // panels, windows
 
     // =========================================================================
     // CONTROLS
     // =========================================================================
-    readonly property int controlHeight: 36
-    readonly property int controlHeightSm: 28
+    readonly property int controlHeight: root.px(36)
+    readonly property int controlHeightSm: root.px(28)
 
     // =========================================================================
     // THE TOP BAR — measured off the V2 artboard
@@ -163,17 +248,17 @@ Singleton {
     // <header style="height:30px; padding:0 10px; gap:2px;
     //                border-bottom:1px solid ...">
     //   .bar-item { height:22px; padding:0 8px; gap:6px; border-radius:6px }
-    readonly property int barHeight: 30          // the whole bar
-    readonly property int barPaddingH: 10        // space before the first / after the last item
-    readonly property int barItemSpacing: 2      // space BETWEEN bar items
-    readonly property int barItemHeight: 22      // the hover pill's height
-    readonly property int barItemPaddingH: 8     // space inside a bar item, left and right
-    readonly property int barItemGap: 6          // space between two things inside one item
-    readonly property int barItemRadius: 6       // the hover pill's corners
-    readonly property int barLogoSize: 14        // the Aquarius mark, drawn 14x14
-    readonly property int hairline: 1            // every 1px rule in the shell
-    readonly property int barGlyphSize: 15       // a status glyph (Wi-Fi, speaker) in the bar
-    readonly property int barTrayIconSize: 16    // a system tray application's own icon
+    readonly property int barHeight: root.px(30)          // the whole bar
+    readonly property int barPaddingH: root.px(10)        // space before the first / after the last item
+    readonly property int barItemSpacing: root.px(2)      // space BETWEEN bar items
+    readonly property int barItemHeight: root.px(22)      // the hover pill's height
+    readonly property int barItemPaddingH: root.px(8)     // space inside a bar item, left and right
+    readonly property int barItemGap: root.px(6)          // space between two things inside one item
+    readonly property int barItemRadius: root.px(6)       // the hover pill's corners
+    readonly property int barLogoSize: root.px(14)        // the Aquarius mark, drawn 14x14
+    readonly property int hairline: root.px(1)            // every 1px rule in the shell
+    readonly property int barGlyphSize: root.px(15)       // a status glyph (Wi-Fi, speaker) in the bar
+    readonly property int barTrayIconSize: root.px(16)    // a system tray application's own icon
 
     // =========================================================================
     // QUICK SETTINGS — measured off the V2 artboard
@@ -193,25 +278,25 @@ Singleton {
     // The panel's corner uses radiusLg (12), which is what the design's
     // var(--radius-lg) resolves to — NOT radiusXl, even though the comment on
     // radiusXl says "panels". The design is the authority here.
-    readonly property int qsWidth: 330
-    readonly property int qsPadding: 16
-    readonly property int qsTileGap: 10          // between tiles, both directions
-    readonly property int qsTileHeight: 52       // 10 + 32 chip + 10
-    readonly property int qsTilePaddingH: 12
-    readonly property int qsTilePaddingV: 10
-    readonly property int qsTileInnerGap: 10     // chip -> text
-    readonly property int qsChipSize: 32
-    readonly property int qsChipGlyphSize: 15
-    readonly property int qsSlidersTop: 16       // grid -> first slider
-    readonly property int qsSliderGap: 14        // slider -> slider
-    readonly property int qsSliderLabelGap: 8    // label row -> track
-    readonly property int qsTrackHeight: 6
-    readonly property int qsHandleSize: 16
-    readonly property int qsFooterTop: 14        // last slider -> the hairline
-    readonly property int qsFooterPaddingTop: 12 // the hairline -> the battery line
-    readonly property int qsFooterGap: 8
-    readonly property int qsBatteryGlyphWidth: 22
-    readonly property int qsBatteryGlyphHeight: 11
+    readonly property int qsWidth: root.px(330)
+    readonly property int qsPadding: root.px(16)
+    readonly property int qsTileGap: root.px(10)          // between tiles, both directions
+    readonly property int qsTileHeight: root.px(52)       // 10 + 32 chip + 10
+    readonly property int qsTilePaddingH: root.px(12)
+    readonly property int qsTilePaddingV: root.px(10)
+    readonly property int qsTileInnerGap: root.px(10)     // chip -> text
+    readonly property int qsChipSize: root.px(32)
+    readonly property int qsChipGlyphSize: root.px(15)
+    readonly property int qsSlidersTop: root.px(16)       // grid -> first slider
+    readonly property int qsSliderGap: root.px(14)        // slider -> slider
+    readonly property int qsSliderLabelGap: root.px(8)    // label row -> track
+    readonly property int qsTrackHeight: root.px(6)
+    readonly property int qsHandleSize: root.px(16)
+    readonly property int qsFooterTop: root.px(14)        // last slider -> the hairline
+    readonly property int qsFooterPaddingTop: root.px(12) // the hairline -> the battery line
+    readonly property int qsFooterGap: root.px(8)
+    readonly property int qsBatteryGlyphWidth: root.px(22)
+    readonly property int qsBatteryGlyphHeight: root.px(11)
 
     // Where the panel sits once it is open: the design draws it 38px from the
     // top of a 30px bar, i.e. 8px of air under the bar.
@@ -221,7 +306,7 @@ Singleton {
     // right-hand end of the bar's own contents, so barPaddingH (10) plus the
     // status item's padding already puts it there. Writing 12 as well would
     // inset it twice.
-    readonly property int qsPopupGap: 8
+    readonly property int qsPopupGap: root.px(8)
 
     // =========================================================================
     // THE DOCK — measured off the V2 artboard
@@ -242,16 +327,16 @@ Singleton {
     // the tile's bottom edge". With a 4px dot that leaves a 3px gap between the
     // tile and the dot, which is what dockDotGap is. 3 + 4 = 7, and the dock's
     // 9px bottom padding has room for it with 2px to spare.
-    readonly property int dockTileSize: 44        // one app tile, square
-    readonly property int dockTileRadius: 11      // that tile's corners
-    readonly property int dockTileInset: 6        // icon inset inside the tile*
-    readonly property int dockGap: 9              // space BETWEEN tiles
-    readonly property int dockPaddingH: 13        // space inside the slab, sides
-    readonly property int dockPaddingV: 9         // space inside the slab, top/bottom
-    readonly property int dockRadius: 16          // the slab's corners
-    readonly property int dockScreenMargin: 10    // slab's gap to the screen edge
-    readonly property int dockDotSize: 4          // the running-app dot
-    readonly property int dockDotGap: 3           // tile bottom -> dot top
+    readonly property int dockTileSize: root.px(44)        // one app tile, square
+    readonly property int dockTileRadius: root.px(11)      // that tile's corners
+    readonly property int dockTileInset: root.px(6)        // icon inset inside the tile*
+    readonly property int dockGap: root.px(9)              // space BETWEEN tiles
+    readonly property int dockPaddingH: root.px(13)        // space inside the slab, sides
+    readonly property int dockPaddingV: root.px(9)         // space inside the slab, top/bottom
+    readonly property int dockRadius: root.px(16)          // the slab's corners
+    readonly property int dockScreenMargin: root.px(10)    // slab's gap to the screen edge
+    readonly property int dockDotSize: root.px(4)          // the running-app dot
+    readonly property int dockDotGap: root.px(3)           // tile bottom -> dot top
 
     // How solid that dot is. The design draws one state; these two come from
     // the Plasma theme's tasks.svg, which used 0.55 for "running" and 0.8 for
@@ -260,11 +345,11 @@ Singleton {
     readonly property real dockDotOpacity: 0.55
     readonly property real dockDotOpacityActive: 0.8
 
-    readonly property int dockSeparatorHeight: 28 // the rule before the + tile
-    readonly property int dockLift: 4             // how far a hovered tile rises
+    readonly property int dockSeparatorHeight: root.px(28) // the rule before the + tile
+    readonly property int dockLift: root.px(4)             // how far a hovered tile rises
     readonly property real dockHoverScale: 1.08   // and how much it grows
-    readonly property int dockGlyphSize: 13       // the two-letter icon fallback
-    readonly property int dockAddGlyphSize: 18    // the "+" on the add tile
+    readonly property int dockGlyphSize: root.px(13)       // the two-letter icon fallback
+    readonly property int dockAddGlyphSize: root.px(18)    // the "+" on the add tile
 
     // * The design draws two-letter placeholders rather than real icons, so it
     //   has no inset to measure. 6 is the Plasma theme's 4-in-32 tile inset
@@ -288,31 +373,31 @@ Singleton {
     //
     // Same reasoning as the top bar above: these are artboard numbers rather
     // than ladder numbers, and they live here so no component types them.
-    readonly property int searchWidth: 560           // the palette's width
-    readonly property int searchTop: 170             // its distance from the top of the screen
-    readonly property int searchPanelPadding: 8      // space inside the panel's edge
-    readonly property int searchIconSize: 17         // the magnifier at the left of the field
+    readonly property int searchWidth: root.px(560)           // the palette's width
+    readonly property int searchTop: root.px(170)             // its distance from the top of the screen
+    readonly property int searchPanelPadding: root.px(8)      // space inside the panel's edge
+    readonly property int searchIconSize: root.px(17)         // the magnifier at the left of the field
 
-    readonly property int searchFieldPaddingH: 14
-    readonly property int searchFieldPaddingV: 12
-    readonly property int searchFieldGap: 12
+    readonly property int searchFieldPaddingH: root.px(14)
+    readonly property int searchFieldPaddingV: root.px(12)
+    readonly property int searchFieldGap: root.px(12)
 
-    readonly property int searchListPaddingH: 2
-    readonly property int searchListPaddingV: 6
+    readonly property int searchListPaddingH: root.px(2)
+    readonly property int searchListPaddingV: root.px(6)
 
-    readonly property int searchRowPaddingH: 14
-    readonly property int searchRowPaddingV: 10
-    readonly property int searchRowGap: 12
-    readonly property int searchRowRadius: 10
-    readonly property int searchRowIconSize: 30
-    readonly property int searchRowIconRadius: 8
+    readonly property int searchRowPaddingH: root.px(14)
+    readonly property int searchRowPaddingV: root.px(10)
+    readonly property int searchRowGap: root.px(12)
+    readonly property int searchRowRadius: root.px(10)
+    readonly property int searchRowIconSize: root.px(30)
+    readonly property int searchRowIconRadius: root.px(8)
 
-    readonly property int searchHintPaddingH: 6
-    readonly property int searchHintPaddingV: 2
-    readonly property int searchHintRadius: 5
+    readonly property int searchHintPaddingH: root.px(6)
+    readonly property int searchHintPaddingV: root.px(2)
+    readonly property int searchHintRadius: root.px(5)
 
-    readonly property int searchFooterPaddingH: 14
-    readonly property int searchFooterPaddingV: 9
+    readonly property int searchFooterPaddingH: root.px(14)
+    readonly property int searchFooterPaddingV: root.px(9)
 
     // =========================================================================
     // NOTIFICATIONS — measured off the V2 artboard
@@ -335,16 +420,16 @@ Singleton {
     // positioned with a `sp2` top margin against a window that already starts
     // below the bar. There is no "38" anywhere in the code, and there should
     // not be: if the bar's height ever changes, the gap should stay 8.
-    readonly property int notifPanelWidth: 350      // the panel AND the toasts
-    readonly property int notifChipSize: 34         // the rounded icon chip
-    readonly property int notifIconSize: 15         // the glyph inside the chip
-    readonly property int notifGroupIconSize: 16    // the app icon on a group header
+    readonly property int notifPanelWidth: root.px(350)      // the panel AND the toasts
+    readonly property int notifChipSize: root.px(34)         // the rounded icon chip
+    readonly property int notifIconSize: root.px(15)         // the glyph inside the chip
+    readonly property int notifGroupIconSize: root.px(16)    // the app icon on a group header
 
     // How tall the scrolling list of notifications may get before it scrolls
     // instead of growing. Not a design number — the artboard draws three rows
     // and stops. 420 is twenty rows' worth of a short list, which keeps the
     // panel comfortably inside a 768px-tall laptop screen with the footer.
-    readonly property int notifMaxListHeight: 420
+    readonly property int notifMaxListHeight: root.px(420)
 
     // =========================================================================
     // TYPE
@@ -384,18 +469,18 @@ Singleton {
     // same way the design draws them; Qt's `font.pixelSize` is the matching
     // property, NOT `font.pointSize` (which would rescale with system DPI and
     // stop matching the artboard).
-    readonly property int fsHero: 64
-    readonly property int fsDisplay: 48
-    readonly property int fsTitle: 34
-    readonly property int fsHeading: 24
-    readonly property int fsSubhead: 18
-    readonly property int fsBody: 15
-    readonly property int fsSmall: 14      // design says 13.5px; Qt wants a whole number
-    readonly property int fsCaption: 12    // <- the top bar's size, and a QS tile's title
-    readonly property int fsMicro: 11      // <- a QS tile's subtitle (design 10.5px) and
+    readonly property int fsHero: root.px(64)
+    readonly property int fsDisplay: root.px(48)
+    readonly property int fsTitle: root.px(34)
+    readonly property int fsHeading: root.px(24)
+    readonly property int fsSubhead: root.px(18)
+    readonly property int fsBody: root.px(15)
+    readonly property int fsSmall: root.px(14)      // design says 13.5px; Qt wants a whole number
+    readonly property int fsCaption: root.px(12)    // <- the top bar's size, and a QS tile's title
+    readonly property int fsMicro: root.px(11)      // <- a QS tile's subtitle (design 10.5px) and
                                            //    a slider's label (design 11px)
-    readonly property int fsMono: 13       // design says 12.5px; same rounding
-    readonly property int fsMonoSm: 11     // design says 10.5px; the keyboard hints
+    readonly property int fsMono: root.px(13)       // design says 12.5px; same rounding
+    readonly property int fsMonoSm: root.px(11)     // design says 10.5px; the keyboard hints
                                            // and the Flow Search footnote. There is
                                            // no body step this small on purpose —
                                            // it is only ever used for mono asides.

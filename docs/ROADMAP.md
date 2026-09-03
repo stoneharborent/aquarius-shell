@@ -191,6 +191,45 @@ inside it works. Each component's doc still ends with its own unproven list.
 **Gate (verbatim from the plan):** *OBS records, Steam desktop works, a full
 workday survives on the bench.*
 
+### Open design question — the base sizes read small on a real monitor
+
+**Raised by Royce on the bench, 2026-09-03, and it is his call to make, not
+ours.** The shell ran on the 55" 4K Odyssey Ark and the whole design read too
+small: *"really small icons… will need to size everything up."*
+
+Two separate things were behind that, and the first is now fixed:
+
+1. **The screen was at 100%.** The Aquarius Session set no output scale at all,
+   while GNOME on the same machine had been running the monitor at 125% for
+   weeks. Fixed in the os-image repository (`aquarius-display-scale`, which
+   reads that GNOME setting and applies it). Nothing in this repository needed
+   to change for it.
+
+2. **Our own base sizes may simply be too small for a desktop monitor.** A 30px
+   bar and a 12px caption were measured off the V2 artboards, which were drawn
+   for a page rather than for a 55" screen at arm's length. Whether they are
+   right is a judgement about how the desktop should FEEL, and that judgement is
+   Royce's.
+
+So `theme/Theme.qml` now has one knob — `AQ_UI_SCALE` — that multiplies every
+size, gap, corner and font size in the design at once:
+
+```
+AQ_UI_SCALE=1.25 qs -p .          # try it here
+aq display ui 1.25                # set it on AquariusOS, then log back in
+```
+
+**This is a way of ASKING the question, not an answer to it.** The design's own
+defaults are untouched and stay untouched until Royce has looked at 1.15, 1.25
+and 1.5 on the bench and said which one is right. When he does, the next job is
+a design pass that moves the base numbers themselves — the token values in
+`Theme.qml` and the artboards behind them — rather than leaving everybody on a
+multiplier forever. A multiplier is a dial for deciding; a token sheet is the
+decision.
+
+`tests/test-shell.sh` section 30 keeps the knob total: every numeric size token
+in `Theme.qml` is written `root.px(N)`, and a bare number fails the build.
+
 ---
 
 ## Phase P3 — services and session polish

@@ -92,7 +92,11 @@ Row {
             Rectangle {
                 width: Theme.barGlyphSize
                 height: Theme.barGlyphSize
-                radius: 3
+                // A placeholder box, so this corner is not a design token. It
+                // still goes through Theme.px so it grows with AQ_UI_SCALE like
+                // everything else — a 3px corner on a 22px box at 1.5x is the
+                // giveaway that something was left behind.
+                radius: Theme.px(3)
                 color: "transparent"
                 border.width: Theme.hairline
                 border.color: Theme.line
