@@ -46,6 +46,8 @@
   KEY BINDINGS ADDED BY US
   =============================================================================
     W-space     open or close the Aquarius search palette (the shell's own IPC)
+    W-Tab       switch to the next window (hold Super, tap Tab)
+    W-S-Tab     switch to the previous window
     W-S-e       leave the session and return to the login screen
 
   "W" is labwc's letter for Super (the Windows/Command key). Its other
@@ -93,6 +95,32 @@
     -->
     <keybind key="W-space">
       <action name="Execute" command="qs ipc call search toggle" />
+    </keybind>
+
+    <!--
+      Switching windows with the Super key, so that Aquarius Keys' Mac mode
+      behaves the way a Mac does.
+
+      labwc already switches windows, on Alt+Tab, and that binding stays. This
+      adds Super+Tab alongside it. The reason is Aquarius Keys: in Mac mode the
+      Command key is mapped to Super, so a person typing Command+Tab out of
+      habit sends Super+Tab. GNOME already does the right thing with that, so
+      before this the same keystroke worked on one AquariusOS desktop and did
+      nothing on the other.
+
+      NextWindow and PreviousWindow are labwc's own actions for this, and they
+      are what Alt+Tab is bound to by default (labwc-actions(5), labwc 0.20).
+      They show the window switcher while the modifier is held, so holding
+      Super and tapping Tab walks along the list — the behaviour people expect
+      from this key. The Immediate variants skip that overlay and are meant for
+      bindings with no modifier, which is not this.
+    -->
+    <keybind key="W-Tab">
+      <action name="NextWindow" />
+    </keybind>
+
+    <keybind key="W-S-Tab">
+      <action name="PreviousWindow" />
     </keybind>
 
     <!-- Leave the session and go back to the login screen. -->

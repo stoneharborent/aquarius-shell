@@ -14,7 +14,39 @@
 # =============================================================================
 
 # ---------------------------------------------------------------------------
-# 1. Tell systemd the graphical session has begun.
+# 1. Tell systemd and D-Bus that a screen now exists.
+#
+# This has to happen BEFORE the target below is started, because the services
+# that target pulls in read their environment once, as they start.
+#
+# The services that make a desktop work — the portals, the keyring, the tray —
+# are not started by this file. They are started on demand, later, by systemd's
+# user manager and by D-Bus. They do not inherit anything from here; they only
+# know what was pushed into those two managers. And ../aquarius-session could
+# not push WAYLAND_DISPLAY, because at the moment it ran, labwc had not started
+# and there was no Wayland display to name.
+#
+# So this is the pass that fixes that, from the first point in the session where
+# WAYLAND_DISPLAY actually exists. --all sends the whole environment, which also
+# covers XDG_CURRENT_DESKTOP — the variable xdg-desktop-portal reads to decide
+# which backend answers a screen-recording or file-dialog request.
+#
+# Skipping this is a classic cause of "the file dialog does not open and nothing
+# is logged", because a portal that cannot tell which display to talk to fails
+# silently rather than loudly. It is also what left /usr/libexec/aquarius-keys-run
+# in AquariusOS having to work out the desktop name for itself.
+#
+# `systemctl --user import-environment` is the same idea for a machine without
+# dbus-update-activation-environment, which lives in the dbus-tools package.
+# ---------------------------------------------------------------------------
+if command -v dbus-update-activation-environment > /dev/null 2>&1; then
+    dbus-update-activation-environment --systemd --all 2>/dev/null || true
+else
+    systemctl --user import-environment 2>/dev/null || true
+fi
+
+# ---------------------------------------------------------------------------
+# 2. Tell systemd the graphical session has begun.
 #
 # Portals, notification daemons and keyring agents are systemd user services
 # that say "start me with graphical-session.target". labwc ships
@@ -27,7 +59,7 @@
 systemctl --user --no-block start labwc-session.target 2>/dev/null || true
 
 # ---------------------------------------------------------------------------
-# 2. The Aquarius Shell.
+# 3. The Aquarius Shell.
 #
 # WHY THE REDIRECT (2026-09-02). On the first real boot, on niri, the session
 # log held nothing but the compositor's own output — the shell had crashed at

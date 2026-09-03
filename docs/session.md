@@ -444,12 +444,13 @@ Everything except the first line is niri's own; the first line is ours.
 
 ### On labwc
 
-The Aquarius Session's labwc configuration adds two bindings and keeps labwc's
+The Aquarius Session's labwc configuration adds four bindings and keeps labwc's
 own defaults for everything else.
 
 | Keys | What it does |
 |---|---|
 | **Super + Space** | **Open or close the Aquarius search palette** — ours |
+| **Super + Tab / Super + Shift + Tab** | **Next / previous window** — ours |
 | **Super + Shift + E** | **Leave the session** — ours |
 | Super + Return | A terminal |
 | Alt + Tab / Alt + Shift + Tab | Next / previous window |
@@ -458,6 +459,27 @@ own defaults for everything else.
 | Super + D | Show the desktop |
 | Super + ← → ↑ ↓ | Snap the window to half or a quarter of the screen |
 | Alt + Space | Window menu |
+
+### About Super + Tab
+
+Hold **Super** and tap **Tab** to walk forward through your open windows; add
+**Shift** to walk back. Keep Super held down and the switcher stays on screen,
+so you can tap Tab several times to reach the window you want and let go.
+
+**Alt + Tab still works and has not moved.** This is an addition, not a
+replacement.
+
+It is here because of Aquarius Keys, the OS's keyboard-mode feature. In **Mac
+mode**, the Command key is mapped to Super — so somebody typing Command + Tab
+out of habit is really sending Super + Tab. GNOME, the other AquariusOS desktop,
+already treats Super + Tab as "switch windows". labwc puts window switching on
+Alt + Tab only. So before this, the same keystroke did the expected thing on one
+AquariusOS desktop and nothing at all on the other, which is the kind of
+inconsistency people read as a broken computer.
+
+The two lines use labwc's own `NextWindow` and `PreviousWindow` actions — the
+same ones its default Alt + Tab is built from — so this is the standard window
+switcher on a second key, not a second implementation of it.
 
 ### About Super + Space
 
@@ -525,6 +547,46 @@ launcher sets:
 The highest-precedence place it looks is `~/.config/xdg-desktop-portal/` — your
 own config folder, above anything the system ships. That is why the installer
 can put these in place without root, and why they work on a read-only OS.
+
+### Handing the environment to systemd and D-Bus
+
+Setting `XDG_CURRENT_DESKTOP` in the launcher is only half the job, and the
+missing half used to be a real gap.
+
+Portals, the keyring and the tray are **not** started by the session files.
+They are started later, on demand, by systemd's user manager and by D-Bus.
+Those two managers do not see the launcher's environment — they only know what
+was explicitly pushed into them. So a portal could start without knowing which
+desktop it was serving or which Wayland display to talk to, and a portal in that
+state fails *silently*: the file dialog simply never appears and nothing is
+written to any log.
+
+On niri this is handled by its `--session` flag, which pushes the environment
+across itself. labwc has no equivalent, so `session/labwc/autostart` does it
+explicitly, as its first step:
+
+```bash
+dbus-update-activation-environment --systemd --all
+```
+
+It lives in the autostart file rather than in `aquarius-session` for a reason
+that is easy to miss: `WAYLAND_DISPLAY` **does not exist yet** when the launcher
+runs. labwc has not started, so there is no display to name. The autostart file
+is the first point in the session where it exists, which makes it the only place
+this can happen. It runs before `labwc-session.target` is started, because the
+services that target pulls in read their environment once, as they start.
+
+`--all` rather than a list of names, so that `XDG_CURRENT_DESKTOP` — the
+variable the whole portal-config lookup above depends on — travels too. On a
+machine without `dbus-update-activation-environment` (it is in the `dbus-tools`
+package) the file falls back to `systemctl --user import-environment`.
+
+> AquariusOS ships its **own** copies of the session files, adapted to system
+> paths — the image never installs this repo's `session/` folder. Its copy of
+> the autostart file already did the same thing, which is why
+> `/usr/libexec/aquarius-keys-run` in the image works out the desktop name for
+> itself rather than failing. This change closes the gap for the version in this
+> repo, which is the one used when running the session from a clone.
 
 ### Why niri and labwc cannot share one file
 

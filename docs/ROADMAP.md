@@ -158,6 +158,17 @@ inside it works. Each component's doc still ends with its own unproven list.
   `-gtk`+`-wlr` portal mix is right for labwc but wrong for niri, which needs
   the GNOME portal for capture — per-compositor portals.conf, selected by
   `XDG_CURRENT_DESKTOP`. Beginner walkthrough: `docs/session.md`.
+  **Two fixes from the Aquarius Keys work, 2026-09-03** (found while building the
+  OS's keyboard-mode feature, both in `session/labwc/`):
+  *(1)* labwc switched windows on Alt + Tab only, so in Aquarius Keys' **Mac
+  mode** — where Command is mapped to Super — Command + Tab did nothing here
+  while GNOME handled it fine. `W-Tab`/`W-S-Tab` now bind labwc's own
+  `NextWindow`/`PreviousWindow`; Alt + Tab is unchanged.
+  *(2)* the autostart file now runs `dbus-update-activation-environment
+  --systemd --all` before starting `labwc-session.target`, so services started
+  on demand inherit `WAYLAND_DISPLAY` and `XDG_CURRENT_DESKTOP` instead of each
+  having to work the desktop out for itself. niri gets this from `--session`;
+  labwc had no equivalent. Both written up in `docs/session.md`.
 - [x] **Theme follows the system** — **PROVEN 2026-09-01**: the bench machine is
   set to dark and the shell came up Midnight. `Theme.dark` is now a binding on the
   appearance portal via `services/SystemAppearance.qml` (`gdbus` under
