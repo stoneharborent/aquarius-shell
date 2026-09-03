@@ -224,6 +224,17 @@ case "${AQ_COMPOSITOR}" in
             # environment, runs the command, and tears the bus down after. The
             # address is also written to a file so another terminal can send
             # notifications into this session — see the note above.
+            #
+            # The single quotes below are deliberate, and shellcheck is told so.
+            # It sees `$DBUS_SESSION_BUS_ADDRESS` and `$1` inside single quotes
+            # and assumes we meant them to expand here. We did not. This script
+            # does not know the bus address — `dbus-run-session` invents it and
+            # only the inner `sh` ever sees it, so that name has to survive
+            # being written down and reach the inner shell unexpanded. `$1` is
+            # the inner shell's own first argument, which is the folder passed
+            # to it on the last line. Double quotes would expand both here, in
+            # the wrong shell, and hand the inner one two empty strings.
+            # shellcheck disable=SC2016
             exec dbus-run-session -- sh -c '
                 printf %s "$DBUS_SESSION_BUS_ADDRESS" > /tmp/aquarius-harness-bus
                 exec niri -c "$1/harness/niri-nested.kdl" -- qs -p "$1"
