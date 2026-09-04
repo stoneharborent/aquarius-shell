@@ -44,10 +44,28 @@
 // WHERE THE SIZES COME FROM
 //   The V2 design system — os-image/branding/design-system/, specifically the
 //   "AquariusOS Desktop Shell.html" artboard and tokens/{spacing,typography,
-//   effects}.css. Those artboards are drawn at 1280x800, and the numbers below
-//   are that drawing's numbers. Colour is the one thing NOT taken from V2: V2's
-//   palette is the old dark "Flow State" identity, and colour now comes from
-//   Ice. Geometry and type carry over unchanged.
+//   effects}.css. Those artboards are drawn at 1280x800. Colour is the one
+//   thing NOT taken from V2: V2's palette is the old dark "Flow State"
+//   identity, and colour now comes from Ice.
+//
+//   THE NUMBERS BELOW ARE NO LONGER THE ARTBOARD'S NUMBERS — READ THIS.
+//   On 2026-09-03 Royce ran the shell on a 55" 4K Samsung Odyssey Ark, with
+//   the session output scale at 1.25 (the value GNOME had been using on that
+//   machine), and made the call:
+//
+//       "1.25 reads right for the whole shell, except the dock,
+//        which should be the size it has at 1.5."
+//
+//   So the design moved to meet him. Every size token below is now
+//   **1.25x the original 2026-08 artboard number, and the dock's tokens are
+//   1.5x** (approved by Royce on a 55" 4K at output scale 1.25, 2026-09-03).
+//   Each section's comment still quotes the artboard's CSS as the paper trail,
+//   with the shipped number beside it, so nobody has to guess which is which.
+//
+//   That means AQ_UI_SCALE is back to what a knob should be: 1.0 is "the
+//   design as designed", not "the design Royce already told us was too small".
+//   Every number was produced by rounding the artboard number the same way
+//   px() would have — so what ships at 1.0 is pixel-for-pixel what he approved.
 // =============================================================================
 pragma Singleton
 
@@ -131,6 +149,19 @@ Singleton {
     // =========================================================================
     // THE SIZE KNOB — one number that makes the whole shell bigger or smaller
     // =========================================================================
+    // WHAT 1.0 MEANS NOW — the question below has been ANSWERED
+    //   This knob was built on 2026-09-03 so Royce could try 1.15, 1.25 and 1.5
+    //   on the real machine and say which was right. He did, the same day: 1.25
+    //   for the shell, 1.5 for the dock. Those numbers are now baked into the
+    //   tokens further down, so **1.0 is the answer, not the old too-small
+    //   design.** The knob survives because the question comes back — a
+    //   different monitor, a different chair, a guest who wants everything
+    //   bigger — and because a shell that can only be one size is a shell that
+    //   has to be edited and rebuilt to be adjusted.
+    //
+    //   Read the rest of this block as the history it is. Everything it says
+    //   about how the knob WORKS is still exactly true.
+    //
     // WHY THIS EXISTS
     //   On the bench, 2026-09-03, the shell drew correctly and read TOO SMALL.
     //   Two separate things can cause that and they are worth keeping apart:
@@ -141,9 +172,11 @@ Singleton {
     //        and it is fixed in the session, not here (see the AquariusOS
     //        os-image repo, `aquarius-display-scale`).
     //
-    //     2. The DESIGN's OWN BASE SIZES. Even at a correct output scale, a
-    //        30px bar and a 12px caption may simply be smaller than Royce
-    //        wants on a big desktop monitor. That is a design judgement, and
+    //     2. The DESIGN's OWN BASE SIZES. Even at a correct output scale, the
+    //        30px bar and 12px caption the artboard drew may simply be smaller
+    //        than Royce wants on a big desktop monitor. (They were: that is why
+    //        the bar is 38 and the caption 15 today.) That is a design
+    //        judgement, and
     //        it is HIS to make — which means he has to be able to try 1.15,
     //        1.25 and 1.5 on the real machine in seconds, without an edit, a
     //        rebuild, or a person on a Mac guessing for him.
@@ -216,52 +249,60 @@ Singleton {
     // =========================================================================
     // SPACING — the step ladder every gap in the shell is built from
     // =========================================================================
-    // Straight out of tokens/spacing.css. If a gap in a design is not on this
-    // ladder, the design is wrong or the measurement is wrong — check before
-    // inventing a number.
-    readonly property int sp1: root.px(4)
-    readonly property int sp2: root.px(8)
-    readonly property int sp3: root.px(12)
-    readonly property int sp4: root.px(16)
-    readonly property int sp5: root.px(24)
-    readonly property int sp6: root.px(32)
-    readonly property int sp7: root.px(48)
-    readonly property int sp8: root.px(64)
+    // tokens/spacing.css drew this ladder as 4/8/12/16/24/32/48/64; the shell
+    // ships it at 1.25x (5/10/15/20/30/40/60/80). If a gap in a design is not
+    // on this ladder, the design is wrong or the measurement is wrong — check
+    // before inventing a number.
+    readonly property int sp1: root.px(5)
+    readonly property int sp2: root.px(10)
+    readonly property int sp3: root.px(15)
+    readonly property int sp4: root.px(20)
+    readonly property int sp5: root.px(30)
+    readonly property int sp6: root.px(40)
+    readonly property int sp7: root.px(60)
+    readonly property int sp8: root.px(80)
 
     // =========================================================================
     // CORNERS
     // =========================================================================
-    readonly property int radiusSm: root.px(7)    // inputs, toggles
-    readonly property int radiusMd: root.px(9)    // buttons
-    readonly property int radiusLg: root.px(12)   // cards
-    readonly property int radiusXl: root.px(16)   // panels, windows
+    // Artboard 7 / 9 / 12 / 16, shipped at 1.25x.
+    readonly property int radiusSm: root.px(9)    // inputs, toggles
+    readonly property int radiusMd: root.px(11)   // buttons
+    readonly property int radiusLg: root.px(15)   // cards
+    readonly property int radiusXl: root.px(20)   // panels, windows
 
     // =========================================================================
     // CONTROLS
     // =========================================================================
-    readonly property int controlHeight: root.px(36)
-    readonly property int controlHeightSm: root.px(28)
+    // Artboard 36 / 28, shipped at 1.25x.
+    readonly property int controlHeight: root.px(45)
+    readonly property int controlHeightSm: root.px(35)
 
     // =========================================================================
-    // THE TOP BAR — measured off the V2 artboard
+    // THE TOP BAR — measured off the V2 artboard, then grown 1.25x
     // =========================================================================
     // <header style="height:30px; padding:0 10px; gap:2px;
     //                border-bottom:1px solid ...">
     //   .bar-item { height:22px; padding:0 8px; gap:6px; border-radius:6px }
-    readonly property int barHeight: root.px(30)          // the whole bar
-    readonly property int barPaddingH: root.px(10)        // space before the first / after the last item
-    readonly property int barItemSpacing: root.px(2)      // space BETWEEN bar items
-    readonly property int barItemHeight: root.px(22)      // the hover pill's height
-    readonly property int barItemPaddingH: root.px(8)     // space inside a bar item, left and right
-    readonly property int barItemGap: root.px(6)          // space between two things inside one item
-    readonly property int barItemRadius: root.px(6)       // the hover pill's corners
-    readonly property int barLogoSize: root.px(14)        // the Aquarius mark, drawn 14x14
+    //
+    // Those are the artboard's numbers. The bar SHIPS at 1.25x of them — 30
+    // became 38, 22 became 28, and so on — because a 30px bar disappeared on a
+    // 55" monitor (Royce, 2026-09-03). `hairline` is the one exception: a
+    // hairline is one pixel by definition, and 1.25 rounds back to 1 anyway.
+    readonly property int barHeight: root.px(38)          // the whole bar
+    readonly property int barPaddingH: root.px(13)        // space before the first / after the last item
+    readonly property int barItemSpacing: root.px(3)      // space BETWEEN bar items
+    readonly property int barItemHeight: root.px(28)      // the hover pill's height
+    readonly property int barItemPaddingH: root.px(10)     // space inside a bar item, left and right
+    readonly property int barItemGap: root.px(8)          // space between two things inside one item
+    readonly property int barItemRadius: root.px(8)       // the hover pill's corners
+    readonly property int barLogoSize: root.px(18)        // the Aquarius mark, drawn 14x14
     readonly property int hairline: root.px(1)            // every 1px rule in the shell
-    readonly property int barGlyphSize: root.px(15)       // a status glyph (Wi-Fi, speaker) in the bar
-    readonly property int barTrayIconSize: root.px(16)    // a system tray application's own icon
+    readonly property int barGlyphSize: root.px(19)       // a status glyph (Wi-Fi, speaker) in the bar
+    readonly property int barTrayIconSize: root.px(20)    // a system tray application's own icon
 
     // =========================================================================
-    // QUICK SETTINGS — measured off the V2 artboard
+    // QUICK SETTINGS — measured off the V2 artboard, then grown 1.25x
     // =========================================================================
     // Source: os-image/branding/design-system/"AquariusOS Desktop Shell.html",
     // the `#ovTray` block and the `.qs-toggle` / `.slider` rules beside it:
@@ -275,44 +316,76 @@ Singleton {
     //   .slider { height:6px }  .slider u { width:16px; height:16px }
     //   footer  { margin-top:14px; padding-top:12px; gap:8px }
     //
-    // The panel's corner uses radiusLg (12), which is what the design's
+    // The panel's corner uses radiusLg, which is what the design's
     // var(--radius-lg) resolves to — NOT radiusXl, even though the comment on
     // radiusXl says "panels". The design is the authority here.
-    readonly property int qsWidth: root.px(330)
-    readonly property int qsPadding: root.px(16)
-    readonly property int qsTileGap: root.px(10)          // between tiles, both directions
-    readonly property int qsTileHeight: root.px(52)       // 10 + 32 chip + 10
-    readonly property int qsTilePaddingH: root.px(12)
-    readonly property int qsTilePaddingV: root.px(10)
-    readonly property int qsTileInnerGap: root.px(10)     // chip -> text
-    readonly property int qsChipSize: root.px(32)
-    readonly property int qsChipGlyphSize: root.px(15)
-    readonly property int qsSlidersTop: root.px(16)       // grid -> first slider
-    readonly property int qsSliderGap: root.px(14)        // slider -> slider
-    readonly property int qsSliderLabelGap: root.px(8)    // label row -> track
-    readonly property int qsTrackHeight: root.px(6)
-    readonly property int qsHandleSize: root.px(16)
-    readonly property int qsFooterTop: root.px(14)        // last slider -> the hairline
-    readonly property int qsFooterPaddingTop: root.px(12) // the hairline -> the battery line
-    readonly property int qsFooterGap: root.px(8)
-    readonly property int qsBatteryGlyphWidth: root.px(22)
-    readonly property int qsBatteryGlyphHeight: root.px(11)
+    //
+    // Every number below is 1.25x the CSS above, for the reason given at the
+    // top of the file. One of them is 1.25x-and-a-pixel: a tile is padding +
+    // chip + padding, and 13 + 40 + 13 is 66 where 52 x 1.25 rounds to 65. The
+    // arithmetic wins — a tile that is one pixel shorter than the thing inside
+    // it is a clipped chip, which is visible, and one pixel of extra height is
+    // not.
+    readonly property int qsWidth: root.px(413)
+    readonly property int qsPadding: root.px(20)
+    readonly property int qsTileGap: root.px(13)          // between tiles, both directions
+    readonly property int qsTileHeight: root.px(66)       // 13 + 40 chip + 13
+    readonly property int qsTilePaddingH: root.px(15)
+    readonly property int qsTilePaddingV: root.px(13)
+    readonly property int qsTileInnerGap: root.px(13)     // chip -> text
+    readonly property int qsChipSize: root.px(40)
+    readonly property int qsChipGlyphSize: root.px(19)
+    readonly property int qsSlidersTop: root.px(20)       // grid -> first slider
+    readonly property int qsSliderGap: root.px(18)        // slider -> slider
+    readonly property int qsSliderLabelGap: root.px(10)   // label row -> track
+    readonly property int qsTrackHeight: root.px(8)
+    readonly property int qsHandleSize: root.px(20)
+    readonly property int qsFooterTop: root.px(18)        // last slider -> the hairline
+    readonly property int qsFooterPaddingTop: root.px(15) // the hairline -> the battery line
+    readonly property int qsFooterGap: root.px(10)
+    readonly property int qsBatteryGlyphWidth: root.px(28)
+    readonly property int qsBatteryGlyphHeight: root.px(14)
 
     // Where the panel sits once it is open: the design draws it 38px from the
-    // top of a 30px bar, i.e. 8px of air under the bar.
+    // top of a 30px bar, i.e. 8px of air under the bar — 10px here, at 1.25x.
+    // The air is a token and the 38 is not, which is exactly why the bar could
+    // grow to 38 of its own without anybody having to notice this line.
     //
     // The design's other number — 12px in from the right edge of the screen —
     // is NOT a token, because it is not set anywhere. The panel hangs off the
-    // right-hand end of the bar's own contents, so barPaddingH (10) plus the
-    // status item's padding already puts it there. Writing 12 as well would
-    // inset it twice.
-    readonly property int qsPopupGap: root.px(8)
+    // right-hand end of the bar's own contents, so barPaddingH plus the status
+    // item's padding already puts it there. Writing 12 as well would inset it
+    // twice.
+    readonly property int qsPopupGap: root.px(10)
 
     // =========================================================================
-    // THE DOCK — measured off the V2 artboard
+    // THE DOCK — measured off the V2 artboard, then grown 1.5x
     // =========================================================================
+    // THE DOCK IS DELIBERATELY BIGGER THAN THE REST OF THE SHELL. Everywhere
+    // else in this file the artboard number is multiplied by 1.25; here it is
+    // multiplied by 1.5. That is not a typo and it is not drift — it is Royce's
+    // call on the bench, 2026-09-03, on a 55" 4K at output scale 1.25:
+    //
+    //     "1.25 reads right for the whole shell, except the dock,
+    //      which should be the size it has at 1.5."
+    //
+    // There is a reason it lands differently, and it is worth knowing before
+    // anybody "fixes" it. The bar and the panels are read — they hold text, and
+    // text has its own legible size. The dock is AIMED AT: it is a row of click
+    // targets you hit with a pointer from across a very large desk, and a
+    // pointer target wants to be bigger than the type beside it. Docks on every
+    // other desktop are outsized relative to their panels for the same reason.
+    //
+    // The whole block moves together — tile, gap, padding, slab corner, screen
+    // margin, dot, lift, glyphs. Growing only the tile would give a 66px icon
+    // in a slab still built for a 44px one, and the dock would look padded
+    // wrong rather than bigger. tests/test-shell.sh section 31 guards the
+    // dock-to-bar ratio so a later "let us shrink the bar a little" cannot
+    // quietly shrink this too.
+    //
     // From "AquariusOS Desktop Shell.html", the `.dock-ico` rule and the dock
-    // container's inline style:
+    // container's inline style — the ARTBOARD's numbers, i.e. what each token
+    // below is 1.5x of:
     //
     //   container  left:50%; bottom:10px; gap:9px; padding:9px 13px;
     //              border-radius:16px; border:1px solid ...
@@ -324,19 +397,20 @@ Singleton {
     //   the + tile font-size:18px
     //
     // The dot's "bottom:-7px" is CSS for "the dot's BOTTOM edge sits 7px below
-    // the tile's bottom edge". With a 4px dot that leaves a 3px gap between the
-    // tile and the dot, which is what dockDotGap is. 3 + 4 = 7, and the dock's
-    // 9px bottom padding has room for it with 2px to spare.
-    readonly property int dockTileSize: root.px(44)        // one app tile, square
-    readonly property int dockTileRadius: root.px(11)      // that tile's corners
-    readonly property int dockTileInset: root.px(6)        // icon inset inside the tile*
-    readonly property int dockGap: root.px(9)              // space BETWEEN tiles
-    readonly property int dockPaddingH: root.px(13)        // space inside the slab, sides
-    readonly property int dockPaddingV: root.px(9)         // space inside the slab, top/bottom
-    readonly property int dockRadius: root.px(16)          // the slab's corners
-    readonly property int dockScreenMargin: root.px(10)    // slab's gap to the screen edge
-    readonly property int dockDotSize: root.px(4)          // the running-app dot
-    readonly property int dockDotGap: root.px(3)           // tile bottom -> dot top
+    // the tile's bottom edge". On the artboard, a 4px dot left a 3px gap
+    // between tile and dot — that gap is dockDotGap — and 3 + 4 = 7 fitted
+    // inside the slab's 9px bottom padding with 2px to spare. At 1.5x the same
+    // sum is 5 + 6 = 11 inside 14, so it still fits, with 3px to spare.
+    readonly property int dockTileSize: root.px(66)        // one app tile, square
+    readonly property int dockTileRadius: root.px(17)      // that tile's corners
+    readonly property int dockTileInset: root.px(9)        // icon inset inside the tile*
+    readonly property int dockGap: root.px(14)             // space BETWEEN tiles
+    readonly property int dockPaddingH: root.px(20)        // space inside the slab, sides
+    readonly property int dockPaddingV: root.px(14)        // space inside the slab, top/bottom
+    readonly property int dockRadius: root.px(24)          // the slab's corners
+    readonly property int dockScreenMargin: root.px(15)    // slab's gap to the screen edge
+    readonly property int dockDotSize: root.px(6)          // the running-app dot
+    readonly property int dockDotGap: root.px(5)           // tile bottom -> dot top
 
     // How solid that dot is. The design draws one state; these two come from
     // the Plasma theme's tasks.svg, which used 0.55 for "running" and 0.8 for
@@ -345,19 +419,21 @@ Singleton {
     readonly property real dockDotOpacity: 0.55
     readonly property real dockDotOpacityActive: 0.8
 
-    readonly property int dockSeparatorHeight: root.px(28) // the rule before the + tile
-    readonly property int dockLift: root.px(4)             // how far a hovered tile rises
+    readonly property int dockSeparatorHeight: root.px(42) // the rule before the + tile
+    readonly property int dockLift: root.px(6)             // how far a hovered tile rises
     readonly property real dockHoverScale: 1.08   // and how much it grows
-    readonly property int dockGlyphSize: root.px(13)       // the two-letter icon fallback
-    readonly property int dockAddGlyphSize: root.px(18)    // the "+" on the add tile
+    readonly property int dockGlyphSize: root.px(20)       // the two-letter icon fallback
+    readonly property int dockAddGlyphSize: root.px(27)    // the "+" on the add tile
 
     // * The design draws two-letter placeholders rather than real icons, so it
-    //   has no inset to measure. 6 is the Plasma theme's 4-in-32 tile inset
-    //   scaled to 44 (round(44 * 4 / 32) = 6) — the number the KDE dock's
-    //   artwork already used, kept so the two docks line up while both exist.
+    //   has no inset to measure. The artboard's inset was 6: the Plasma theme's
+    //   4-in-32 tile inset scaled to a 44px tile (round(44 * 4 / 32) = 6), the
+    //   number the KDE dock's artwork already used, kept so the two docks line
+    //   up while both exist. 9 is that same 6 at 1.5x, and 9/66 is exactly
+    //   6/44 — the icon sits in the tile the way it always did.
 
     // =========================================================================
-    // THE FLOW SEARCH PALETTE — measured off the V2 artboard
+    // THE FLOW SEARCH PALETTE — measured off the V2 artboard, then grown 1.25x
     // =========================================================================
     // Source: "AquariusOS Shell Search.html", which is an iframe onto
     // "AquariusOS Desktop Shell.html#search". The numbers below are that
@@ -372,35 +448,37 @@ Singleton {
     //   footer  { padding:9px 14px; border-top:1px }
     //
     // Same reasoning as the top bar above: these are artboard numbers rather
-    // than ladder numbers, and they live here so no component types them.
-    readonly property int searchWidth: root.px(560)           // the palette's width
-    readonly property int searchTop: root.px(170)             // its distance from the top of the screen
-    readonly property int searchPanelPadding: root.px(8)      // space inside the panel's edge
-    readonly property int searchIconSize: root.px(17)         // the magnifier at the left of the field
+    // than ladder numbers, and they live here so no component types them. And
+    // like the top bar, each token is 1.25x the CSS quoted above — the palette
+    // is 700 wide, not 560.
+    readonly property int searchWidth: root.px(700)           // the palette's width
+    readonly property int searchTop: root.px(213)             // its distance from the top of the screen
+    readonly property int searchPanelPadding: root.px(10)      // space inside the panel's edge
+    readonly property int searchIconSize: root.px(21)         // the magnifier at the left of the field
 
-    readonly property int searchFieldPaddingH: root.px(14)
-    readonly property int searchFieldPaddingV: root.px(12)
-    readonly property int searchFieldGap: root.px(12)
+    readonly property int searchFieldPaddingH: root.px(18)
+    readonly property int searchFieldPaddingV: root.px(15)
+    readonly property int searchFieldGap: root.px(15)
 
-    readonly property int searchListPaddingH: root.px(2)
-    readonly property int searchListPaddingV: root.px(6)
+    readonly property int searchListPaddingH: root.px(3)
+    readonly property int searchListPaddingV: root.px(8)
 
-    readonly property int searchRowPaddingH: root.px(14)
-    readonly property int searchRowPaddingV: root.px(10)
-    readonly property int searchRowGap: root.px(12)
-    readonly property int searchRowRadius: root.px(10)
-    readonly property int searchRowIconSize: root.px(30)
-    readonly property int searchRowIconRadius: root.px(8)
+    readonly property int searchRowPaddingH: root.px(18)
+    readonly property int searchRowPaddingV: root.px(13)
+    readonly property int searchRowGap: root.px(15)
+    readonly property int searchRowRadius: root.px(13)
+    readonly property int searchRowIconSize: root.px(38)
+    readonly property int searchRowIconRadius: root.px(10)
 
-    readonly property int searchHintPaddingH: root.px(6)
-    readonly property int searchHintPaddingV: root.px(2)
-    readonly property int searchHintRadius: root.px(5)
+    readonly property int searchHintPaddingH: root.px(8)
+    readonly property int searchHintPaddingV: root.px(3)
+    readonly property int searchHintRadius: root.px(6)
 
-    readonly property int searchFooterPaddingH: root.px(14)
-    readonly property int searchFooterPaddingV: root.px(9)
+    readonly property int searchFooterPaddingH: root.px(18)
+    readonly property int searchFooterPaddingV: root.px(11)
 
     // =========================================================================
-    // NOTIFICATIONS — measured off the V2 artboard
+    // NOTIFICATIONS — measured off the V2 artboard, then grown 1.25x
     // =========================================================================
     // From "AquariusOS Desktop Shell.html", the block with id="ovNotif" (the
     // same panel published on its own as "AquariusOS Shell Notifications.html"):
@@ -415,21 +493,27 @@ Singleton {
     // The panel's 16px padding is `sp4`, the 12px row padding and 12px right
     // offset are `sp3`, the 8px gap between rows is `sp2`, and both 12px
     // corner radii are `radiusLg` — those are used directly, not restated.
+    // (Those ladder steps are themselves 1.25x now, so the panel's padding
+    // draws at 20 and its corner at 15. Naming the step rather than the number
+    // is what let the whole panel grow without one edit in this section.)
     //
     // The design's `top:38px` is the 30px bar plus 8px of air, so the popup is
     // positioned with a `sp2` top margin against a window that already starts
     // below the bar. There is no "38" anywhere in the code, and there should
-    // not be: if the bar's height ever changes, the gap should stay 8.
-    readonly property int notifPanelWidth: root.px(350)      // the panel AND the toasts
-    readonly property int notifChipSize: root.px(34)         // the rounded icon chip
-    readonly property int notifIconSize: root.px(15)         // the glyph inside the chip
-    readonly property int notifGroupIconSize: root.px(16)    // the app icon on a group header
+    // not be: the bar's height DID change — 30 to 38 — and this gap correctly
+    // did not have to.
+    readonly property int notifPanelWidth: root.px(438)      // the panel AND the toasts
+    readonly property int notifChipSize: root.px(43)         // the rounded icon chip
+    readonly property int notifIconSize: root.px(19)         // the glyph inside the chip
+    readonly property int notifGroupIconSize: root.px(20)    // the app icon on a group header
 
     // How tall the scrolling list of notifications may get before it scrolls
     // instead of growing. Not a design number — the artboard draws three rows
-    // and stops. 420 is twenty rows' worth of a short list, which keeps the
-    // panel comfortably inside a 768px-tall laptop screen with the footer.
-    readonly property int notifMaxListHeight: root.px(420)
+    // and stops. 420 was twenty rows' worth of a short list, which kept the
+    // panel comfortably inside a 768px-tall laptop screen with the footer;
+    // 525 is that at 1.25x, and the rows it holds grew by the same 1.25x, so
+    // it is still twenty rows and still fits the same screen.
+    readonly property int notifMaxListHeight: root.px(525)
 
     // =========================================================================
     // TYPE
@@ -465,22 +549,33 @@ Singleton {
     readonly property string fontBody: root.pickFont("Inter", root.fontBodyFallback)
     readonly property string fontMono: root.pickFont("JetBrains Mono", root.fontMonoFallback)
 
-    // The scale, from tokens/typography.css. Sizes are in points-as-pixels the
-    // same way the design draws them; Qt's `font.pixelSize` is the matching
-    // property, NOT `font.pointSize` (which would rescale with system DPI and
-    // stop matching the artboard).
-    readonly property int fsHero: root.px(64)
-    readonly property int fsDisplay: root.px(48)
-    readonly property int fsTitle: root.px(34)
-    readonly property int fsHeading: root.px(24)
-    readonly property int fsSubhead: root.px(18)
-    readonly property int fsBody: root.px(15)
-    readonly property int fsSmall: root.px(14)      // design says 13.5px; Qt wants a whole number
-    readonly property int fsCaption: root.px(12)    // <- the top bar's size, and a QS tile's title
-    readonly property int fsMicro: root.px(11)      // <- a QS tile's subtitle (design 10.5px) and
-                                           //    a slider's label (design 11px)
-    readonly property int fsMono: root.px(13)       // design says 12.5px; same rounding
-    readonly property int fsMonoSm: root.px(11)     // design says 10.5px; the keyboard hints
+    // The scale, from tokens/typography.css, at 1.25x like everything else that
+    // is not the dock. Sizes are in points-as-pixels the same way the design
+    // draws them; Qt's `font.pixelSize` is the matching property, NOT
+    // `font.pointSize` (which would rescale with system DPI and stop matching
+    // the artboard).
+    //
+    // The "design says" notes below are the ORIGINAL token-sheet sizes, kept as
+    // the paper trail. The shipped number is on the left. So the top bar's
+    // caption is a 12px design step drawn at 15px, and that is on purpose.
+    //
+    // Type is where growing the design is most obviously right and most easily
+    // second-guessed: a 12px caption is a perfectly good caption on a laptop
+    // and unreadable across a 55" desk. If someone ever wants the old sizes
+    // back, that is AQ_UI_SCALE=0.8, not an edit here.
+    //                                   design step ->  shipped
+    readonly property int fsHero: root.px(80)       // 64
+    readonly property int fsDisplay: root.px(60)    // 48
+    readonly property int fsTitle: root.px(43)      // 34
+    readonly property int fsHeading: root.px(30)    // 24
+    readonly property int fsSubhead: root.px(23)    // 18
+    readonly property int fsBody: root.px(19)       // 15
+    readonly property int fsSmall: root.px(18)      // 14 (design 13.5px; Qt wants a whole number)
+    readonly property int fsCaption: root.px(15)    // 12 <- the top bar's size, and a QS tile's title
+    readonly property int fsMicro: root.px(14)      // 11 <- a QS tile's subtitle (design 10.5px) and
+                                           //       a slider's label (design 11px)
+    readonly property int fsMono: root.px(16)       // 13 (design 12.5px; same rounding)
+    readonly property int fsMonoSm: root.px(14)     // 11 (design 10.5px) — the keyboard hints
                                            // and the Flow Search footnote. There is
                                            // no body step this small on purpose —
                                            // it is only ever used for mono asides.
@@ -493,8 +588,9 @@ Singleton {
     // timestamps (10px mono). Rather than let components each invent their own
     // 11, the two steps are named ONCE above — fsMicro and fsMonoSm. Three P2
     // tracks arrived at them independently with three different roundings;
-    // they unified on 11 at the merge. If the design system ever publishes its
-    // own micro steps, re-point these rather than keeping a second opinion.
+    // they unified on 11 at the merge, and 11 is what the 14 above is 1.25x of.
+    // If the design system ever publishes its own micro steps, re-point these
+    // rather than keeping a second opinion.
 
     // =========================================================================
     // MOTION

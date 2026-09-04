@@ -135,7 +135,8 @@ stored and not just the switch.
 **The design does not draw a toast.** The V2 artboards have the panel and the
 bar, and nothing else. So this is a decision, not a port:
 
-Toasts appear in the **top-right corner, 350px wide, 8px under the bar, 12px in
+Toasts appear in the **top-right corner, 350px wide on the artboard (438px as
+shipped — the design grew 1.25x on 2026-09-03), 8px under the bar, 12px in
 from the edge** — exactly the panel's geometry. A notification therefore appears
 in the same place it will later be found, and opening the panel over it reads as
 the same object growing rather than a second unrelated surface.
@@ -187,12 +188,18 @@ notifications going missing with nowhere to look for why.
 Measured off `os-image/branding/design-system/AquariusOS Desktop Shell.html`, the
 block with `id="ovNotif"`.
 
+**"exact" below means the token matches the design's number, not that it draws
+at it.** Since 2026-09-03 every size token ships at 1.25x — the design read too
+small on a 55" 4K — so `notifPanelWidth` is an exact match for the design's 350
+and draws 438. The mapping is what this table checks; the multiplier is applied
+to all of it evenly and is documented in `theme/Theme.qml`.
+
 | Design | Built | Note |
 |---|---|---|
 | Panel `width:350px` | `Theme.notifPanelWidth` | exact |
 | Panel `padding:16px` | `Theme.sp4` | exact |
 | Panel `border-radius: --radius-lg` | `Theme.radiusLg` (12) | exact |
-| Panel `right:12px; top:38px` | `sp3` right, `sp2` top, on a window that starts below the bar | 30 + 8 = 38. There is no `38` in the code, deliberately. |
+| Panel `right:12px; top:38px` | `sp3` right, `sp2` top, on a window that starts below the bar | 30 + 8 = 38. There is no `38` in the code, deliberately — which is why the bar growing to 38px of its own needed no change here. |
 | Row `padding:12px`, `gap:12px`, `radius:12px` | `sp3`, `sp3`, `radiusLg` | exact |
 | Gap between rows `8px` | `sp2` | exact |
 | Icon chip `34x34`, `radius:9px` | `notifChipSize`, `radiusMd` | exact |
@@ -292,9 +299,11 @@ That is real. It is not the same as working. Specifically unproven:
 8. **`Accessible.AlertMessage`** as a role for a toast, and the `Accessible.*`
    attached properties generally. None of it has been through a screen reader.
 
-9. **Every visual measurement.** 350px, a 34px chip and 11px body text are
-   artboard numbers. Whether they are right on a real screen is a P1-gate-shaped
-   question that only a bench run answers.
+9. **Every visual measurement.** 350px, a 34px chip and 11px body text were the
+   artboard numbers; they ship at 1.25x (438 / 43 / 14) since 2026-09-03,
+   because the artboard read too small on a 55" 4K. Whether the *proportions*
+   are right on a real screen is still a P1-gate-shaped question that only a
+   bench run answers.
 
 ### Known rough edges (deliberate, not bugs to find later)
 

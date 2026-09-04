@@ -60,7 +60,9 @@ Practically, that means standing the Aquarius bar next to the shipped one and
 answering honestly. Sub-questions worth writing down when it is judged:
 
 - Does the light bar read cleanly against real wallpapers, or does it wash out?
-- Is 30px right on a real screen, or is that an artboard number?
+- ~~Is 30px right on a real screen, or is that an artboard number?~~ Answered
+  2026-09-03: it was an artboard number, and the bar is 38 now. See "the base
+  sizes read small" below.
 - Does the active-app name change fast enough to feel connected to the window?
 - Does the bar survive plugging a monitor in and out?
 
@@ -191,11 +193,11 @@ inside it works. Each component's doc still ends with its own unproven list.
 **Gate (verbatim from the plan):** *OBS records, Steam desktop works, a full
 workday survives on the bench.*
 
-### Open design question — the base sizes read small on a real monitor
+### Settled — the base sizes read small on a real monitor (2026-09-03)
 
-**Raised by Royce on the bench, 2026-09-03, and it is his call to make, not
-ours.** The shell ran on the 55" 4K Odyssey Ark and the whole design read too
-small: *"really small icons… will need to size everything up."*
+**Raised and answered by Royce on the bench the same day, 2026-09-03.** The
+shell ran on the 55" 4K Odyssey Ark and the whole design read too small:
+*"really small icons… will need to size everything up."*
 
 Two separate things were behind that, and the first is now fixed:
 
@@ -219,16 +221,42 @@ AQ_UI_SCALE=1.25 qs -p .          # try it here
 aq display ui 1.25                # set it on AquariusOS, then log back in
 ```
 
-**This is a way of ASKING the question, not an answer to it.** The design's own
-defaults are untouched and stay untouched until Royce has looked at 1.15, 1.25
-and 1.5 on the bench and said which one is right. When he does, the next job is
-a design pass that moves the base numbers themselves — the token values in
-`Theme.qml` and the artboards behind them — rather than leaving everybody on a
-multiplier forever. A multiplier is a dial for deciding; a token sheet is the
-decision.
+That knob was a way of ASKING the question, not an answer to it. Royce answered
+it the same day, on the Ark, with the session at output scale 1.25:
 
-`tests/test-shell.sh` section 30 keeps the knob total: every numeric size token
-in `Theme.qml` is written `root.px(N)`, and a bare number fails the build.
+> **1.25 reads right for the whole shell, except the dock, which should be the
+> size it has at 1.5.**
+
+**So the tokens moved, and the knob went back to 1.0.** Every size token in
+`theme/Theme.qml` is now 1.25x the original 2026-08 artboard number, and the
+whole `THE DOCK` block is 1.5x. The rounding is the same rounding `px()` would
+have done, so what ships at 1.0 is pixel-for-pixel what he approved on the
+bench. `AQ_UI_SCALE` still works and still defaults to 1.0 — it now means what a
+knob should mean, "bigger or smaller than the design", rather than "the design,
+plus the correction we already know it needs".
+
+| | artboard (2026-08) | ships (2026-09-03) |
+|---|---|---|
+| bar height | 30 | **38** |
+| dock tile | 44 | **66** |
+| body text | 15 | **19** |
+| caption (the bar's text) | 12 | **15** |
+| spacing unit (`sp1`) | 4 | **5** |
+
+The dock being out of step is the point, not drift: the bar and the panels are
+*read*, and text has its own legible size; the dock is *aimed at*, and a pointer
+target across a big desk wants to be bigger than the type beside it.
+
+Two checks keep it honest. `tests/test-shell.sh` section 30 keeps the knob
+total — every numeric size token in `Theme.qml` is written `root.px(N)`, and a
+bare number fails the build. Section 31 keeps the dock's relationship to the bar
+inside a band, so a later reasonable-sounding "the bar is a touch tall" cannot
+quietly shrink the dock along with it.
+
+**Still to see on the bench:** the shell has never actually drawn inside the
+real session (see the P2 entry above), so these sizes have been judged through
+the nested harness and the knob, not in the session Royce logs into. First look
+confirms them or reopens this.
 
 ---
 

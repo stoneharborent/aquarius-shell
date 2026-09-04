@@ -20,7 +20,7 @@ the instant NetworkManager reported the adapter — see "Wi-Fi" below.*
 
 Two things, and they are the same thing seen from two distances.
 
-**The Quick Settings panel** — the 330px drawer the V2 design draws hanging under
+**The Quick Settings panel** — the drawer the V2 design draws at 330px, hanging under
 the right-hand end of the bar. Four toggles in a 2x2 grid (Wi-Fi, Bluetooth,
 Focus, and an adaptive fourth), two sliders (sound and brightness), and a battery
 line along the bottom.
@@ -33,7 +33,7 @@ other P2 tracks.
 
 ```
 components/quicksettings/
-  QuickSettingsPanel.qml    the 330px drawer's contents
+  QuickSettingsPanel.qml    the drawer's contents
   QuickSettingsPopup.qml    that drawer as a window, anchored under the bar
   QsTile.qml                the look of one toggle — knows nothing about anything
   QsTileSlot.qml            the safety net that loads a tile (READ THIS ONE)
@@ -530,9 +530,12 @@ That is real, and it is not the same as working. Specifically unproven:
 
 **Cosmetic / correctness**
 
-19. Whether 330px is right on a real screen, or is an artboard number — the same
-    open question the roadmap already asks about the bar's 30px.
-20. Whether the drawn glyphs read cleanly at 15px on a light ground.
+19. ~~Whether 330px is right on a real screen, or is an artboard number.~~
+    It was an artboard number. Since 2026-09-03 the whole design ships at
+    1.25x, so the drawer is **413px** and its chips are 40px. Whether that is
+    the right proportion is still a bench question.
+20. Whether the drawn glyphs read cleanly on a light ground — they are 19px
+    now (15 at 1.25x).
 21. The battery duration strings ("6 hr", "45 min") are marked for translation
     but assembled in English shapes. A proper localisation pass is P3.
 

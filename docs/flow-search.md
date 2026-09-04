@@ -496,8 +496,10 @@ that is the change that would silently stop node being able to test them.
 9. **That writing `Quickshell.clipboardText` while the palette is focused
    actually reaches the clipboard.**
 10. **That the panel's geometry is right on a real screen.** 560px wide, 170px
-    down, is an artboard number at 1280×800 — the same open question the roadmap
-    asks about the bar's 30px.
+    down, was an artboard number at 1280×800. Partly answered 2026-09-03: the
+    whole design ships at 1.25x since Royce saw it on a 55" 4K, so the palette
+    is **700px wide, 213px down**. Whether that is the right *proportion* is
+    still a bench question.
 11. **That `WlrLayershell.namespace` can be set declaratively.** The docs say it
     cannot be changed after the window connects; setting it in the declaration
     should be before that, but "should" is doing work.
@@ -597,7 +599,7 @@ Then, in order — each step is a thing that can fail on its own:
 
 12. **The design questions**, which are the ones that actually decide whether
     this was worth building: does the palette land where your eye already is?
-    Is 560px too wide on a laptop screen? Does the Ice scrim dim enough to focus
+    Is 700px (560 at the 1.25x the design now ships) too wide on a laptop screen? Does the Ice scrim dim enough to focus
     attention without making the desktop look broken? Is the monogram tile
     charming or is it a missing icon?
 

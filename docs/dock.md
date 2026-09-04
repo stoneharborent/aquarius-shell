@@ -29,9 +29,38 @@ bench](#on-the-bench-what-to-actually-do) is the sequence that settles the rest.
                  pinned and running apps; a dot under each running one
 ```
 
-A floating slab, centred along the bottom edge, 10px clear of it. Inside: one
-44px tile per app, 9px apart, with 13px of space at the ends and 9px above and
+A floating slab, centred along the bottom edge, 15px clear of it. Inside: one
+66px tile per app, 14px apart, with 20px of space at the ends and 14px above and
 below.
+
+### The dock is deliberately larger than the rest of the shell
+
+Those numbers are **1.5x** the V2 artboard's (44px tile, 9px apart, 13/9 of
+padding, 10px off the screen edge). Everywhere else in the shell — the bar, the
+panels, the search palette, the type scale — the artboard number is multiplied
+by **1.25**. That is not drift and it is not a rounding accident. It is Royce's
+call on the bench, 2026-09-03, looking at the shell on a 55" 4K Odyssey Ark with
+the session output scale at 1.25:
+
+> 1.25 reads right for the whole shell, except the dock, which should be the
+> size it has at 1.5.
+
+There is a reason it lands differently. The bar and the panels are **read** —
+they hold text, and text has a legible size of its own. The dock is **aimed
+at**: it is a row of click targets you hit with a pointer from across a very
+large desk, and a pointer target wants to be bigger than the type beside it.
+Docks on other desktops are outsized relative to their panels for the same
+reason.
+
+The whole `THE DOCK` block in `theme/Theme.qml` moves together — tile, gap,
+padding, slab corner, screen margin, dot, hover lift, glyphs. Growing only the
+tile would put a 66px icon inside a slab still built for a 44px one, and the
+dock would read as badly padded rather than bigger.
+
+`tests/test-shell.sh` **section 31** guards this. It asserts the dock tile stays
+roughly 1.75x the bar's height (66/38 = 1.74, in a 1.60–1.90 band), because
+"the bar is a touch tall, take it to 34" is a one-token edit that would quietly
+shrink the dock's apparent size and nobody would connect the two.
 
 | File | What it does |
 |---|---|
@@ -345,7 +374,9 @@ fails if one appears. The V2 artboard's colour tokens map onto ours like this:
 **No new colour role was needed**, so `Ice.qml` and `Midnight.qml` are untouched.
 What *was* added to `Theme.qml` is a block of dock geometry (`dockTileSize`,
 `dockGap`, `dockLift`, …) and the two dot opacities, all measured off the V2
-artboard and commented with where each number came from.
+artboard and commented with where each number came from — and, since
+2026-09-03, all shipping at 1.5x those measurements for the reason given at the
+top of this document.
 
 ### One dock per monitor, all windows on each
 

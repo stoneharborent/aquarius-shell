@@ -84,7 +84,7 @@ these. Full explanation and troubleshooting: **[`harness/README.md`](harness/REA
 | `theme/` | **Ice** (light) and **Midnight** (dark) as the single source of truth for every colour, size and typeface. No component anywhere contains a hex value. |
 | `components/bar/` | The top bar — the first real piece. Aquarius mark, active app name, status cluster (live glyphs + system tray), clock. |
 | `components/dock/` | The centred dock: pinned + running apps, hover lift, the centred running dot. `docs/dock.md`. |
-| `components/quicksettings/` | The 330px Quick Settings panel and the bar glyphs that open it. `docs/quick-settings.md`. |
+| `components/quicksettings/` | The Quick Settings panel and the bar glyphs that open it. `docs/quick-settings.md`. |
 | `components/notifications/` | The notification daemon, toasts, and the panel off the clock. `docs/notifications.md`. |
 | `components/search/` | The Flow Search palette — apps, math, session actions. `docs/flow-search.md`. |
 | `services/` | Shared single-instance state: Focus (do-not-disturb) and the system light/dark preference. |

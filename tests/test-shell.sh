@@ -23,6 +23,8 @@
 #   * every capitalised `Name.something` is a name somebody probed on the
 #     Quickshell build AquariusOS actually ships (section 28 — the one that
 #     catches a module that IS installed and spells a name differently)
+#   * every size in the theme goes through the one size knob (section 30), and
+#     the dock stays deliberately larger than the rest of it (section 31)
 #
 # WHAT THIS CAN ACTUALLY RUN (added with the Flow Search palette)
 #   Section 12 is different in kind from everything above it. The search
@@ -1587,10 +1589,16 @@ echo "=== 30. the size knob reaches every size ==="
 # THIS SECTION EXISTS BECAUSE OF THE BENCH TEST, 2026-09-03.
 #
 # The shell drew correctly and read too small on a 55" 4K monitor. Part of that
-# was the session running the output at scale 1.0; the rest is a design question
-# only Royce can answer, and answering it means trying 1.15, 1.25 and 1.5 on the
-# real machine. AQ_UI_SCALE is how he does that: Theme.ui reads it, Theme.px()
-# applies it, and every size token in theme/Theme.qml is written root.px(N).
+# was the session running the output at scale 1.0; the rest was a design
+# question only Royce could answer, and answering it meant trying 1.15, 1.25 and
+# 1.5 on the real machine. AQ_UI_SCALE is how he did that: Theme.ui reads it,
+# Theme.px() applies it, and every size token in theme/Theme.qml is written
+# root.px(N).
+#
+# He answered it the same day — 1.25 for the shell, 1.5 for the dock — and those
+# numbers are now the tokens themselves, so the knob sits at 1.0 again. This
+# check outlived the question it was written for, because the knob did: the
+# next monitor asks it again.
 #
 # A PARTIAL multiplier is worse than none. If one token stays a bare number, the
 # bar grows and its icons do not, or the panel grows and its corners stay sharp,
@@ -1674,6 +1682,97 @@ else
          "one environment variable resizes the whole design at once. A token" \
          "left bare refuses to grow with the rest. See the SIZE KNOB block at" \
          "the top of theme/Theme.qml."
+fi
+
+# ------------------------------------------------------------------------------
+echo ""
+echo "=== 31. the dock stays bigger than the rest of the shell ==="
+# ------------------------------------------------------------------------------
+# THIS SECTION EXISTS BECAUSE OF THE BENCH TEST, 2026-09-03.
+#
+# Royce looked at the shell on a 55" 4K monitor and gave two numbers, not one:
+# the shell reads right at 1.25x its original artboard sizes, and the dock reads
+# right at 1.5x. Those numbers are now baked into theme/Theme.qml, which means
+# the dock is deliberately out of step with everything around it.
+#
+# Deliberate-but-odd is exactly the kind of decision that gets tidied away by a
+# later, entirely reasonable change. "The bar is a touch tall, take it to 34" is
+# a one-token edit that would quietly make the dock look oversized, and nobody
+# would connect the two. So the RELATIONSHIP is what gets asserted, not either
+# number: the dock's tile is meant to be roughly 1.75x the bar's height, and if
+# that drifts far in either direction, somebody moved one without the other.
+#
+# The band is wide on purpose. This is a design guard, not a pixel test — it
+# should survive rounding and small honest adjustments and only fire when the
+# two have genuinely come apart. At the time of writing it is 66/38 = 1.74.
+#
+# The second check is the dock's own arithmetic, which the comment in Theme.qml
+# claims and nothing else verifies: the running dot hangs BELOW its tile, and it
+# has to still land inside the slab. dockDotGap + dockDotSize must fit within
+# dockPaddingV, or the dot is drawn over the slab's edge.
+
+if python3 - <<'PYTHON'
+import pathlib
+import re
+import sys
+
+text = pathlib.Path('theme/Theme.qml').read_text(encoding='utf-8')
+
+def token(name):
+    m = re.search(r'readonly\s+property\s+int\s+%s\s*:\s*root\.px\((\d+)\)' % name, text)
+    if not m:
+        print("  FAIL theme/Theme.qml has no token named %s." % name)
+        return None
+    return int(m.group(1))
+
+bad = 0
+
+# --- the dock is meant to read bigger than the bar ---------------------------
+ratio_lo, ratio_hi = 1.60, 1.90
+
+tile = token('dockTileSize')
+bar = token('barHeight')
+if tile is None or bar is None:
+    bad += 1
+else:
+    ratio = tile / bar
+    if not (ratio_lo <= ratio <= ratio_hi):
+        print("  FAIL dockTileSize/barHeight is %.2f (%d/%d); expected %.2f-%.2f."
+              % (ratio, tile, bar, ratio_lo, ratio_hi))
+        print("       The dock is 1.5x the artboard and the bar is 1.25x, on")
+        print("       Royce's call of 2026-09-03. Changing one without the")
+        print("       other breaks that. See THE DOCK in theme/Theme.qml.")
+        bad += 1
+    else:
+        print("  OK   dock tile %d is %.2fx the %dpx bar (band %.2f-%.2f)"
+              % (tile, ratio, bar, ratio_lo, ratio_hi))
+
+# --- the running dot has to fit inside the slab ------------------------------
+gap = token('dockDotGap')
+dot = token('dockDotSize')
+padv = token('dockPaddingV')
+if None in (gap, dot, padv):
+    bad += 1
+elif gap + dot > padv:
+    print("  FAIL the running dot does not fit: dockDotGap(%d) + dockDotSize(%d)"
+          " = %d, but dockPaddingV is only %d." % (gap, dot, gap + dot, padv))
+    print("       The dot is drawn below its tile and would spill over the")
+    print("       slab's bottom edge.")
+    bad += 1
+else:
+    print("  OK   the running dot fits under its tile with %dpx to spare"
+          % (padv - gap - dot))
+
+sys.exit(1 if bad else 0)
+PYTHON
+then
+    :
+else
+    fail "the dock's proportions have drifted (listed above)." \
+         "The dock is deliberately larger than the rest of the shell —" \
+         "1.5x the artboard where everything else is 1.25x — because Royce" \
+         "judged it that way on a 55\" 4K on 2026-09-03. Read THE DOCK block" \
+         "in theme/Theme.qml before changing either number."
 fi
 
 # ------------------------------------------------------------------------------
