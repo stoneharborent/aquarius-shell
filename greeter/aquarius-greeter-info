@@ -1,0 +1,262 @@
+#!/usr/bin/python3
+# =============================================================================
+# aquarius-greeter-info — who can log in, and what they can log in to
+# =============================================================================
+# WHAT THIS IS FOR
+#
+# The login screen has to answer two questions before it can draw anything:
+#
+#   WHO   the people with accounts on this computer, their proper names, and
+#         their pictures
+#   WHAT  the desktops they can choose between — the Aquarius Desktop and GNOME
+#
+# Neither answer is available to QML on its own, so this small program works
+# them out and prints them as one line of JSON. greeter/GreeterInfo.qml runs it
+# once when the login screen starts and reads the answer.
+#
+# WHY A SEPARATE PROGRAM AND NOT QML
+#   Because reading /etc/passwd and parsing .desktop files is exactly the kind
+#   of fiddly text work that is three lines of Python and thirty of QML, and
+#   because a separate program can be run by hand and checked:
+#
+#       /usr/libexec/aquarius-greeter-info          the JSON the greeter reads
+#       /usr/libexec/aquarius-greeter-info --people  a readable list of people
+#       /usr/libexec/aquarius-greeter-info --desktops  a readable list of desktops
+#
+# WHY NOT AccountsService, WHICH IS THE "PROPER" WAY
+#   AccountsService is the service desktops use to ask about user accounts, and
+#   most login screens talk to it. It needs a D-Bus client, and QML in this
+#   shell has none. What we actually need from it — a person's proper name — is
+#   already in /etc/passwd, and the only thing that is not (their picture) is a
+#   plain file in a folder anyone can read. So this reads those two directly.
+#   If a real need for AccountsService turns up later, this file is the one
+#   place that changes and the QML does not notice.
+#
+# IT NEVER FAILS LOUDLY. A login screen that cannot draw because a folder was
+# missing is worse than a login screen with no pictures on it. Every lookup here
+# has a sensible empty answer.
+# =============================================================================
+
+import json
+import os
+import shlex
+import sys
+
+# Where a person's picture lives. AccountsService writes it here when you pick
+# one in Settings > Users, and the file has no extension — it is the picture
+# itself, whatever format it happens to be, named after the account.
+ICON_DIR = "/var/lib/AccountsService/icons"
+
+# Where desktops describe themselves. The first is where the operating system
+# puts them; the second is where somebody hand-installing one would.
+SESSION_DIRS = (
+    "/usr/share/wayland-sessions",
+    "/usr/local/share/wayland-sessions",
+)
+
+# Ordinary human accounts start at 1000 on every modern Linux. Above 60000 are
+# the accounts a domain login or a container creates, which are not people
+# sitting at this machine.
+UID_MIN = 1000
+UID_MAX = 60000
+
+# An account whose login shell is one of these cannot log in at all — that is
+# what those shells are for. Listing them is how "system account" is spelled.
+NON_LOGIN_SHELLS = {
+    "/sbin/nologin",
+    "/usr/sbin/nologin",
+    "/bin/false",
+    "/usr/bin/false",
+    "/bin/sync",
+    "",
+}
+
+# The desktop we want selected when nobody has said otherwise. Matched against
+# the .desktop file's name without its extension.
+PREFERRED_SESSION = "aquarius"
+
+
+def people(passwd_path="/etc/passwd", icon_dir=ICON_DIR):
+    """Everybody who can sit down at this computer and log in.
+
+    /etc/passwd is a text file, one account per line, seven fields separated by
+    colons:
+
+        royce:x:1000:1000:Royce Adkins:/home/royce:/bin/bash
+        \\____/   \\__/      \\_________/              \\_______/
+        name      uid       proper name             login shell
+
+    The fifth field is called GECOS, for reasons that stopped mattering in about
+    1975. Its first comma-separated part is the person's real name; the rest is
+    an office phone number nobody has filled in since.
+    """
+    found = []
+    try:
+        with open(passwd_path, "r", encoding="utf-8", errors="replace") as handle:
+            lines = handle.readlines()
+    except OSError:
+        return found
+
+    for line in lines:
+        parts = line.rstrip("\n").split(":")
+        if len(parts) < 7:
+            continue
+        name, _password, uid_text, _gid, gecos, home, shell = parts[:7]
+        try:
+            uid = int(uid_text)
+        except ValueError:
+            continue
+        if uid < UID_MIN or uid > UID_MAX:
+            continue
+        if shell in NON_LOGIN_SHELLS:
+            continue
+
+        real = gecos.split(",")[0].strip() or name
+
+        icon = os.path.join(icon_dir, name)
+        if not os.path.isfile(icon) or not os.access(icon, os.R_OK):
+            icon = ""
+
+        found.append({
+            "name": name,
+            "real": real,
+            "home": home,
+            "icon": icon,
+        })
+
+    # Alphabetical by the name a person actually reads, so the list does not
+    # reshuffle itself when an account is added.
+    found.sort(key=lambda person: person["real"].lower())
+    return found
+
+
+def read_desktop_file(path):
+    """The handful of lines a .desktop file has that a login screen cares about.
+
+    A .desktop file is an ini file. Only the [Desktop Entry] section counts, and
+    a key repeated in a later section would be a different thing entirely — so
+    this stops reading at the next section heading rather than trusting that
+    there is only one.
+    """
+    values = {}
+    try:
+        with open(path, "r", encoding="utf-8", errors="replace") as handle:
+            in_entry = False
+            for raw in handle:
+                line = raw.strip()
+                if line.startswith("[") and line.endswith("]"):
+                    in_entry = line == "[Desktop Entry]"
+                    continue
+                if not in_entry or "=" not in line or line.startswith("#"):
+                    continue
+                key, value = line.split("=", 1)
+                # "Name[de]=..." is the German translation. We want the plain
+                # key, and taking the first one we see means the untranslated
+                # line wins, which is the one written first in every file.
+                key = key.strip()
+                if key not in values:
+                    values[key] = value.strip()
+    except OSError:
+        return {}
+    return values
+
+
+def desktops(session_dirs=SESSION_DIRS):
+    """The desktops a person can choose between at the login screen.
+
+    ⚠️ THE Exec= LINE IS SPLIT HERE, NOT LATER, AND THAT IS DELIBERATE.
+    greetd is handed a LIST of words — the program and its arguments — not a
+    line of shell. Something has to do the splitting, and doing it here with
+    shlex (which understands quotes exactly the way a shell does) means the QML
+    never has to think about it and a session whose command has a quoted
+    argument in it works.
+    """
+    found = []
+    seen = set()
+    for folder in session_dirs:
+        try:
+            names = sorted(os.listdir(folder))
+        except OSError:
+            continue
+        for filename in names:
+            if not filename.endswith(".desktop"):
+                continue
+            identifier = filename[: -len(".desktop")]
+            if identifier in seen:
+                continue
+
+            values = read_desktop_file(os.path.join(folder, filename))
+            if not values:
+                continue
+            if values.get("Hidden", "").lower() == "true":
+                continue
+            if values.get("NoDisplay", "").lower() == "true":
+                continue
+
+            command = values.get("Exec", "").strip()
+            if not command:
+                continue
+            try:
+                argv = shlex.split(command)
+            except ValueError:
+                # An unbalanced quote in somebody's .desktop file. Fall back to
+                # splitting on spaces rather than dropping the session, because
+                # a session you cannot choose is worse than one whose odd
+                # argument is split wrongly.
+                argv = command.split()
+            if not argv:
+                continue
+
+            seen.add(identifier)
+            found.append({
+                "id": identifier,
+                "name": values.get("Name", identifier),
+                "comment": values.get("Comment", ""),
+                "exec": argv,
+                "desktopNames": values.get("DesktopNames", ""),
+            })
+
+    # Ours first, then everything else alphabetically. The login screen shows
+    # the first one as the default, and the default should be AquariusOS's own
+    # desktop on AquariusOS.
+    found.sort(key=lambda entry: (entry["id"] != PREFERRED_SESSION,
+                                  entry["name"].lower()))
+    return found
+
+
+def main(argv=None):
+    argv = list(sys.argv[1:] if argv is None else argv)
+
+    if argv and argv[0] in ("-h", "--help", "help"):
+        print(__doc__ or "")
+        print("Usage:")
+        print("  aquarius-greeter-info              print everything as JSON")
+        print("  aquarius-greeter-info --people     a readable list of people")
+        print("  aquarius-greeter-info --desktops   a readable list of desktops")
+        return 0
+
+    if argv and argv[0] == "--people":
+        for person in people():
+            print("%-16s %-28s %s"
+                  % (person["name"], person["real"],
+                     person["icon"] or "(no picture)"))
+        return 0
+
+    if argv and argv[0] == "--desktops":
+        for entry in desktops():
+            print("%-16s %-28s %s"
+                  % (entry["id"], entry["name"], " ".join(entry["exec"])))
+        return 0
+
+    if argv:
+        print("aquarius-greeter-info: '%s' is not something this understands."
+              % argv[0], file=sys.stderr)
+        return 1
+
+    json.dump({"people": people(), "desktops": desktops()}, sys.stdout)
+    sys.stdout.write("\n")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

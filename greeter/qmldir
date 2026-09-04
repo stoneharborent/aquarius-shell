@@ -1,0 +1,19 @@
+# =============================================================================
+# greeter/qmldir — the login screen's one piece of shared state
+# =============================================================================
+# GreeterState is a SINGLETON: there is exactly one of it, and anything in the
+# login screen can reach it without being handed a reference.
+#
+# It has to be a singleton rather than an object somebody owns, because the
+# login screen draws one full-screen window PER MONITOR, and all of those
+# windows are looking at the same one question — who is logging in, with which
+# password, into which desktop. Two copies of that state on a two-monitor
+# machine would be a bug you only find when you plug a second screen in.
+#
+# QML will not treat a file as a singleton on the strength of its `pragma
+# Singleton` line alone — it also has to be named here. Forget this and the
+# login screen fails to start with "GreeterState is not a type", which is a
+# confusing way to be told you did not write it down.
+# =============================================================================
+
+singleton GreeterState 1.0 GreeterState.qml

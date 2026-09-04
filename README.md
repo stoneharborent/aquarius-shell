@@ -87,6 +87,7 @@ these. Full explanation and troubleshooting: **[`harness/README.md`](harness/REA
 | `components/quicksettings/` | The Quick Settings panel and the bar glyphs that open it. `docs/quick-settings.md`. |
 | `components/notifications/` | The notification daemon, toasts, and the panel off the clock. `docs/notifications.md`. |
 | `components/search/` | The Flow Search palette — apps, math, session actions. `docs/flow-search.md`. |
+| `greeter/` | **The login screen** — this repo's second entry point (`qs -p greeter/greeter.qml`). The Ice wallpaper, the Aquarius mark, a password box, and the conversation with greetd that starts your desktop. `docs/greeter.md`. |
 | `services/` | Shared single-instance state: Focus (do-not-disturb) and the system light/dark preference. |
 | `session/` | The experimental Aquarius Session: login entry, launcher, niri + labwc configs, portals. `docs/session.md`. |
 | `assets/` | The Aquarius logo, copied from `os-image/branding/`. |

@@ -530,6 +530,42 @@ Singleton {
     readonly property int notifMaxListHeight: root.px(525)
 
     // =========================================================================
+    // THE LOGIN SCREEN
+    // =========================================================================
+    // The greeter — greeter/greeter.qml — is the first thing anybody sees, and
+    // the only part of this shell that runs before anyone has logged in. It has
+    // no artboard of its own; it is built out of the same pieces as everything
+    // else, at the same sizes, so that the screen you log in at and the desktop
+    // you land on are visibly one design.
+    //
+    // The numbers below are chosen against the shell's existing ladder rather
+    // than invented: the card is a little wider than the Flow Search palette
+    // minus its margins, its padding is sp5, its corners are radiusXl, and the
+    // password box is the shell's standard control height. When a real artboard
+    // exists, these get re-pointed at it.
+    //
+    // ⚠️ They are all px() like everything else, so AQ_UI_SCALE resizes the
+    // login screen too. That matters more here than anywhere: the login screen
+    // is the one place a person cannot open Settings to fix the size.
+    readonly property int greeterCardWidth: root.px(520)     // the card the password is in
+    readonly property int greeterCardPadding: root.px(30)    // sp5, inside its edge
+    readonly property int greeterSectionGap: root.px(20)     // sp4, between the card's rows
+    readonly property int greeterClockGap: root.px(50)       // the clock -> the card
+    readonly property int greeterAvatarSize: root.px(96)     // the big picture above your name
+    readonly property int greeterAvatarGlyphSize: root.px(38) // the initials when there is no picture
+    readonly property int greeterLogoSize: root.px(26)       // the Aquarius mark on the card
+    readonly property int greeterLogoGap: root.px(10)        // mark -> the word AquariusOS
+    readonly property int greeterFieldPaddingH: root.px(18)  // inside the password box
+    readonly property int greeterListRowHeight: root.px(58)  // one person in the list
+    readonly property int greeterListRowRadius: root.px(14)
+    readonly property int greeterListAvatarSize: root.px(38) // their picture in that row
+    readonly property int greeterListGap: root.px(15)        // picture -> name
+    readonly property int greeterPillPaddingH: root.px(14)   // the session pill at the foot
+    readonly property int greeterPillPaddingV: root.px(8)
+    readonly property int greeterPillRadius: root.px(10)
+    readonly property int greeterHintGap: root.px(18)        // the card -> the keyboard hints
+
+    // =========================================================================
     // TYPE
     // =========================================================================
     // The OS installs Sora, Inter and JetBrains Mono as system fonts. In the

@@ -132,6 +132,17 @@ for aq_file in \
     components/notifications/IconChip.qml \
     components/notifications/ActionButtons.qml \
     components/notifications/InlineReply.qml \
+    greeter/greeter.qml \
+    greeter/qmldir \
+    greeter/GreeterState.qml \
+    greeter/GreeterWindow.qml \
+    greeter/GreeterCard.qml \
+    greeter/GreeterField.qml \
+    greeter/GreeterAvatar.qml \
+    greeter/GreeterStepArrow.qml \
+    greeter/GreeterDesktopPill.qml \
+    greeter/aquarius-greeter-info \
+    docs/greeter.md \
     assets/logo.svg \
     assets/logo-mono.svg \
     harness/run-nested.sh \
@@ -260,8 +271,8 @@ echo "=== 4. colour lives in theme/ and nowhere else ==="
 # We look for hex colours outside theme/. "transparent" is allowed — it is the
 # absence of a colour, not a choice of one.
 
-if grep -rn --include='*.qml' -E '"#[0-9A-Fa-f]{3,8}"' components/ services/ shell.qml > /dev/null 2>&1; then
-    grep -rn --include='*.qml' -E '"#[0-9A-Fa-f]{3,8}"' components/ services/ shell.qml || true
+if grep -rn --include='*.qml' -E '"#[0-9A-Fa-f]{3,8}"' components/ services/ greeter/ shell.qml > /dev/null 2>&1; then
+    grep -rn --include='*.qml' -E '"#[0-9A-Fa-f]{3,8}"' components/ services/ greeter/ shell.qml || true
     fail "a component contains a raw colour value." \
          "Colour belongs in theme/Ice.qml and theme/Midnight.qml only." \
          "Add a role there, then use Theme.<role> here."
@@ -398,6 +409,7 @@ singletons = {
     'Theme': declared('theme/Theme.qml'),
     'FocusState': declared('services/FocusState.qml'),
     'Overlays': declared('services/Overlays.qml'),
+    'GreeterState': declared('greeter/GreeterState.qml'),
 }
 
 bad = 0
@@ -1433,7 +1445,7 @@ echo "=== 28. every enum namespace is one the shipped build actually has ==="
 
 # Names that come from this repo. Singletons in theme/ and services/, and the
 # two .pragma library JavaScript files.
-aq_ns_ours="Theme FocusState Overlays SystemAppearance Fuzzy Calc"
+aq_ns_ours="Theme FocusState Overlays SystemAppearance Fuzzy Calc GreeterState"
 
 # Names Qt itself provides — globals, value types and attached types.
 aq_ns_qt="Qt Math JSON Date Object Locale Accessible Component Keys Easing Font
@@ -1445,7 +1457,16 @@ aq_ns_quickshell="Quickshell Networking DeviceType Edges DesktopEntries
 SystemClock SystemTray Pipewire UPower UPowerDeviceState PowerProfiles
 PowerProfile PerformanceDegradationReason Bluetooth BluetoothAdapterState
 NotificationUrgency ExclusionMode WlrKeyboardFocus WlrLayershell
-ToplevelManager"
+ToplevelManager Greetd GreetdState"
+
+# ⚠️ Greetd and GreetdState were NOT probed the way the rest of that list was,
+# and here is the honest reason. They belong to the login screen, and the login
+# screen cannot be probed the way the desktop can: there is no greetd socket on
+# a developer's machine and no session to run `qs` inside. What stands in for
+# the probe is stronger. The image build compiles Quickshell itself and FAILS
+# THE BUILD if SERVICE_GREETD is not ON in the finished program (os-image,
+# build_files/stage-quickshell.sh). A build cache that says ON plus a build that
+# finished is proof the module is compiled in.
 
 # Names that exist on ONE build and not the other. Mentioning one is fine —
 # reaching through one for a variant is the bug above.
@@ -1493,7 +1514,7 @@ def strip(text):
 member = re.compile(r'(?:^|[^A-Za-z0-9_.$])([A-Z][A-Za-z0-9_]*)\s*\.\s*[A-Za-z_]')
 bad = 0
 
-for root in ('components', 'services', 'theme'):
+for root in ('components', 'services', 'theme', 'greeter'):
     paths = sorted(pathlib.Path(root).rglob('*.qml'))
     for path in paths + ([pathlib.Path('shell.qml')] if root == 'components' else []):
         code = strip(path.read_text(encoding='utf-8'))
@@ -1824,6 +1845,156 @@ else
          "1.5x the artboard where everything else is 1.25x — because Royce" \
          "judged it that way on a 55\" 4K on 2026-09-03. Read THE DOCK block" \
          "in theme/Theme.qml before changing either number."
+fi
+
+# ==============================================================================
+# THE LOGIN SCREEN (greeter/) — check 32
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+echo ""
+echo "=== 32. the login screen holds together ==="
+# ------------------------------------------------------------------------------
+# The greeter is the one part of this repo that runs BEFORE anybody has logged
+# in, which changes what a bug costs. A broken bar is a desktop with no bar. A
+# broken login screen is a computer nobody can get into, and the way out is a
+# text console and a command typed from memory.
+#
+# So the checks here are about the things that would do exactly that.
+
+# --- it must not import a compositor's own module -----------------------------
+# Section 3 already covers the whole repo. This is the same law said again where
+# it is most tempting to break it: a greeter is the one place where "just use
+# the compositor's IPC" looks harmless, and it is how the login screen would
+# stop working the day the compositor underneath changes.
+if grep -rn --include='*.qml' -E '^\s*import\s+Quickshell\.(Hyprland|I3)' greeter/ > /dev/null 2>&1; then
+    fail "the login screen imports a compositor-specific module."
+else
+    pass "the login screen speaks only standard protocols"
+fi
+
+# --- the singleton has to be declared, twice ----------------------------------
+# Same trap as theme/qmldir: `pragma Singleton` alone is not enough, and the
+# failure message ("GreeterState is not a type") does not mention qmldir.
+if grep -q '^singleton GreeterState .*GreeterState\.qml$' greeter/qmldir; then
+    pass "greeter/qmldir declares GreeterState"
+else
+    fail "greeter/qmldir does not declare GreeterState." \
+         "Add:  singleton GreeterState 1.0 GreeterState.qml"
+fi
+if grep -q '^pragma Singleton' greeter/GreeterState.qml; then
+    pass "greeter/GreeterState.qml says 'pragma Singleton'"
+else
+    fail "greeter/GreeterState.qml is listed as a singleton but does not say" \
+         "'pragma Singleton' at the top. Both are required."
+fi
+
+# --- the whole greetd conversation has to be answered -------------------------
+# ⚠️ THIS IS THE CHECK THAT MATTERS MOST IN THIS SECTION.
+#
+# greetd's conversation is five steps and a login screen that forgets ONE of
+# them does not fail — it hangs. You type your password, press Enter, and
+# nothing happens, for ever, with no error anywhere. Every one of these has to
+# be reached from somewhere in greeter/.
+for aq_step in \
+    'Greetd.createSession' \
+    'Greetd.respond' \
+    'Greetd.cancelSession' \
+    'Greetd.launch' \
+    'onAuthMessage' \
+    'onAuthFailure' \
+    'onReadyToLaunch'
+do
+    if grep -rq --include='*.qml' -F "${aq_step}" greeter/; then
+        pass "the login screen handles ${aq_step}"
+    else
+        fail "nothing in greeter/ uses ${aq_step}." \
+             "greetd's conversation is five steps and missing one does not" \
+             "produce an error — it produces a login screen that hangs after" \
+             "you press Enter. See the header of greeter/GreeterState.qml."
+    fi
+done
+
+# --- a password must never be left sitting in the box -------------------------
+if grep -q 'passwordField.clear()' greeter/GreeterCard.qml; then
+    pass "the password box is emptied as soon as its contents are handed over"
+else
+    fail "greeter/GreeterCard.qml no longer clears the password box after" \
+         "signing in. A password left in a text box is a password on a screen" \
+         "anybody can walk up to."
+fi
+
+# --- the keyboard has to be taken, and taken exclusively ----------------------
+# focusable:true alone maps to OnDemand — "focus me if the system decides to".
+# On a screen where nobody has clicked anything, the system may decide not to,
+# and then the password box does not take typing at all.
+if grep -q 'WlrKeyboardFocus.Exclusive' greeter/GreeterWindow.qml; then
+    pass "the login screen takes the keyboard exclusively"
+else
+    fail "greeter/GreeterWindow.qml no longer asks for exclusive keyboard" \
+         "focus. Without it the password box may never receive a keystroke," \
+         "which looks exactly like a frozen computer."
+fi
+
+# --- the helper has to be real Python and answer -------------------------------
+if python3 -m py_compile greeter/aquarius-greeter-info 2>/dev/null; then
+    pass "greeter/aquarius-greeter-info compiles"
+    rm -rf greeter/__pycache__
+else
+    fail "greeter/aquarius-greeter-info does not compile."
+fi
+if [ -x greeter/aquarius-greeter-info ]; then
+    pass "greeter/aquarius-greeter-info is executable"
+else
+    fail "greeter/aquarius-greeter-info is not executable." \
+         "Run:  chmod +x greeter/aquarius-greeter-info"
+fi
+
+# Run it for real and check it prints usable JSON with both keys in it. On a Mac
+# or a CI runner there are no wayland-sessions and possibly no ordinary users,
+# so BOTH lists being empty is a correct answer — what is being checked is that
+# it answers at all and answers in the shape the QML reads.
+if python3 - <<'PYTHON'
+import json
+import subprocess
+import sys
+
+done = subprocess.run(["python3", "greeter/aquarius-greeter-info"],
+                      capture_output=True, text=True)
+if done.returncode != 0:
+    print("  FAIL it exited %d: %s" % (done.returncode, done.stderr.strip()))
+    sys.exit(1)
+try:
+    data = json.loads(done.stdout)
+except ValueError as problem:
+    print("  FAIL what it printed is not JSON: %s" % problem)
+    sys.exit(1)
+for key in ("people", "desktops"):
+    if not isinstance(data.get(key), list):
+        print("  FAIL its answer has no '%s' list in it" % key)
+        sys.exit(1)
+print("  OK   it prints JSON with a people list and a desktops list "
+      "(%d and %d here)" % (len(data["people"]), len(data["desktops"])))
+sys.exit(0)
+PYTHON
+then
+    :
+else
+    fail "greeter/aquarius-greeter-info did not print the answer the login" \
+         "screen reads (above). greeter/GreeterState.qml calls JSON.parse on" \
+         "it and shows an error on the card if it cannot."
+fi
+
+# --- the command the operating system runs ------------------------------------
+# Two repositories have to agree on one path, the same way they already agree on
+# the search palette's summoning command. If they drift, greetd starts a program
+# that is not there and the machine shows a black screen.
+aq_greeter_helper='/usr/libexec/aquarius-greeter-info'
+if grep -q "${aq_greeter_helper}" greeter/GreeterState.qml; then
+    pass "the login screen calls ${aq_greeter_helper}"
+else
+    fail "greeter/GreeterState.qml no longer calls ${aq_greeter_helper}." \
+         "The AquariusOS image installs the helper at exactly that path."
 fi
 
 # ------------------------------------------------------------------------------
