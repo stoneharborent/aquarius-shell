@@ -199,7 +199,7 @@ workday survives on the bench.*
 shell ran on the 55" 4K Odyssey Ark and the whole design read too small:
 *"really small icons… will need to size everything up."*
 
-Two separate things were behind that, and the first is now fixed:
+Two separate things were behind that, and both are now fixed:
 
 1. **The screen was at 100%.** The Aquarius Session set no output scale at all,
    while GNOME on the same machine had been running the monitor at 125% for
@@ -207,11 +207,11 @@ Two separate things were behind that, and the first is now fixed:
    reads that GNOME setting and applies it). Nothing in this repository needed
    to change for it.
 
-2. **Our own base sizes may simply be too small for a desktop monitor.** A 30px
+2. **Our own base sizes were simply too small for a desktop monitor.** A 30px
    bar and a 12px caption were measured off the V2 artboards, which were drawn
-   for a page rather than for a 55" screen at arm's length. Whether they are
-   right is a judgement about how the desktop should FEEL, and that judgement is
-   Royce's.
+   for a page rather than for a 55" screen at arm's length. Whether they were
+   right was a judgement about how the desktop should FEEL, and that judgement
+   was Royce's to make. He made it — see below — and the tokens moved.
 
 So `theme/Theme.qml` now has one knob — `AQ_UI_SCALE` — that multiplies every
 size, gap, corner and font size in the design at once:
