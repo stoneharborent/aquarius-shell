@@ -3,28 +3,66 @@
 // =============================================================================
 // StatusCluster — the group of small status icons left of the clock
 // =============================================================================
-// THIS USED TO BE THREE EMPTY BOXES. TWO OF THEM ARE REAL NOW.
+// EVERYTHING IN THIS CLUSTER IS REAL. THERE ARE NO PLACEHOLDERS LEFT.
 //
-//   In the finished design this holds, left to right: Drop (send a file to
-//   another device), Search, then Wi-Fi + battery, which together open Quick
-//   Settings.
-//
-//   What is real, in this file, today:
+//   Left to right, what the bar actually draws between the app name and the
+//   clock:
 //
 //     * THE SYSTEM TRAY. Every application that puts an icon in the tray, via
-//       StatusNotifierItem. See TrayItem.qml.
+//       StatusNotifierItem. See TrayItem.qml. Empty on a machine with no tray
+//       applications running, which is most machines most of the time.
 //     * THE STATUS BUTTON. Live Wi-Fi, sound and battery glyphs, off the same
 //       services the Quick Settings panel uses, and a click that opens that
 //       panel underneath it.
 //
-//   What is still a placeholder, and belongs to other Phase-P2 tracks:
+//   THE TWO EMPTY SQUARES ARE GONE — 2026-09-04.
+//     Until today this file drew two outlined boxes to the left of the tray,
+//     holding space for the design's *Drop* and *Search* buttons. They were
+//     honest placeholders and they were written down as such
+//     (docs/first-run-on-hardware.md, "Open questions", item 1), but on the
+//     bench they are simply two empty squares in the corner of the screen, and
+//     an empty square is a thing that looks broken no matter what the source
+//     says it means. Royce called it: "remove the placeholder squares in the
+//     top right bar."
 //
-//     * DROP — the send-to-any-device panel.
-//     * SEARCH — the Flow Search palette.
+//     Nothing was lost with them:
+//       SEARCH already has two ways in — click the Aquarius mark at the far
+//         left of this same bar, or the "+" at the end of the dock, or bind
+//         `qs ipc -c aquarius-shell call search toggle`. It has been real since
+//         Flow Search landed; this slot was outliving its own placeholder.
+//       DROP does not exist yet. When it does it gets a BarItem here with a
+//         glyph in it, exactly the way the status button below is built, and
+//         the clock shifts left by one item on the day it lands. Holding empty
+//         space for months to avoid a one-off shift on that day was the wrong
+//         trade.
 //
-//   Those two keep their empty outlined slots so the bar's spacing stays right
-//   and the clock does not shift sideways when they land. Set `showPlannedSlots`
-//   to false to hide them.
+//     If you are adding Drop: put its BarItem above the tray Repeater, give it
+//     a glyph in components/quicksettings/QsGlyph.qml (see the note below about
+//     why nothing here is a font), and DO NOT reintroduce an outlined box for
+//     anything that is not yet clickable.
+//
+// WHERE THE GLYPHS COME FROM — AND WHY A BOX HERE IS NEVER A MISSING FONT
+//
+//   Nothing in this cluster is a character. Wi-Fi, sound and the battery are
+//   vector paths drawn by QtQuick.Shapes: the first two out of the table in
+//   components/quicksettings/QsGlyph.qml, the battery out of QsBatteryGlyph.qml,
+//   both stroked in Theme colours at run time. No symbol font, no glyph table
+//   from a package, no icon-theme lookup — QsGlyph.qml's header sets out the
+//   three reasons at length, the short one being that this shell cannot assume
+//   any font or icon theme is installed on the machine it wakes up on.
+//
+//   THE PRACTICAL CONSEQUENCE, and the reason this note exists: an empty box in
+//   this corner CANNOT be Qt's missing-character tofu, and installing a font
+//   will never fix anything here. Before 2026-09-04 a box in this cluster meant
+//   exactly one thing — the Drop/Search placeholder rectangles this file used to
+//   draw — and those are now gone. If a box appears here again, it came from a
+//   TRAY application's own artwork (TrayItem.qml deliberately draws each app's
+//   icon unrecoloured, and an app that publishes a bad icon name gets a
+//   missing-image box), so look at which application is in the tray.
+//
+//   The two-letter fallback in the DOCK is the one place the shell does draw
+//   text where an icon should be, and it uses Theme.fontDisplay — a real font,
+//   with real letters in it. Different component, different problem.
 //
 // ⚠️ THE GLYPHS ARE READ-ONLY MIRRORS OF THE PANEL, NOT A SECOND SOURCE OF TRUTH
 //
@@ -63,46 +101,7 @@ Row {
     // where "the panel opened" happens.
     signal quickSettingsToggled(bool nowOpen)
 
-    // Draw the empty Drop and Search slots, or leave the space blank.
-    property bool showPlannedSlots: true
-
-    // The two things in the design that other P2 tracks own. Named here so the
-    // bar reads as a plan rather than as two mystery boxes.
-    readonly property var plannedSlots: [
-        { key: "drop", label: qsTr("Drop — send to any device") },
-        { key: "search", label: qsTr("Search") }
-    ]
-
     spacing: Theme.barItemSpacing
-
-    // ---- still to come: Drop and Search --------------------------------------
-    Repeater {
-        model: root.showPlannedSlots ? root.plannedSlots : []
-
-        delegate: BarItem {
-            required property var modelData
-
-            // Not interactive: these do nothing yet, so they must not light up
-            // on hover and pretend otherwise.
-            interactive: false
-
-            Accessible.role: Accessible.StaticText
-            Accessible.name: modelData.label
-
-            Rectangle {
-                width: Theme.barGlyphSize
-                height: Theme.barGlyphSize
-                // A placeholder box, so this corner is not a design token. It
-                // still goes through Theme.px so it grows with AQ_UI_SCALE like
-                // everything else — a 3px corner on a 22px box at 1.5x is the
-                // giveaway that something was left behind.
-                radius: Theme.px(3)
-                color: "transparent"
-                border.width: Theme.hairline
-                border.color: Theme.line
-            }
-        }
-    }
 
     // ---- the system tray ------------------------------------------------------
     // Referencing the SystemTray singleton is what makes Quickshell start

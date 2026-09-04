@@ -48,7 +48,10 @@ P1's gate is closed. He also confirmed the widgets and notifications worked and
 that the Aquarius mark opens the search palette, and answered the three open
 questions the first run raised: the bar's Drop/Search placeholders stay as they
 are for now, the fuzzy search breadth is right, and the Quick Settings text
-truncation is fine as it is.
+truncation is fine as it is. (He changed his mind about the first one on
+2026-09-04, after living with the desktop on the 55" monitor — the placeholders
+are removed, along with the dock's per-icon borders. See
+[`first-run-on-hardware.md`](first-run-on-hardware.md), open question 1.)
 
 The sub-questions below were written before the bar existed; they are kept as
 the record of what the gate was asking.

@@ -26,10 +26,10 @@ Focus, and an adaptive fourth), two sliders (sound and brightness), and a batter
 line along the bottom.
 
 **The bar's status cluster** — the group of icons left of the clock. It used to
-be three empty outlined boxes. Two of the three are now real: the system tray,
-and a status button showing live Wi-Fi, sound and battery glyphs that opens the
-panel. The Drop and Search slots are still placeholders, because those belong to
-other P2 tracks.
+be three empty outlined boxes. **Every box is gone as of 2026-09-04**, and what
+is left is real: the system tray, and a status button showing live Wi-Fi, sound
+and battery glyphs that opens the panel. See
+[**What the cluster draws, and where every mark in it comes from**](#what-the-cluster-draws-and-where-every-mark-in-it-comes-from).
 
 ```
 components/quicksettings/
@@ -329,6 +329,51 @@ The one exception: **tray icons keep the application's own artwork at its own
 colours**, through `IconImage`. A tray icon is somebody else's brand mark, and
 recolouring Steam's logo to Aquarius Blue would be both wrong and slightly rude.
 
+### What the cluster draws, and where every mark in it comes from
+
+Written down on 2026-09-04, because Royce reported "placeholder squares in the
+top right bar" and the first thing anyone needs, looking at a square in a status
+bar, is to know whether it is a missing font.
+
+**It never is, here.** Left to right, everything the cluster can draw:
+
+| What | Drawn by | Where the drawing comes from | Can it come out as a box? |
+|---|---|---|---|
+| tray icons | `TrayItem.qml` → `Quickshell.Widgets.IconImage` | the application's **own** artwork, via its StatusNotifierItem icon name | **Yes** — if the app publishes an icon name nothing on the system resolves, `IconImage` has nothing to draw. That is the app's bug, and the fix is per-app. |
+| Wi-Fi | `StatusGlyphNetwork.qml` → `QsGlyph.qml` | vector paths in `QsGlyph`'s table (`wifi`, `wifi-off`), stroked by `QtQuick.Shapes` in a `Theme` colour | No |
+| sound | `StatusGlyphSound.qml` → `QsGlyph.qml` | ditto (`speaker`, `speaker-mute`) | No |
+| battery | `StatusGlyphBattery.qml` → `QsBatteryGlyph.qml` | three `Rectangle`s on the design's 22x11 grid | No |
+
+**No font, no icon theme, no glyph package.** Three of the four are geometry
+this repo owns, and the fourth is an `Image`. Qt's missing-character box — the
+"tofu" you get when text names a character the font does not have — cannot
+appear in this cluster, because nothing in it is text. Installing a symbol font
+in the OS image would change nothing here, and adding one to fix a box would be
+fixing the wrong thing. See "The icons are drawn, not loaded from an icon theme"
+above for why it is built that way.
+
+**So the squares Royce saw were ours.** Until 2026-09-04 this file drew two
+outlined `Rectangle`s to the left of the tray, holding the design's *Drop* and
+*Search* slots. They were deliberate, and they were written down as such — this
+page said so in the deviations table, and
+[`first-run-on-hardware.md`](first-run-on-hardware.md) listed "the two empty
+squares in the bar" as an open question. That question is now answered: they are
+gone.
+
+What replaces them, for each:
+
+* **Search** — nothing, because it already exists. Click the Aquarius mark at
+  the far left of the same bar, or the `+` at the end of the dock, or bind
+  `qs ipc -c aquarius-shell call search toggle` in the compositor. The slot was
+  holding space for something that had already landed somewhere better.
+* **Drop** — nothing yet. When the send-to-any-device panel is built it gets a
+  `BarItem` in `StatusCluster.qml` with a `QsGlyph` inside it, exactly the way
+  the status button is built, and the clock shifts left by one item that day.
+
+**The rule this leaves behind:** a bar item that is not yet clickable does not
+get drawn. An outlined empty box in the corner of a 55" screen reads as a broken
+desktop no matter how carefully the source comments explain that it is a plan.
+
 ### The adaptive fourth tile
 
 Carried over unchanged from the KDE widget, including the reasoning:
@@ -432,7 +477,7 @@ unregistering or claiming.
 | Slider handle shadow: `0 1px 4px rgba(0,0,0,.5)` | A slightly larger, very faint circle one pixel lower | A real blur means `QtQuick.Effects` and an offscreen render pass on a 16px dot. At that size the cheap version reads the same. |
 | Fourth tile: Game Mode | Adaptive — Game Mode or Performance | See above. |
 | Footer: battery line + "All settings" | Battery line only | See above. |
-| Bar: Drop, Search, Wi-Fi + battery | Drop and Search still placeholder outlines; tray + Wi-Fi/sound/battery real | Drop and Search are other P2 tracks. Their slots are kept so the clock does not shift sideways when they land. |
+| Bar: Drop, Search, Wi-Fi + battery | Tray + Wi-Fi/sound/battery. **No Drop, no Search, and no placeholder for either** (2026-09-04) | Search already opens from the Aquarius mark and the dock's `+`, so its slot was holding space for something that had arrived. Drop does not exist yet and gets a real `BarItem` on the day it does. Holding two empty squares in the corner of the screen for months, to avoid the clock shifting once, was the wrong trade — see below. |
 | Bar has no sound glyph | Added one (muted / not muted only) | "Is my machine silent" is the question a bar can answer at a glance and the one people get caught out by. Not a volume ladder — that is what the panel is for. |
 | Text sizes 10.5px / 11.5px | 11 / 12 | Qt's `font.pixelSize` wants whole numbers. Same rounding the existing `fsSmall` and `fsMono` already do. |
 
@@ -634,8 +679,10 @@ Work through this list, in order, and write down what actually happens:
 
 **The bar**
 
-1. Does the status cluster draw: two empty outlined slots, then any tray icons,
-   then Wi-Fi + sound + battery glyphs, then the clock?
+1. Does the status cluster draw: any tray icons, then Wi-Fi + sound + battery
+   glyphs, then the clock — and **nothing else**? There must be no empty box
+   anywhere between the app name and the clock. (Before 2026-09-04 there were
+   two, on purpose. There are none now.)
 2. On a machine with no battery, does the battery glyph take **no space** — i.e.
    do the glyphs sit flush without a gap where it would be?
 3. Open something with a tray icon (`nm-applet`, Steam, Discord). Does it appear?

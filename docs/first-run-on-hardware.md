@@ -255,9 +255,21 @@ Two traps worth knowing about, neither of them a bug in the shell:
 
 Not bugs — decisions.
 
-1. **The two empty squares in the bar.** They are deliberate placeholders for
+1. ~~**The two empty squares in the bar.** They are deliberate placeholders for
    *Drop* and *Search*. But Flow Search now exists, so the Search one could
-   simply open it. Wire it up, or keep both as placeholders until Drop is real?
+   simply open it. Wire it up, or keep both as placeholders until Drop is real?~~
+   **ANSWERED 2026-09-04 — neither. Remove them.** Royce, after using the
+   desktop on the 55" bench monitor: *"remove the placeholder squares in the top
+   right bar."* Search already opens from the Aquarius mark and the dock's `+`,
+   so its slot was holding space for something that had arrived; Drop gets a
+   real bar item on the day Drop exists. The standing rule now: a bar item that
+   is not yet clickable does not get drawn. See `docs/quick-settings.md`, "What
+   the cluster draws".
+
+   He asked for one other thing in the same breath, which was not on this list:
+   *"remove the clear borders around the apps in the dock."* Each dock icon was
+   sitting in its own bordered pane. That is gone too — `docs/dock.md`, "No box
+   around the icon".
 2. **Fuzzy search breadth.** Typing `fi` returns Starfield, DaVinci Resolve and
    Alacritty — the matcher weighs several fields, not just the name. Right call,
    or should the name carry more weight?
