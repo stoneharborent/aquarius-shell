@@ -519,6 +519,80 @@ each, and the shell is the source of truth, not the config.
 
 ---
 
+## What else starts at login, and why it is written down three times
+
+Most Linux desktops have one list of "things to start when somebody logs in":
+the `.desktop` files in `/etc/xdg/autostart`. GNOME reads that folder and starts
+everything in it.
+
+**Neither of our compositors reads that folder.** labwc reads exactly one file,
+the `autostart` next to its `rc.xml`, and nothing else. niri reads only its own
+`config.kdl`. That is deliberate and it is worth keeping: it is what stops a
+dozen GNOME background programs from starting up underneath the Aquarius Shell
+and fighting it for the tray, the notifications and the screen.
+
+The price of that decision is duplication. Anything that has to run at login in
+**both** the Aquarius session and the GNOME fallback ends up written down in
+three places:
+
+| Where | Which session it covers |
+|-------|-------------------------|
+| `/etc/xdg/autostart/<name>.desktop` (shipped by AquariusOS) | the GNOME fallback |
+| `session/labwc/autostart`, in this repo | the Aquarius session on labwc |
+| `session/niri/config.kdl`, in this repo | the Aquarius session on niri |
+
+**Change one, change all three.** There is no clever way around it — there is no
+session name that means "GNOME and ours", so `OnlyShowIn=` cannot be used to
+make a single `.desktop` file cover everything.
+
+### The one entry there is so far: the creator apps window
+
+On the first login, AquariusOS opens **"Your creator apps"** — a window that
+offers the studio apps (OBS, Kdenlive, Blender and friends) and installs the
+ones you tick. The command is:
+
+```bash
+/usr/libexec/aquarius-creator-apps --first-run
+```
+
+`--first-run` is what makes it happen only once. The window looks for
+`~/.config/aquarius/creator-apps-seen` and returns silently if that file is
+already there, so the line runs at every login and does nothing at all on all
+but the first.
+
+Both session files wait ten seconds before running it, matching the
+`X-GNOME-Autostart-Delay=10` in the GNOME copy. The wait is not for the
+program's benefit — the window opens in well under a second — it is so the
+desktop has settled and the person is looking at their computer rather than at
+a login screen when it appears.
+
+Both session files also guard the line with `[ -x /usr/libexec/aquarius-creator-apps ]`.
+That guard matters here more than it would in the image: the chooser belongs to
+AquariusOS, not to this repository, so on a plain Fedora machine running the
+session from a clone the program simply is not there, and the session has to
+start normally anyway.
+
+### Which copy of these files actually ships
+
+> **AquariusOS ships its own copies of the session files.** The image build
+> (`build_files/stage-aquarius-shell.sh` in the `os-image` repo) copies only
+> `shell.qml`, `components/`, `services/`, `theme/` and `assets/` out of this
+> repository — it deliberately leaves `session/` behind, because the image's
+> versions are adapted to system paths and carry image-only steps this repo has
+> no business knowing about (the wallpaper, the display-scale helper, the
+> shell-start dialog).
+>
+> So the file that runs on an installed AquariusOS machine is
+> `system_files/usr/share/aquarius/labwc/autostart` **in the os-image repo**,
+> and that copy is the authoritative one. The files here are what runs when the
+> session is started from a clone — on the bench, or on plain Fedora.
+>
+> They are still kept in step by hand, and the lines that actually *run* are
+> byte-for-byte identical between the two, so a diff between them shows only
+> prose. When you change one, change the other.
+
+---
+
 ## Portals — what they are and why there are two config files
 
 A **portal** is how an application asks the desktop to do something it cannot do

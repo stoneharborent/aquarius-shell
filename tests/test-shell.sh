@@ -800,6 +800,55 @@ fi
 
 # ------------------------------------------------------------------------------
 echo ""
+echo "=== 17b. what starts at login is written down in BOTH session files ==="
+# ------------------------------------------------------------------------------
+# labwc's autostart file is a shell script, and a typo in it does not produce an
+# error anybody sees — it produces a login where the rest of the file never ran.
+# So parse it, the same way check 17 parses the scripts.
+#
+# Then the drift check. Neither of our compositors reads /etc/xdg/autostart, so
+# anything that must start at login is written down once per compositor. The
+# failure that follows is nasty precisely because it is quiet: somebody adds a
+# line to one file, the other session keeps starting perfectly, and the missing
+# program is only noticed by whoever happened to be on the other compositor.
+#
+# The list below is the login-time extras, by the substring that must appear in
+# both files. It is short on purpose — add to it when a new one is added, and
+# remember the THIRD copy, the .desktop file in the os-image repo, which that
+# repo's own build checks.
+
+if bash -n session/labwc/autostart 2>/dev/null; then
+    pass "session/labwc/autostart is valid shell"
+else
+    bash -n session/labwc/autostart || true
+    fail "session/labwc/autostart is not valid shell." \
+         "labwc runs this file at every login. A syntax error in it means" \
+         "everything after the mistake silently never runs."
+fi
+
+aq_login_extras=(
+    'aquarius-creator-apps --first-run'
+)
+
+for aq_login_extra in "${aq_login_extras[@]}"; do
+    aq_missing_from=""
+    for aq_session_file in session/labwc/autostart session/niri/config.kdl; do
+        if ! grep -qF "${aq_login_extra}" "${aq_session_file}"; then
+            aq_missing_from="${aq_missing_from} ${aq_session_file}"
+        fi
+    done
+    if [ -z "${aq_missing_from}" ]; then
+        pass "'${aq_login_extra}' is in both session files"
+    else
+        fail "'${aq_login_extra}' is missing from:${aq_missing_from}" \
+             "Anything that has to run at login must be written down once per" \
+             "compositor, because neither labwc nor niri reads /etc/xdg/autostart." \
+             "See 'What else starts at login' in docs/session.md."
+    fi
+done
+
+# ------------------------------------------------------------------------------
+echo ""
 echo "=== 18. the dock's files exist ==="
 # ------------------------------------------------------------------------------
 # Same reasoning as check 1, for the second real piece of the shell. Kept as its

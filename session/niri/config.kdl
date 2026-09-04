@@ -113,6 +113,45 @@ layout {
 spawn-sh-at-startup "qs 2>&1 | sed -u 's/^/[shell] /' >> \"${AQ_LOG:-/dev/null}\""
 
 // -----------------------------------------------------------------------------
+// The creator apps window, once, on the first login
+// -----------------------------------------------------------------------------
+// This is the niri twin of section 4 of ../labwc/autostart. Read that one for
+// the long version; the short version is:
+//
+// Neither of our compositors reads /etc/xdg/autostart, the folder GNOME uses to
+// decide what starts at login. labwc reads exactly one file and niri reads only
+// this one. That is deliberate — it is what keeps a dozen GNOME background
+// programs out of the Aquarius session — and the price of it is that anything
+// which must run at login in BOTH sessions is written down in three places: a
+// .desktop file for GNOME, the labwc autostart, and this line. CHANGE ONE,
+// CHANGE ALL THREE.
+//
+// WHAT IT OPENS. "Your creator apps" — the window that offers the studio apps
+// (OBS, Kdenlive, Blender and friends) and installs the ones you tick. It is
+// part of AquariusOS, not of this repository. That is why the `[ -x ... ]`
+// guard is not optional: running this session from a clone on plain Fedora,
+// there is no such program, and the session must still start normally.
+//
+// --first-run is what makes it "once". The window looks for
+// ~/.config/aquarius/creator-apps-seen and returns silently if it is there, so
+// this runs at every login and does nothing at all on all but the first.
+//
+// The ten-second wait matches the X-GNOME-Autostart-Delay in the GNOME copy.
+// It is not for us — the window opens in well under a second — it is so the
+// desktop has settled and the person is looking at their computer rather than
+// at a login screen when it appears.
+//
+// Rule 2 at the top still holds. /usr/libexec/aquarius-creator-apps is not a
+// machine-specific path: it is a fixed location inside AquariusOS, the same on
+// every machine, and it is not the shell's own location — which is the thing
+// rule 2 is actually about.
+//
+// `spawn-sh-at-startup` rather than `spawn-at-startup` for the same reason as
+// the line above: it runs the string through `sh`, which is what allows the
+// test, the delay and the redirect to be written at all.
+spawn-sh-at-startup "if [ -x /usr/libexec/aquarius-creator-apps ]; then (sleep 10; /usr/libexec/aquarius-creator-apps --first-run) >> \"${AQ_LOG:-/dev/null}\" 2>&1; fi"
+
+// -----------------------------------------------------------------------------
 // Session chrome
 // -----------------------------------------------------------------------------
 // niri normally pops up a hotkey cheat-sheet on every start. Useful the first

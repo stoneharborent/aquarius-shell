@@ -84,3 +84,47 @@ systemctl --user --no-block start labwc-session.target 2>/dev/null || true
 # the shell's.)
 # ---------------------------------------------------------------------------
 qs 2>&1 | sed -u 's/^/[shell] /' >> "${AQ_LOG:-/dev/null}" &
+
+# ---------------------------------------------------------------------------
+# 4. The creator apps window, once, on the first login.
+#
+# ⚠️ THIS BLOCK EXISTS BECAUSE LABWC DOES NOT READ /etc/xdg/autostart.
+#
+# On GNOME, a file in /etc/xdg/autostart is all it takes: GNOME reads that
+# folder at login and starts everything in it. labwc reads exactly ONE file —
+# this one — and nothing else. That is deliberate, and it is what keeps a dozen
+# GNOME background programs out of the Aquarius session. The cost of that
+# decision is this: anything that must run at login in BOTH sessions has to be
+# written down twice, once as a .desktop file for GNOME and once here.
+#
+# So this block and AquariusOS's
+# /etc/xdg/autostart/aquarius-creator-apps-firstrun.desktop are the same fact
+# said in two languages. CHANGE ONE, CHANGE BOTH — the AquariusOS build checks
+# that both exist and that they run the same command.
+#
+# WHAT IT OPENS. "Your creator apps" — the window that offers the studio apps
+# (OBS, Kdenlive, Blender and friends) and installs the ones you tick. It is
+# part of AquariusOS, not of this repository, which is why the guard below is
+# not optional: a machine running this session from a clone of the shell, on
+# plain Fedora, has no such program, and the session must still start.
+#
+# --first-run is what makes it "once": the window looks for
+# ~/.config/aquarius/creator-apps-seen and returns silently if it is there. So
+# this runs at every login and does nothing at all on all but the first.
+#
+# The ten-second wait matches the X-GNOME-Autostart-Delay in the GNOME copy. It
+# is not for us — the window opens in well under a second — it is so that the
+# desktop has settled and the person is looking at their computer rather than at
+# a login screen when it appears.
+#
+# The lines that actually run are kept BYTE-FOR-BYTE identical to the AquariusOS
+# copy (system_files/usr/share/aquarius/labwc/autostart in the os-image repo), so
+# a diff between the two files shows only prose. The niri equivalent is the
+# `spawn-sh-at-startup` line in ../niri/config.kdl — change that too.
+# ---------------------------------------------------------------------------
+if [ -x /usr/libexec/aquarius-creator-apps ]; then
+    (
+        sleep 10
+        /usr/libexec/aquarius-creator-apps --first-run
+    ) >> "${AQ_LOG:-/dev/null}" 2>&1 &
+fi
