@@ -412,12 +412,26 @@ Singleton {
     readonly property int dockDotSize: root.px(6)          // the running-app dot
     readonly property int dockDotGap: root.px(5)           // tile bottom -> dot top
 
-    // How solid that dot is. The design draws one state; these two come from
-    // the Plasma theme's tasks.svg, which used 0.55 for "running" and 0.8 for
-    // "running and focused". Keeping both means the dock can say which of
-    // several open apps you are actually in, at no cost in ink.
-    readonly property real dockDotOpacity: 0.55
-    readonly property real dockDotOpacityActive: 0.8
+    // THE DOT HAS NO OPACITY TOKENS ANY MORE — 2026-09-04.
+    //   It used to be drawn in Theme.accent at 0.55 when running and 0.8 when
+    //   focused, the two numbers the Plasma theme's tasks.svg used. Those were
+    //   fine while every tile sat on its own recessed slab: the slab said
+    //   "app", so the dot only had to whisper "and it is open".
+    //
+    //   The slabs are gone (Royce, on the bench, 2026-09-04 — see DockItem.qml),
+    //   so the dot is now the ONLY mark that says an app is running, and a
+    //   whisper is no longer enough. Measured against Ice's panel, the old dot
+    //   came out at 1.9:1 when running and 2.6:1 when focused — both under the
+    //   3:1 that WCAG asks of a non-text indicator, and both genuinely hard to
+    //   see across a room from a 55" screen.
+    //
+    //   So both states are now drawn SOLID, and the state is carried by the
+    //   COLOUR instead: Theme.accent when the app is the one you are in,
+    //   Theme.inkMute when it is merely open. Measured against each theme's
+    //   panel that is 3.3:1 and 3.0:1 on Ice, 7.7:1 and 3.1:1 on Midnight —
+    //   every state over the bar, on both themes, and the two are told apart by
+    //   hue rather than by a difference in fadedness that a light theme cannot
+    //   carry. Nothing to put here: both colours are roles that already exist.
 
     readonly property int dockSeparatorHeight: root.px(42) // the rule before the + tile
     readonly property int dockLift: root.px(6)             // how far a hovered tile rises

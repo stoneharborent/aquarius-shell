@@ -1616,10 +1616,10 @@ text = pathlib.Path('theme/Theme.qml').read_text(encoding='utf-8')
 # Things that are numbers but are NOT sizes, so must NOT be multiplied.
 #   durFast/durMed  milliseconds. A taller bar must not animate more slowly.
 #   uiScaleMin/Max  the clamp on the knob itself.
-#   dock*Opacity    0..1 opacity.
 #   dockHoverScale  already a multiplier.
-exempt = {'durFast', 'durMed', 'uiScaleMin', 'uiScaleMax',
-          'dockDotOpacity', 'dockDotOpacityActive', 'dockHoverScale'}
+# dockDotOpacity/dockDotOpacityActive were here until 2026-09-04, when the dock
+# dot stopped being a translucent accent and became two solid colour roles.
+exempt = {'durFast', 'durMed', 'uiScaleMin', 'uiScaleMax', 'dockHoverScale'}
 
 bad = 0
 scaled = 0
@@ -1659,8 +1659,10 @@ others = 0
 for path in sorted(pathlib.Path('.').rglob('*.qml')):
     if '.git' in path.parts or path == pathlib.Path('theme/Theme.qml'):
         continue
-    # Comments are stripped first: a file is allowed to EXPLAIN the knob (and
-    # StatusCluster.qml does), it is just not allowed to read it.
+    # Comments are stripped first: a file is allowed to EXPLAIN the knob, it is
+    # just not allowed to read it. (StatusCluster.qml used to be the example
+    # here; the placeholder box whose comment explained the knob was removed on
+    # 2026-09-04. The stripping still matters — the next explainer will come.)
     code = path.read_text(encoding='utf-8')
     code = re.sub(r'/\*.*?\*/', '', code, flags=re.S)
     code = re.sub(r'//[^\n]*', '', code)

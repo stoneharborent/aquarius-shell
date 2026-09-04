@@ -20,7 +20,7 @@ bench](#on-the-bench-what-to-actually-do) is the sequence that settles the rest.
 
 ```
               ╭───────────────────────────────────────────╮
-              │  ▣   ▣   ▣   ▣   ▣   ▣   │   ┌ ─ ┐        │
+              │  ◆   ◆   ◆   ◆   ◆   ◆   │   ┌ ─ ┐        │
               │  ●   ●                       ╷ + ╷        │
               ╰───────────────────────────────────────────╯
                  ^                       ^     ^
@@ -32,6 +32,11 @@ bench](#on-the-bench-what-to-actually-do) is the sequence that settles the rest.
 A floating slab, centred along the bottom edge, 15px clear of it. Inside: one
 66px tile per app, 14px apart, with 20px of space at the ends and 14px above and
 below.
+
+**The tiles are invisible.** Each app is its own icon sitting on the slab, with
+nothing drawn around it — no pane, no outline. The slab is the only box. See
+[**No box around the icon**](#no-box-around-the-icon) for why that changed on
+2026-09-04.
 
 ### The dock is deliberately larger than the rest of the shell
 
@@ -276,9 +281,62 @@ because it is a CSS child inheriting the tile's transform, not because anyone
 decided it should. A running mark that jumps about reads as noise. Same call the
 KDE dock made, for the same reason.
 
-**Its two opacities** — 0.55 running, 0.8 running-and-focused — are the numbers
-the Plasma theme's `tasks.svg` used for the same two states. Keeping both lets
-the dock say which of several open apps you are actually in, at no cost in ink.
+**Its colour says which app you are in.** `Theme.accent` when this is the
+focused app, `Theme.inkMute` when it is merely open. Both solid.
+
+That is a change from 2026-09-04, and the reason is the tiles going away. The
+dot used to be `Theme.accent` at two opacities — 0.55 running, 0.8
+running-and-focused, the numbers the Plasma theme's `tasks.svg` used. Those
+worked while every icon sat on its own recessed pane: the pane said "app", so
+the dot only had to whisper "and it is open". With the panes gone the dot is the
+only thing left saying an app is running, and a whisper does not carry. Measured
+against each theme's panel colour:
+
+| | Ice | Midnight |
+|---|---|---|
+| old, running (accent @ 0.55) | **1.9:1** | 3.3:1 |
+| old, focused (accent @ 0.8) | **2.6:1** | 5.4:1 |
+| new, running (`inkMute`) | 3.0:1 | 3.1:1 |
+| new, focused (`accent`) | 3.3:1 | 7.7:1 |
+
+WCAG asks 3:1 of a non-text indicator. Ice failed both states and Midnight
+passed both, which is exactly the trap a light theme sets: the author's dark
+screen looks fine. Two solid colours clear the bar on both themes, and hue is a
+distinction a light theme can carry where a difference in fadedness is not.
+
+### No box around the icon
+
+Until 2026-09-04 every tile painted its own pane — `Theme.surfaceAlt` with a
+hairline of `Theme.line` around it, straight off the V2 artboard, which draws
+`.dock-ico` as a bordered rounded rectangle because it had two-letter
+placeholders to put inside rather than real icons.
+
+On the bench, on a 55" screen at output scale 1.25, that read as a row of little
+boxes with icons trapped inside them rather than as a row of icons. Six visible
+outlines competing with the six pieces of artwork they were framing, inside a
+slab that already draws the only frame the group needs. Royce's words:
+**"remove the clear borders around the apps in the dock."**
+
+So the icon sits on the slab, and the slab is the box — which is what every dock
+people already use does (macOS, the GNOME dash, Latte), for the same reason: an
+app icon is artwork somebody designed to be looked at, and a second outline
+around it is noise.
+
+Three things the pane was **not** doing, and which all still happen:
+
+* the **hover lift** — the tile still rises 6px and grows to 108%;
+* the **press wash** — `Theme.pressWash` at `Theme.dockTileRadius`, so a click
+  is still acknowledged, and still with the tile's own corner;
+* the **running dot**, which never sat on the pane in the first place. It hangs
+  *below* the tile, in the slab's bottom padding, so its background was
+  `Theme.panel` before this change and is `Theme.panel` after it. Removing the
+  pane did not touch it — but it did make it the only running indicator left,
+  which is why its colours changed too. See "The running dot" above.
+
+`Theme.dockTileRadius` and `Theme.dockTileInset` both stay: the press wash and
+the `+` tile shape themselves to the first, and the icon is still inset inside
+its 66px slot by the second. Putting the pane back, if anyone ever wants it, is
+one `Rectangle` in `DockItem.qml`.
 
 ### The hover lift moves the whole tile
 
@@ -287,8 +345,10 @@ the dock say which of several open apps you are actually in, at no cost in ink.
 
 The KDE version had to lift **the icon only** and leave the tile still, because
 moving the tile dragged Plasma's highlight artwork off the dock's border. That
-constraint does not exist here either, so the whole tile lifts — background,
-border and icon together — which is what the CSS actually says.
+constraint does not exist here either, so the whole tile lifts — which, since the
+tile stopped painting a background on 2026-09-04, is the icon and the press wash.
+There is no artwork left that could be dragged off anything, so this cannot come
+back.
 
 The mouse area does **not** move with it. If it followed the lift, the pointer
 would leave it the instant the tile moved, the tile would drop, and the whole
@@ -368,8 +428,9 @@ fails if one appears. The V2 artboard's colour tokens map onto ours like this:
 | `--text-3` (tertiary ink) | `Theme.inkMute` | The `+` and its dashed outline. |
 | `--border-2` (stronger rule) | `Theme.lineStrong` | The separator before the `+`. |
 | the slab's translucent fill | `Theme.panel` | Solid — see "No glass". |
-| the tile's faint fill | `Theme.surfaceAlt` | A slightly recessed surface reads as a tile on both Ice and Midnight. |
-| the tile's 1px border | `Theme.line` | |
+| the tile's faint fill | *(not drawn)* | Removed 2026-09-04 — see "No box around the icon". It was `Theme.surfaceAlt`. |
+| the tile's 1px border | *(not drawn)* | Removed with it. It was `Theme.line`. |
+| `--text-3` again | `Theme.inkMute` | The running dot of an app that is open but not focused. |
 
 **No new colour role was needed**, so `Ice.qml` and `Midnight.qml` are untouched.
 What *was* added to `Theme.qml` is a block of dock geometry (`dockTileSize`,

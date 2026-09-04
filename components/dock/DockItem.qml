@@ -1,15 +1,20 @@
 // SPDX-FileCopyrightText: 2026 Stone Harbor Entertainment
 // SPDX-License-Identifier: Apache-2.0
 // =============================================================================
-// DockItem — one app in the dock: its tile, its icon, and its running dots
+// DockItem — one app in the dock: its icon, and its running dots
 // =============================================================================
 //
-//        ┌────────┐            ┌────────┐   <- hovered: the whole tile rises
-//        │        │            │  ICON  │      4px and grows to 108%, over
-//        │  ICON  │            │        │      120ms on the design's curve
-//        │        │            └────────┘
-//        └────────┘                ●         <- running: a centred dot, in
-//            ●                                  the accent colour
+//                                  ICON     <- hovered: the icon rises 6px and
+//                                              grows to 108%, over 120ms on
+//          ICON                              the design's curve
+//                                    ●
+//            ●                             <- running: a centred dot. Accent
+//                                             if it is the app you are in,
+//                                             quiet ink if it is merely open.
+//
+// THERE IS NO BOX AROUND THE ICON. Look for "THERE IS NO TILE SURFACE" below
+// before you add one back — that is a decision Royce made at the bench on
+// 2026-09-04, not something nobody got round to.
 //
 // THE RUNNING DOT, AND WHY IT IS FINALLY RIGHT
 //   The design has always asked for a small round mark, centred, sitting just
@@ -46,8 +51,10 @@
 //   translateY(-4px) scale(1.08) over --dur-fast on --ease-out. The KDE version
 //   had to lift the ICON ONLY and leave the tile still, because moving the tile
 //   dragged Plasma's highlight artwork off the dock's border. That constraint
-//   does not exist here either, so the WHOLE TILE lifts — background, border and
-//   icon together — which is what the CSS actually says.
+//   does not exist here either, so the whole `tile` Item lifts — which since the
+//   surface was removed on 2026-09-04 means the icon and the press wash, and is
+//   still what the CSS says. There is no artwork left that could be dragged
+//   anywhere, so this can never come back.
 //
 // WHAT A CLICK DOES
 //   nothing running    -> launch the app
@@ -226,18 +233,27 @@ Item {
             }
         }
 
-        // The tile's own surface. The design paints a translucent pane with a
-        // blur behind it; this shell does not do glass — the top bar dropped it
-        // for the same reason (BarItem.qml, and the Plasma theme's "Glass
-        // removed" note). A recessed solid surface reads the same on Ice and
-        // survives being over a busy wallpaper.
-        Rectangle {
-            anchors.fill: parent
-            radius: Theme.dockTileRadius
-            color: Theme.surfaceAlt
-            border.width: Theme.hairline
-            border.color: Theme.line
-        }
+        // THERE IS NO TILE SURFACE. THIS IS DELIBERATE — 2026-09-04.
+        //   Until today each tile painted its own recessed pane: Theme.surfaceAlt
+        //   with a hairline of Theme.line around it, straight off the V2
+        //   artboard. On the bench, on a 55" screen, that read as a row of
+        //   little boxes with icons trapped inside them rather than as a row of
+        //   icons — six visible outlines competing with the six pieces of
+        //   artwork they were supposed to be framing, and the dock's own slab
+        //   already drawing the only frame the group needs. Royce called it and
+        //   he is right: "remove the clear borders around the apps in the dock".
+        //
+        //   So the icon sits on the slab, and the slab is the box. This is what
+        //   every dock people already use does — macOS, the GNOME dash, Latte —
+        //   for the same reason: an app icon is artwork somebody designed to be
+        //   looked at, and a second outline around it is noise.
+        //
+        //   NOTHING WAS LOST. The tile still lifts and grows on hover, still
+        //   flashes on press (below), and still carries its running dot; those
+        //   are the three things the surface was NOT doing. And this is a
+        //   subtraction, not a new opinion — the tile's radius token stays
+        //   because the press wash and the "+" tile still shape themselves to
+        //   it, so putting the surface back is one Rectangle.
 
         // Pressed feedback. The design has none — a web mock rarely does — but
         // a dock that does not acknowledge the mouse going down feels broken.
@@ -294,15 +310,19 @@ Item {
                 width: Theme.dockDotSize
                 height: Theme.dockDotSize
                 radius: Theme.dockDotSize / 2
-                color: Theme.accent
 
-                // Focused app: the dot is at full strength. Running but not
-                // focused: quieter. The two numbers are the ones the Plasma
-                // theme used for its `focus` and `normal` states, kept so the
-                // two docks say the same thing while both exist.
-                opacity: root.active
-                    ? Theme.dockDotOpacityActive
-                    : Theme.dockDotOpacity
+                // Focused app: the accent. Open but not focused: the quiet ink.
+                //
+                // These used to be ONE colour at two opacities (0.55 and 0.8,
+                // the Plasma theme's numbers). That worked while the dot had a
+                // slab-bordered tile above it doing half the talking. With the
+                // tiles gone the dot is the whole message, and a 55%-opaque
+                // accent dot on Ice's near-white panel measures 1.9:1 — a mark
+                // you cannot see from a sofa. Both states are solid now and the
+                // hue carries the difference; the arithmetic, and the contrast
+                // each state lands at on each theme, is in Theme.qml where the
+                // two tokens used to be.
+                color: root.active ? Theme.accent : Theme.inkMute
             }
         }
     }
