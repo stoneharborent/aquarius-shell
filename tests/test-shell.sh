@@ -842,7 +842,7 @@ else
 fi
 
 aq_login_extras=(
-    'aquarius-creator-apps --first-run'
+    'aquarius-welcome --first-run'
 )
 
 for aq_login_extra in "${aq_login_extras[@]}"; do

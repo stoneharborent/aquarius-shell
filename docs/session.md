@@ -545,18 +545,27 @@ three places:
 session name that means "GNOME and ours", so `OnlyShowIn=` cannot be used to
 make a single `.desktop` file cover everything.
 
-### The one entry there is so far: the creator apps window
+### The one entry there is so far: the welcome
 
-On the first login, AquariusOS opens **"Your creator apps"** — a window that
-offers the studio apps (OBS, Kdenlive, Blender and friends) and installs the
-ones you tick. The command is:
+On the first login, AquariusOS opens the **Aquarius welcome** — a short flow
+that asks how you want the keyboard to work, then opens **"Your creator apps"**
+(the window that offers the studio apps — OBS, Kdenlive, Blender and friends —
+and installs the ones you tick) as its second step, then says goodbye. The
+command is:
 
 ```bash
-/usr/libexec/aquarius-creator-apps --first-run
+/usr/libexec/aquarius-welcome --first-run
 ```
 
-`--first-run` is what makes it happen only once. The window looks for
-`~/.config/aquarius/creator-apps-seen` and returns silently if that file is
+> **This changed on 2026-09-04.** It used to be the creator apps window on its
+> own, started as `/usr/libexec/aquarius-creator-apps --first-run`. The welcome
+> replaced it as the thing that starts at login; the chooser is still an
+> ordinary app you can open any time ("Aquarius Apps" in the app grid), it is
+> just no longer started by these files. The AquariusOS copies are the
+> authoritative ones — see "Which copy of these files actually ships" below.
+
+`--first-run` is what makes it happen only once. The welcome looks for
+`~/.config/aquarius/welcome-seen` and returns silently if that file is
 already there, so the line runs at every login and does nothing at all on all
 but the first.
 
@@ -566,8 +575,8 @@ program's benefit — the window opens in well under a second — it is so the
 desktop has settled and the person is looking at their computer rather than at
 a login screen when it appears.
 
-Both session files also guard the line with `[ -x /usr/libexec/aquarius-creator-apps ]`.
-That guard matters here more than it would in the image: the chooser belongs to
+Both session files also guard the line with `[ -x /usr/libexec/aquarius-welcome ]`.
+That guard matters here more than it would in the image: the welcome belongs to
 AquariusOS, not to this repository, so on a plain Fedora machine running the
 session from a clone the program simply is not there, and the session has to
 start normally anyway.

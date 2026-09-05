@@ -113,8 +113,14 @@ layout {
 spawn-sh-at-startup "qs 2>&1 | sed -u 's/^/[shell] /' >> \"${AQ_LOG:-/dev/null}\""
 
 // -----------------------------------------------------------------------------
-// The creator apps window, once, on the first login
+// The welcome, once, on the first login
 // -----------------------------------------------------------------------------
+// ⚠️ THIS USED TO BE THE CREATOR APPS WINDOW ON ITS OWN, UNTIL 2026-09-04. Now
+// the first login opens /usr/libexec/aquarius-welcome, which asks how the
+// keyboard should work, then opens the creator apps window itself as its second
+// step, then says goodbye. The chooser is still an ordinary app — "Aquarius
+// Apps" in the app grid — it simply is not what starts at login any more.
+//
 // This is the niri twin of section 4 of ../labwc/autostart. Read that one for
 // the long version; the short version is:
 //
@@ -126,22 +132,24 @@ spawn-sh-at-startup "qs 2>&1 | sed -u 's/^/[shell] /' >> \"${AQ_LOG:-/dev/null}\
 // .desktop file for GNOME, the labwc autostart, and this line. CHANGE ONE,
 // CHANGE ALL THREE.
 //
-// WHAT IT OPENS. "Your creator apps" — the window that offers the studio apps
-// (OBS, Kdenlive, Blender and friends) and installs the ones you tick. It is
-// part of AquariusOS, not of this repository. That is why the `[ -x ... ]`
-// guard is not optional: running this session from a clone on plain Fedora,
-// there is no such program, and the session must still start normally.
+// WHAT IT OPENS. The Aquarius welcome: a short first-login flow that asks about
+// the keyboard, then opens "Your creator apps" — the window that offers the
+// studio apps (OBS, Kdenlive, Blender and friends) and installs the ones you
+// tick — as its second step, then finishes. It is part of AquariusOS, not of
+// this repository. That is why the `[ -x ... ]` guard is not optional: running
+// this session from a clone on plain Fedora, there is no such program, and the
+// session must still start normally.
 //
-// --first-run is what makes it "once". The window looks for
-// ~/.config/aquarius/creator-apps-seen and returns silently if it is there, so
-// this runs at every login and does nothing at all on all but the first.
+// --first-run is what makes it "once". The welcome looks for
+// ~/.config/aquarius/welcome-seen and returns silently if it is there, so this
+// runs at every login and does nothing at all on all but the first.
 //
 // The ten-second wait matches the X-GNOME-Autostart-Delay in the GNOME copy.
 // It is not for us — the window opens in well under a second — it is so the
 // desktop has settled and the person is looking at their computer rather than
 // at a login screen when it appears.
 //
-// Rule 2 at the top still holds. /usr/libexec/aquarius-creator-apps is not a
+// Rule 2 at the top still holds. /usr/libexec/aquarius-welcome is not a
 // machine-specific path: it is a fixed location inside AquariusOS, the same on
 // every machine, and it is not the shell's own location — which is the thing
 // rule 2 is actually about.
@@ -149,7 +157,11 @@ spawn-sh-at-startup "qs 2>&1 | sed -u 's/^/[shell] /' >> \"${AQ_LOG:-/dev/null}\
 // `spawn-sh-at-startup` rather than `spawn-at-startup` for the same reason as
 // the line above: it runs the string through `sh`, which is what allows the
 // test, the delay and the redirect to be written at all.
-spawn-sh-at-startup "if [ -x /usr/libexec/aquarius-creator-apps ]; then (sleep 10; /usr/libexec/aquarius-creator-apps --first-run) >> \"${AQ_LOG:-/dev/null}\" 2>&1; fi"
+//
+// The AquariusOS copy of this fact is the authoritative one — it lives in
+// system_files/usr/share/aquarius/labwc/autostart in the os-image repo. Keep
+// the command below matching it exactly.
+spawn-sh-at-startup "if [ -x /usr/libexec/aquarius-welcome ]; then (sleep 10; /usr/libexec/aquarius-welcome --first-run) >> \"${AQ_LOG:-/dev/null}\" 2>&1; fi"
 
 // -----------------------------------------------------------------------------
 // Session chrome
