@@ -105,6 +105,40 @@ jobs:
             dnf install -y quickshell
           }
 
+      # ⚠️ FEDORA DOES NOT PUT QT 6'S TOOLS ON THE PATH, and this step is here
+      # because of that. `qt6-qtdeclarative-devel` installs `qmllint` into a
+      # VERSIONED folder — /usr/lib64/qt6/bin — precisely so that a Qt 5 and a
+      # Qt 6 copy of the same tool can be installed side by side without one
+      # shadowing the other. Nothing then adds that folder to the PATH.
+      #
+      # The symptom, the first time this workflow ever ran (2026-09-05): every
+      # package installed cleanly, and the run died with
+      #
+      #     xargs: qmllint: No such file or directory
+      #
+      # which reads like a missing package and is not one.
+      #
+      # The folder is asked for rather than typed, because the path has a
+      # version and an architecture in it and both will move.
+      - name: Put Qt 6's own tools on the PATH
+        run: |
+          set -euo pipefail
+          qt_bins=""
+          if command -v qmllint > /dev/null 2>&1; then
+            qt_bins="$(dirname "$(command -v qmllint)")"
+          else
+            qt_bins="$(rpm -ql qt6-qtdeclarative-devel \
+              | grep -m1 -E '/bin/qmllint$' \
+              | xargs -r dirname || true)"
+          fi
+          if [ -z "${qt_bins}" ]; then
+            echo "::error::qmllint is not in qt6-qtdeclarative-devel any more."
+            echo "          Find where it went: rpm -ql qt6-qtdeclarative-devel | grep qmllint"
+            exit 1
+          fi
+          echo "qmllint lives in ${qt_bins}"
+          echo "${qt_bins}" >> "${GITHUB_PATH}"
+
       - name: Get the code
         uses: actions/checkout@v4
 
