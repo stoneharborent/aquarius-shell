@@ -60,6 +60,15 @@ Item {
     readonly property bool clickable: root.store && root.notification
         && root.store.defaultAction(root.notification) !== null
 
+    // 0-100 while the sender is reporting a job, -1 the rest of the time. The
+    // panel shows the same bar as the toast, for the same reason the two look
+    // alike everywhere else: this is one object at two moments in its life, and
+    // opening the panel to check on a conversion should show you what the toast
+    // was showing before you looked away from it.
+    readonly property int percent: (root.store && root.notification)
+        ? root.store.progressOf(root.notification)
+        : -1
+
     implicitHeight: content.implicitHeight + Theme.sp3 * 2
 
     // ---- the slab -----------------------------------------------------------
@@ -218,6 +227,14 @@ Item {
                     visible: text.length > 0
                 }
             }
+        }
+
+        // ---- the bar, when the sender is reporting a job ----------------------
+        ProgressBar {
+            width: content.width
+            percent: root.percent
+            fill: root.critical ? Theme.danger : Theme.accent
+            visible: root.percent >= 0
         }
 
         // ---- the buttons the application attached ----------------------------

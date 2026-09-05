@@ -52,6 +52,7 @@ import Quickshell
 import Quickshell.Services.Notifications
 
 import "../../services"
+import "progress.js" as Progress
 
 Scope {
     id: root
@@ -273,11 +274,48 @@ Scope {
         return !FocusState.enabled;
     }
 
+    // =========================================================================
+    // Progress — a notification that is reporting a job, not announcing news
+    // =========================================================================
+    // The arithmetic and the paranoia both live in progress.js, so that they can
+    // be RUN by node on a Mac (tests/notifications-js-tests.mjs) rather than
+    // only read. These three are the doorway QML uses.
+
+    //: -1 when a notification carries no usable progress; otherwise 0 to 100.
+    function progressOf(n): int {
+        if (!n)
+            return Progress.NO_PROGRESS;
+        return Progress.percentOf(n.hints);
+    }
+
+    function hasProgress(n): bool {
+        return root.progressOf(n) !== Progress.NO_PROGRESS;
+    }
+
+    // The name a notification asks to be replaced under, or "".
+    function progressTag(n): string {
+        if (!n)
+            return "";
+        return Progress.tagOf(n.hints);
+    }
+
     // How long this notification's toast should live, in milliseconds.
     // 0 means "until somebody deals with it".
     function toastTimeout(n): int {
         // A critical notification is never taken off the screen by a clock.
         if (n.urgency === NotificationUrgency.Critical)
+            return 0;
+
+        // Neither is a job that is still running. "Make Editor-Ready" converting
+        // a card of footage takes twenty minutes; a progress bar that vanished
+        // after five seconds of it is worse than no progress bar, because the
+        // person is then left thinking the work stopped. The same notification
+        // at 100% is finished news and expires like anything else.
+        //
+        // Note the shape of this: the toast holds because the notification SAYS
+        // it is mid-job, not because we recognise which application sent it.
+        // Anything on the machine that reports progress gets the same treatment.
+        if (Progress.isRunning(n.hints))
             return 0;
 
         const requested = n.expireTimeout;
@@ -298,6 +336,51 @@ Scope {
 
     function pushToast(n): void {
         const next = root.copyOf(root.toasts);
+
+        // ---- "replace the last one like me" ---------------------------------
+        // Most applications that redraw a notification do it with `replaces_id`,
+        // which never reaches this function at all: the server updates the
+        // notification object in place and the toast already on screen changes
+        // its own text. Some ask by NAME instead, with the
+        // x-canonical-private-synchronous hint — a volume popup, a brightness
+        // popup, a job reporting itself. Honouring that is the difference
+        // between one toast that counts up and fifteen stacked ones.
+        //
+        // An untagged notification never replaces anything: `progressTag`
+        // returns "" and progress.js refuses to match on it. Without that rule
+        // every ordinary message on the machine would replace every other one.
+        const tag = root.progressTag(n);
+        if (tag) {
+            const tags = [];
+            for (let i = 0; i < next.length; ++i)
+                tags.push(root.progressTag(next[i]));
+
+            const at = Progress.replacesIndex(tags, tag);
+            if (at !== -1) {
+                const replaced = next[at];
+                next[at] = n;
+                root.toasts = next;
+
+                // The one it replaced is GONE — not moved to the panel.
+                //
+                // This is the one place the store closes a notification the
+                // person did not close, and it needs its reason in writing. The
+                // rule everywhere else is "silenced, never dropped". But
+                // `x-canonical-private-synchronous` does not mean "quieter", it
+                // means REPLACES: the sender is redrawing one message, and
+                // keeping the old drafts would fill the panel with a trail of
+                // "30%", "60%", "90%" — the same stack the hint exists to
+                // prevent, just moved somewhere less visible.
+                //
+                // Done AFTER root.toasts is assigned, so the rebuild that
+                // dismissing sets off reads the finished list rather than the
+                // half-edited one.
+                if (replaced !== n)
+                    replaced.dismiss();
+                return;
+            }
+        }
+
         next.push(n);
 
         const overflow = [];

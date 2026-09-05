@@ -129,6 +129,9 @@ for aq_file in \
     components/notifications/NotificationRow.qml \
     components/notifications/ToastLayer.qml \
     components/notifications/Toast.qml \
+    components/notifications/ProgressBar.qml \
+    components/notifications/progress.js \
+    tests/notifications-js-tests.mjs \
     components/notifications/IconChip.qml \
     components/notifications/ActionButtons.qml \
     components/notifications/InlineReply.qml \
@@ -1062,17 +1065,30 @@ echo "=== 23. the search palette's logic actually runs ==="
 # that matters most — every string the calculator must REFUSE, since it is fed
 # whatever a person types into a box holding the whole desktop's keyboard.
 
+#
+# components/notifications/progress.js joined them on 2026-09-04, when the
+# "Make Editor-Ready" progress bar arrived. It reads two hints that come over
+# D-Bus from ANY application on the machine, so most of what it does is decide
+# what to make of rubbish — the sort of thing that must be executed to be
+# believed.
+
 if command -v node > /dev/null 2>&1; then
     if node tests/search-js-tests.mjs; then
         pass "the search matcher and calculator behave"
     else
         fail "the search logic tests failed (listed above)."
     fi
+
+    if node tests/notifications-js-tests.mjs; then
+        pass "the notification progress logic behaves"
+    else
+        fail "the notification progress tests failed (listed above)."
+    fi
 else
-    echo "  SKIP node is not installed; the search logic tests cannot run."
-    echo "       This is the only test in this repo that executes real code —"
-    echo "       install node and run it before trusting a change to fuzzy.js"
-    echo "       or calc.js."
+    echo "  SKIP node is not installed; the JavaScript logic tests cannot run."
+    echo "       These are the only tests in this repo that execute real code —"
+    echo "       install node and run them before trusting a change to fuzzy.js,"
+    echo "       calc.js or components/notifications/progress.js."
 fi
 
 # ------------------------------------------------------------------------------
@@ -1085,7 +1101,8 @@ echo "=== 24. the search JavaScript stays plain JavaScript ==="
 # check is what stops that from happening silently.
 
 aq_js_ok=1
-for aq_js in components/search/fuzzy.js components/search/calc.js; do
+for aq_js in components/search/fuzzy.js components/search/calc.js \
+             components/notifications/progress.js; do
     if ! grep -q '^\.pragma library' "${aq_js}"; then
         fail "${aq_js} is missing its '.pragma library' line." \
              "Without it QML gives every importer its own copy, and the" \
@@ -1108,22 +1125,22 @@ for aq_js in components/search/fuzzy.js components/search/calc.js; do
 done
 
 if [ "${aq_js_ok}" -eq 1 ]; then
-    pass "fuzzy.js and calc.js are pure, testable JavaScript"
+    pass "fuzzy.js, calc.js and progress.js are pure, testable JavaScript"
 fi
 
 # The brackets in the JavaScript, for the case where node is not installed and
 # section 12 skipped. Same idea as section 2, same reason.
-if python3 - components/search <<'PYTHON'
+if python3 - components/search components/notifications <<'PYTHON'
 import pathlib
 import sys
 
-root = pathlib.Path(sys.argv[1])
+roots = [pathlib.Path(a) for a in sys.argv[1:]]
 bad = 0
 
 pairs = {'}': '{', ')': '(', ']': '['}
 openers = set(pairs.values())
 
-for path in sorted(root.rglob('*.js')):
+for path in sorted(q for r in roots for q in r.rglob('*.js')):
     text = path.read_text(encoding='utf-8')
     out = []
     i = 0
@@ -1444,8 +1461,10 @@ echo "=== 28. every enum namespace is one the shipped build actually has ==="
 # Run the probe.
 
 # Names that come from this repo. Singletons in theme/ and services/, and the
-# two .pragma library JavaScript files.
-aq_ns_ours="Theme FocusState Overlays SystemAppearance Fuzzy Calc GreeterState"
+# three .pragma library JavaScript files (Fuzzy, Calc, Progress) — those are
+# `import "x.js" as Name`, so they are our own code and cannot be missing from a
+# Quickshell build.
+aq_ns_ours="Theme FocusState Overlays SystemAppearance Fuzzy Calc Progress GreeterState"
 
 # Names Qt itself provides — globals, value types and attached types.
 aq_ns_qt="Qt Math JSON Date Object Locale Accessible Component Keys Easing Font

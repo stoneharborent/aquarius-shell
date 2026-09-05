@@ -29,6 +29,8 @@ you open by clicking the clock.
 | `components/notifications/NotificationStore.qml` | **The daemon.** The only file that talks to the notification protocol. Grouping, Focus policy, toast queue, clear-all. |
 | `components/notifications/ToastLayer.qml` | The top-right window the arriving popups stack up in. |
 | `components/notifications/Toast.qml` | One popup. |
+| `components/notifications/ProgressBar.qml` | The filling bar inside a notification that is reporting a job. |
+| `components/notifications/progress.js` | Plain JavaScript: reads the `value` and `x-canonical-private-synchronous` hints, and decides what to make of the rubbish an application may send instead. |
 | `components/notifications/NotificationPanelWindow.qml` | The full-screen transparent window that positions the panel and catches the click-away. |
 | `components/notifications/NotificationsPanel.qml` | The 350px panel from the design: header, list, Focus banner, big clock, Focus pill. |
 | `components/notifications/NotificationGroup.qml` | One application's notifications, folded together. |
@@ -43,6 +45,11 @@ one binding), `components/bar/BarClock.qml` (two accessibility lines, one commen
 block), `components/bar/BarItem.qml` (an `active` property), `theme/Theme.qml`
 (new tokens), `theme/Ice.qml` + `theme/Midnight.qml` (one new colour role each),
 `services/qmldir`, `tests/test-shell.sh` (three new checks).
+
+Added 2026-09-04, for the progress bar: `components/notifications/progress.js`,
+`components/notifications/ProgressBar.qml`, `tests/notifications-js-tests.mjs`,
+plus two tokens in `theme/Theme.qml` and the bar itself in `Toast.qml` and
+`NotificationRow.qml`.
 
 ---
 
@@ -157,6 +164,75 @@ clamped to 2–30 seconds, defaulting to 5.
 The clamp is also a hedge against a documentation discrepancy — see the
 **unproven** list below.
 
+**One more exception, added 2026-09-04: a job that is still running.** If a
+notification carries a `value` hint below 100, its toast has no clock at all. It
+stays until the sender replaces it with a finished one, or the person sweeps it
+away.
+
+That rule is written against what the notification SAYS, not against which
+application sent it. Anything on this machine that reports progress gets it.
+The case it was written for is `aq-ingest` converting a card of footage, which
+takes twenty minutes; a progress bar that vanished after five seconds of that is
+worse than no progress bar, because you are then left thinking the work stopped.
+
+### The progress bar
+
+An application can say how far along it is by attaching hints to its
+notification. Two matter here, and both are read in
+`components/notifications/progress.js`:
+
+| Hint | What it means |
+|---|---|
+| `value` | An integer 0–100. We draw it as a bar under the body text. |
+| `x-canonical-private-synchronous` | A name. "This message replaces the last one with the same name" — how a volume popup stays one popup. |
+
+Both are the freedesktop standard ones:
+<https://specifications.freedesktop.org/notification-spec/latest/hints.html>
+
+**Why the logic is a `.js` file.** These hints arrive over D-Bus from any
+application on the machine, so most of what that file does is decide what to make
+of a value that is a string, a boolean, an array, `NaN`, or 140. That is exactly
+the kind of code that has to be **executed** to be believed, and QML cannot be
+executed on the Mac this repo is written on. `progress.js` is plain JavaScript
+for the same reason `fuzzy.js` and `calc.js` are, and
+`tests/notifications-js-tests.mjs` runs 42 assertions against it before anything
+reaches Linux. `NotificationStore.qml` only wraps it:
+`progressOf(n)`, `hasProgress(n)`, `progressTag(n)`.
+
+**Two rules worth stating out loud.**
+
+* An out-of-range value is **clamped, not rejected**. A job that reports 104% has
+  miscounted its own work, which is not a reason to take its bar away one second
+  before it finishes.
+* An **untagged** notification replaces nothing. If an empty tag matched an empty
+  tag, every ordinary message on the machine would replace every other one and
+  the desktop would only ever show you the most recent thing that happened. That
+  is the single most important assertion in the JavaScript tests.
+
+A notification replaced by name is **closed**, not moved to the panel — the one
+place in this shell that closes something the person did not close. The rule
+everywhere else is "silenced, never dropped", but this hint does not mean
+"quieter", it means *replaces*: keeping the old drafts would fill the panel with
+a trail of "30%", "60%", "90%", which is the stack the hint exists to prevent,
+just moved somewhere less visible.
+
+Note that our own `aq-ingest` does not take this path at all. It redraws with
+`replaces_id`, which the server handles by updating the notification object in
+place — the toast already on screen changes its own text and never reaches
+`pushToast`. The tag is honoured for senders that only ask by name.
+
+**Where the bar is drawn.** In the toast and in the panel row, both — a
+notification is one object at two moments in its life, and opening the panel to
+check on a conversion should show what the toast was showing before you looked
+away. There is no number printed on the bar: the percentage is already in the
+body text, because that is how a desktop with no bar (GNOME Shell ignores `value`
+outright) shows the same information, and printing it twice looks like a mistake.
+
+**Why it animates.** The sender redraws its notification about once a second, so
+without the `Behavior on width` the bar would jump a second's worth of work at a
+time — which reads as stuttering, not as progress. It spends that second walking
+there instead.
+
 ### Capabilities we advertise, and what each means
 
 Quickshell defaults nearly all of these to `false`, so every `true` is a promise
@@ -233,6 +309,16 @@ scale.
 Plus four plain measurements: `notifPanelWidth`, `notifChipSize`, `notifIconSize`,
 `notifGroupIconSize`, and one judgement call, `notifMaxListHeight: 420` (not a
 design number — the artboard draws three rows and stops).
+
+Two more arrived on 2026-09-04 with the progress bar: **`notifBarHeight`** and
+**`notifBarTopGap`**. The artboard draws no such bar, so these are not measured
+off it — they are the Quick Settings slider's track (8px, fully rounded), which
+is the only other horizontal track in this shell and therefore the thing the eye
+compares it to. They are named separately rather than reaching for
+`qsTrackHeight`, because "these two agree today" is not a reason for one to
+follow the other if the volume slider is ever redesigned. No new **colour** role
+was needed: the track is `Theme.trackIdle` and the fill is `Theme.accent`, both
+of which already exist in Ice and Midnight.
 
 ### The missing drop shadow
 
@@ -397,6 +483,42 @@ notify-send "Markup" "<b>bold</b>, <i>italic</i><img src=\"https://example.com/x
 
 # Timeout, for the units question in the unproven list above.
 notify-send -t 12000 "Twelve" "Should stay up for twelve seconds."
+```
+
+### The progress bar
+
+```bash
+# A bar, at 42%, that must NOT go away on its own.
+notify-send -t 0 -h int:value:42 "Converting" "clip.MP4 · 42% · about 2 min left"
+
+# One notification that fills up, rather than five stacked ones. Watch the bar
+# walk between the steps rather than jumping.
+ID=$(notify-send -p -t 0 -h int:value:0 "Converting" "clip.MP4 · 0%")
+for P in 20 45 70 90; do
+    sleep 1
+    notify-send -r "$ID" -t 0 -h int:value:$P "Converting" "clip.MP4 · $P%"
+done
+sleep 1
+notify-send -r "$ID" "clip.MP4 is editor-ready" "The fixed copy is in EditorReady." \
+    -A "open=Show in Files"
+# Expect: ONE toast throughout. The bar fills, then disappears when the final
+# message replaces it, and that last one goes away on its own after five seconds.
+
+# Replace-by-name, for a sender that does not keep the id. Expect one toast that
+# counts up, not three.
+for P in 30 60 90; do
+    notify-send -h int:value:$P \
+        -h string:x-canonical-private-synchronous:demo "Backing up" "$P%"
+    sleep 1
+done
+
+# Rubbish, which must leave NO bar and still show the message.
+notify-send -h string:value:nearly "No bar" "The value hint is not a number."
+
+# And the real thing, if you have a camera clip on the machine:
+#   right-click it in Files -> Make Editor-Ready
+# Expect one notification that fills up with a percentage and a time left, then
+# a "clip.MP4 is editor-ready" with a "Show in Files" button.
 ```
 
 ### The Focus tests

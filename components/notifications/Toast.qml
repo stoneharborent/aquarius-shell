@@ -55,6 +55,11 @@ Item {
     readonly property bool clickable: root.store && root.notification
         && root.store.defaultAction(root.notification) !== null
 
+    // 0-100 while the sender is reporting a job, -1 the rest of the time.
+    readonly property int percent: (root.store && root.notification)
+        ? root.store.progressOf(root.notification)
+        : -1
+
     implicitHeight: content.implicitHeight + Theme.sp3 * 2
 
     // ---- how long it lives --------------------------------------------------
@@ -194,6 +199,16 @@ Item {
                     visible: text.length > 0
                 }
             }
+        }
+
+        // ---- the bar, when the sender is reporting a job ---------------------
+        // Nothing here when there is no `value` hint, which is almost every
+        // notification: `visible: false` on an Item in a Column takes no space.
+        ProgressBar {
+            width: content.width
+            percent: root.percent
+            fill: root.critical ? Theme.danger : Theme.accent
+            visible: root.percent >= 0
         }
 
         ActionButtons {

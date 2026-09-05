@@ -521,6 +521,22 @@ Singleton {
     readonly property int notifIconSize: root.px(19)         // the glyph inside the chip
     readonly property int notifGroupIconSize: root.px(20)    // the app icon on a group header
 
+    // The progress bar inside a notification that is reporting a running job —
+    // "Make Editor-Ready" converting a card of footage is the one that asked for
+    // it (Royce, 2026-09-04).
+    //
+    // The artboard draws no such bar, so these are not measured off it. They are
+    // the Quick Settings slider's track, which is the only other horizontal
+    // track in this shell and therefore the thing the eye compares it to: same
+    // 8px height, same fully-rounded ends. Naming them separately rather than
+    // reaching for `qsTrackHeight` is deliberate — a notification bar and a
+    // volume slider agreeing today is not a reason for one to follow the other
+    // if the volume slider is ever redesigned.
+    //
+    // Its corner radius is not a token: a fully-rounded track is `height / 2`,
+    // which follows the height on its own and cannot fall out of step with it.
+    readonly property int notifBarHeight: root.px(8)
+
     // How tall the scrolling list of notifications may get before it scrolls
     // instead of growing. Not a design number — the artboard draws three rows
     // and stops. 420 was twenty rows' worth of a short list, which kept the
