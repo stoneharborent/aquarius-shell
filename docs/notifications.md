@@ -216,10 +216,14 @@ everywhere else is "silenced, never dropped", but this hint does not mean
 a trail of "30%", "60%", "90%", which is the stack the hint exists to prevent,
 just moved somewhere less visible.
 
-Note that our own `aq-ingest` does not take this path at all. It redraws with
+Note that our own `aq-ingest` does not normally take this path. It redraws with
 `replaces_id`, which the server handles by updating the notification object in
 place — the toast already on screen changes its own text and never reaches
-`pushToast`. The tag is honoured for senders that only ask by name.
+`pushToast`. It tags its messages anyway, as a fallback: if the notification
+daemon was not answering when the run started, it never gets an id back, every
+redraw arrives as a new notification, and the tag is then the only thing keeping
+them down to one toast. The tag is also honoured for any sender that only asks
+by name.
 
 **Where the bar is drawn.** In the toast and in the panel row, both — a
 notification is one object at two moments in its life, and opening the panel to
