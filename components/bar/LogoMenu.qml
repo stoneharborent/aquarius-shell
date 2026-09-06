@@ -15,6 +15,7 @@
 //     │  System Settings          │   -> Settings
 //     │  Check for Update         │   -> /usr/libexec/aquarius-updater
 //     ├────────────────────────────┤
+//     │  Lock Screen              │   -> the shell's own lock screen
 //     │  Log Out                  │   -> loginctl terminate-session
 //     │  Sleep                    │   -> systemctl suspend
 //     │  Restart                  │   -> systemctl reboot        (asks twice)
@@ -63,6 +64,10 @@
 //   binding); this menu does not invent a second way to end a session, it uses
 //   the one that is already here.
 //
+//   Lock Screen is the exception that proves the rule: it runs nothing at all.
+//   The lock screen is part of this shell, so the row simply calls
+//   LockState.lock() and the screens are covered on the next frame.
+//
 //   Log Out mirrors the palette exactly: `loginctl terminate-session <id>`, the
 //   same thing Super+Shift+E does by another road, using $XDG_SESSION_ID. logind
 //   lets the active-session user suspend, reboot and power off without a password
@@ -79,6 +84,7 @@ import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
 
+import "../../lock"
 import "../../services"
 import "../../theme"
 
@@ -129,6 +135,11 @@ Scope {
         else
             out.push({ id: "update", title: qsTr("Updates unavailable"), disabled: true });
         out.push({ separator: true });
+        // Above Log Out, and with NO confirm step: locking the screen is the
+        // one item down here that cannot cost you anything. Asking "Confirm?"
+        // before locking a computer would be asking somebody who is already
+        // standing up to sit back down.
+        out.push({ id: "lock",     title: qsTr("Lock Screen") });
         out.push({ id: "logout",   title: qsTr("Log Out"),   confirm: true });
         out.push({ id: "sleep",    title: qsTr("Sleep") });
         out.push({ id: "restart",  title: qsTr("Restart"),   confirm: true });
@@ -188,6 +199,12 @@ Scope {
         } else if (id === "update") {
             if (root.updaterAvailable)
                 Quickshell.execDetached([root.updaterPath]);
+        } else if (id === "lock") {
+            // Not a command and not a launch: the lock screen is part of this
+            // same shell (shell.qml holds a LockLayer), so this is one object
+            // telling another to do something. That is why it is instant. See
+            // lock/LockLayer.qml.
+            LockState.lock();
         } else if (id === "logout") {
             if (root.sessionId !== "")
                 Quickshell.execDetached(["loginctl", "terminate-session", root.sessionId]);

@@ -22,6 +22,7 @@ import "components/bar"
 import "components/dock"
 import "components/notifications"
 import "components/search"
+import "lock"
 
 ShellRoot {
     TopBar {
@@ -78,5 +79,19 @@ ShellRoot {
     // See docs/flow-search.md for the whole contract.
     FlowSearch {
         id: flowSearch
+    }
+
+    // The lock screen, and the watching that leads to it: the screen dims after
+    // five minutes, locks after ten, and goes dark after fifteen. Invisible
+    // until something asks for it — the Aquarius menu's "Lock Screen" row, or
+    // the compositor's Super+L binding through:
+    //
+    //     qs ipc call lock lock
+    //
+    // The one thing handed to it is how many notifications are waiting, so the
+    // calm state can say "3 notifications waiting" and nothing more. See
+    // docs/lock-screen.md.
+    LockLayer {
+        notificationCount: notifications.notificationCount
     }
 }
