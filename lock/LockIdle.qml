@@ -107,13 +107,26 @@ Scope {
         timeout: Theme.lockIdleOffSeconds
         respectInhibitors: true
 
+        // ⚠️ ONLY TURN THE SCREEN BACK ON IF WE TURNED IT OFF.
+        //
+        // Without this, the shell would run `wlopm --on` once at every login,
+        // because `isIdle` starts false and a QML property's change handler
+        // fires when it settles. That is a subprocess and a message to the
+        // compositor for no reason, at the busiest moment of the session — and
+        // on a machine where somebody had deliberately switched a monitor off,
+        // it would switch it back on as they logged in.
+        property bool weTurnedItOff: false
+
         onIsIdleChanged: {
             // Two words that have to be in separate list entries: this does not
             // run in a shell, so nothing would split "--off *" for us.
-            if (offWatch.isIdle)
+            if (offWatch.isIdle) {
+                offWatch.weTurnedItOff = true;
                 Quickshell.execDetached(["wlopm", "--off", "*"]);
-            else
+            } else if (offWatch.weTurnedItOff) {
+                offWatch.weTurnedItOff = false;
                 Quickshell.execDetached(["wlopm", "--on", "*"]);
+            }
         }
     }
 
