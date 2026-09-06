@@ -56,6 +56,8 @@ import QtQuick
 import Quickshell
 import Quickshell.Wayland
 
+import "../../services"
+
 QtObject {
     id: root
 
@@ -67,38 +69,19 @@ QtObject {
     readonly property var toplevels: ToplevelManager.toplevels.values
 
     // "org.gnome.Nautilus.desktop" and "org.gnome.Nautilus" and
-    // "ORG.GNOME.NAUTILUS" are all the same app. This is the form we compare.
+    // "ORG.GNOME.NAUTILUS" are all the same app, and working out which app a
+    // window belongs to is the same question the app switcher and the top bar
+    // ask. It is answered ONCE, in services/AppIdentity.qml — read its header
+    // before changing anything about matching. These two lines are here so the
+    // rest of this file reads the way it always did.
     function normaliseId(id: string): string {
-        if (!id)
-            return "";
-        let text = String(id);
-        if (text.toLowerCase().endsWith(".desktop"))
-            text = text.slice(0, -8);
-        return text.toLowerCase();
+        return AppIdentity.normaliseId(id);
     }
 
-    // Find the DesktopEntry for a name out of the pinned list. `byId` wants an
-    // exact id, and an id never carries the ".desktop" ending — quickshell
-    // builds it from the file's base name — so try the name as written first
-    // (in case somebody pinned an id), then with the ending removed, then fall
-    // back to the heuristic lookup.
+    // Find the DesktopEntry for a name out of the PINNED list, which is a
+    // different question from "what app is this window" — see AppIdentity.
     function pinnedEntry(id: string): var {
-        if (!id)
-            return null;
-        let text = String(id);
-
-        let entry = DesktopEntries.byId(text);
-        if (entry)
-            return entry;
-
-        if (text.toLowerCase().endsWith(".desktop")) {
-            text = text.slice(0, -8);
-            entry = DesktopEntries.byId(text);
-            if (entry)
-                return entry;
-        }
-
-        return DesktopEntries.heuristicLookup(text);
+        return AppIdentity.lookupPinned(id);
     }
 
     // The ordered tile list. See the header for the shape of each entry.
@@ -128,8 +111,8 @@ QtObject {
                 continue;
 
             const appId = window.appId || "";
-            const entry = appId === "" ? null : DesktopEntries.heuristicLookup(appId);
-            const key = root.normaliseId(entry ? entry.id : appId);
+            const entry = AppIdentity.lookup(appId);
+            const key = AppIdentity.keyFor(appId, entry);
 
             // A window with no appId and no entry has no identity we can group
             // or name. Compositors do report these during start-up. Skipping is

@@ -180,11 +180,8 @@ Item {
     // The app's human name. Falls back to tidying the appId, the same way the
     // top bar's ActiveAppName does, rather than showing a reverse-DNS string.
     readonly property string appName: {
-        if (root.entry && root.entry.name)
-            return root.entry.name;
-        if (root.appId !== "")
-            return root.tidyAppId(root.appId);
-        return qsTr("Unknown application");
+        const name = AppIdentity.displayName(root.entry, root.appId);
+        return name === "" ? qsTr("Unknown application") : name;
     }
 
     // Quickshell resolves an icon name against the icon theme Qt is using, so
@@ -193,26 +190,11 @@ Item {
     // rather than the missing-texture image — which is what lets the two-letter
     // fallback below know it is needed.
     // (https://quickshell.org/docs/v0.3.1/types/Quickshell/ - iconPath)
-    readonly property string iconSource: {
-        const name = root.entry && root.entry.icon ? root.entry.icon : root.appId;
-        if (!name)
-            return "";
-        return Quickshell.iconPath(name, true);
-    }
+    readonly property string iconSource: AppIdentity.iconPath(root.entry, root.appId)
 
     // The design draws two-letter placeholders in the tiles ("Fi", "St", "Kd"),
     // so when there is no icon we can fall back to exactly what it drew.
     readonly property string initials: root.appName.slice(0, 2)
-
-    // "org.gnome.Nautilus" -> "Nautilus". Only reached when the proper lookup
-    // already failed. Same routine as components/bar/ActiveAppName.qml.
-    function tidyAppId(id: string): string {
-        const pieces = id.split(".");
-        const last = pieces[pieces.length - 1];
-        if (last.length === 0)
-            return id;
-        return last.charAt(0).toUpperCase() + last.slice(1);
-    }
 
     // ---- what a click does ---------------------------------------------------
 
