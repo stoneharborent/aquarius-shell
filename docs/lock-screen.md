@@ -305,6 +305,49 @@ Nothing you had open is saved by that, so it is a last resort, not a habit.
 
 ---
 
+## What was checked before any of this was written
+
+Nothing here was taken from a blog post or from memory. Each line was read out of
+the exact version AquariusOS pins, and the version is named so that the next
+person can check the same thing after a bump.
+
+**Quickshell v0.3.1** (commit `1a4716c`, the tag `aquarius-os.env` pins), read in
+its own source:
+
+| What | Where it was read | What it says |
+|---|---|---|
+| `WlSessionLock` | `src/wayland/session_lock.hpp` | `locked` (read/write), `secure` (read-only — the compositor confirming every screen is covered), `surface` (a Component, and the default property). The header carries the warning this whole design is shaped around: if the lock dies while on, the screens stay covered and nothing can lift them. |
+| `WlSessionLockSurface` | same file | `screen`, `width`, `height`, `color` (**defaults to white** — ours sets `Theme.bg`), `visible`, `contentItem`. **There is no keyboard-focus property**, because the session-lock protocol grants input to the lock surfaces by definition. That is the opposite of layer-shell, where the login screen has to ask. |
+| `IdleMonitor` | `src/wayland/idle_notify/monitor.hpp` | `enabled`, `timeout` (**seconds** — `monitor.cpp` multiplies by 1000 for the protocol), `respectInhibitors` (defaults true), `isIdle`. |
+| …and what `respectInhibitors` really does | `src/wayland/idle_notify/proto.cpp` | true → `get_idle_notification`, which the compositor suppresses while an app holds an inhibitor. false → `get_input_idle_notification`, which ignores them. This is the line that decides whether a Resolve export gets interrupted. |
+| `PamContext` | `src/services/pam/qml.hpp`, `conversation.hpp`, `subprocess.cpp` | `config` (defaults `"login"` — we set `"aquarius-lock"`), `configDirectory` (defaults `/etc/pam.d`), `user` (**unset means the process's own user**, resolved with `getpwuid_r`), `start()`, `respond()`, `abort()`, and the signals `completed(PamResult)`, `error(PamError)`, `pamMessage()`. `start()` **returns false** when the config file is missing, which is why the card can say so instead of hanging. And the conversation genuinely happens in a `fork()`ed child (`subprocess.cpp`) — the comment there says why: PAM has no way to abort a module that is waiting on a fingerprint reader except by killing the process it is in. |
+| Both are really compiled in | `CMakeLists.txt` | `WAYLAND_SESSION_LOCK` and `SERVICE_PAM` are both `ON` by default, and `os-image/build_files/stage-quickshell.sh` fails the image build if either is off. |
+| Which module they live in | `src/wayland/CMakeLists.txt`, `src/services/pam/CMakeLists.txt` | `Quickshell.Wayland` and `Quickshell.Services.Pam`. |
+
+**labwc 0.20.2** (the tag `aquarius-os.env` pins), read in its own source:
+
+| Protocol | Where | Notes |
+|---|---|---|
+| `ext-session-lock-v1` | `src/session-lock.c` | Present. ⚠️ It focuses **the first lock surface that maps** and keeps it — which is why every screen here keeps a password box. See the note at the top of `LockSurface.qml`. |
+| `ext-idle-notify-v1` | `src/idle.c` | Present. |
+| `idle-inhibit-unstable-v1` | `src/idle.c` | Present, and wired into the one above: an inhibitor appearing calls `wlr_idle_notifier_v1_set_inhibited(true)`. So `respectInhibitors` is honoured by the compositor, not by us. |
+| `wlr-output-power-management-v1` | `src/server.c` | Present. This is what `wlopm` speaks. |
+| A built-in lock or idle action | `src/action.c` | **None.** There is no `Lock` action in labwc's list, so Super+L has to run something — hence `qs ipc call lock lock`. labwc's own documentation recommends driving all of this from outside with `swayidle` + a locker + `wlopm`; we do the same three jobs from inside the shell, with the compositor still doing the counting. |
+
+**Fedora**, read out of the real packages:
+
+- `swaylock` 1.8.6, `hyprlock` 0.4.1 and `gtklock` 4.0.0 all ship `/usr/bin/<name>` at mode **0755 with no setuid and no file capabilities**, and each ships an `/etc/pam.d/<name>` containing the single line `auth include login`. Ours is the same line for the same reasons.
+- `/usr/bin/unix_chkpwd`, from `pam` 1.7.2, is mode **4755** — setuid root. Fedora does not use the newer file-capabilities form. It is the only privileged step in the chain.
+- `wlopm` 1.0.0 is in Fedora 44.
+- `qt6-qtdeclarative` is 6.10.2, so `QtQuick.Effects` (Qt 6.5+) is present — which is what the veil's blur needs.
+
+### Two things the spec assumed that turned out not to be there
+
+- **A helper of our own to write.** The spec asked for "a PAM conversation through a small helper". Quickshell already forks exactly that helper, in C, and it is the same shape swaylock's is. Writing a second one would have meant a second piece of security-critical C to keep correct, for nothing. What we do own is the pam.d file.
+- **"Switch user".** greetd cannot hold a second session on a seat, so the word is not there. The spec said to leave it out if so.
+
+---
+
 ## Deviations from the approved spec
 
 Written down rather than quietly done.
