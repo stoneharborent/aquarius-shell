@@ -25,7 +25,7 @@ opens under it. It is the desktop's equivalent of the Apple menu.
 
 ```
 ┌────────────────────────────┐
-│  About This PC             │   Settings, on its About page
+│  About This PC             │   Settings, ON its About page
 │  System Settings          │   Settings
 │  Check for Update         │   /usr/libexec/aquarius-updater
 ├────────────────────────────┤
@@ -44,8 +44,10 @@ opens under it. It is the desktop's equivalent of the Apple menu.
   Quick Settings, the search palette and the notifications panel, and they close
   it. `services/Overlays.qml` holds that rule.
 - **The two Settings items go through one launcher.** Neither of them names a
-  program: both call `SettingsLauncher.open()` — `"system"` for About This PC,
-  `""` for System Settings. See [Opening Settings](#opening-settings).
+  program: both call `SettingsLauncher.open()` — `("system", ["about"])` for
+  About This PC, `("")` for System Settings. See
+  [Opening Settings](#opening-settings) and
+  [Asking for a page inside a panel](#asking-for-a-page-inside-a-panel).
 - **Check for Update is guarded.** The menu probes `test -x
   /usr/libexec/aquarius-updater` when it opens; if the updater is not installed
   the item reads *Updates unavailable* and cannot be clicked, so the menu never
@@ -111,6 +113,106 @@ ordinary way and get the same silent exit. The desktop right-click menu
 because labwc draws that menu from XML and cannot call into QML.
 `tests/test-shell.sh` **section 34b** fails if any component names
 `gnome-control-center` in code again.
+
+### Asking for a page inside a panel
+
+*Fixed 2026-09-06, second bench pass.*
+
+With the `env` prefix in place, every Settings click opened the app — and
+**About This PC** opened it on the **System panel's front page**, which is a
+list of rows, one of which says *About*. An item called "About This PC" that
+makes you click *About* is not doing what it says.
+
+gnome-control-center takes a page **inside** a panel as a further word on the
+command line:
+
+```bash
+gnome-control-center system about
+#                    ^^^^^^ ^^^^^
+#                    panel  page inside it
+```
+
+That form is not folklore; it is three steps through the app's own source.
+
+1. **`shell/cc-application.c`, `cc_application_command_line()`** splits the
+   leftover words: word 0 is the panel, the rest become an array called
+   `parameters`.
+
+   ```c
+   start_id = start_panels[0];
+   g_variant_builder_init (&builder, G_VARIANT_TYPE ("av"));
+   for (i = 1; start_panels[i] != NULL; i++)
+     g_variant_builder_add (&builder, "v", g_variant_new_string (start_panels[i]));
+   parameters = g_variant_builder_end (&builder);
+   ...
+   cc_window_set_active_panel_from_id (self->window, start_id, parameters, &err)
+   ```
+
+   Its own `--help` text says the same in one line: `N_("[PANEL] [ARGUMENT…]")`.
+
+2. **`shell/cc-window.c`, `set_active_panel_from_id()`** hands that array to the
+   panel:
+
+   ```c
+   g_object_set (G_OBJECT (self->current_panel), "parameters", parameters, NULL);
+   ```
+
+3. **`shell/cc-panel.c`, `cc_panel_set_property()`, case `PROP_PARAMETERS`**
+   reads the FIRST parameter and treats it as the name of a subpage:
+
+   ```c
+   g_variant_get_child (parameters, 0, "v", &v);
+   if (g_variant_is_of_type (v, G_VARIANT_TYPE_STRING))
+     set_subpage (CC_PANEL (object), g_variant_get_string (v, NULL));
+   ```
+
+   An unknown name warns `Invalid subpage: '%s'` and stays on the front page —
+   the wrong page, never a crash, exactly as a wrong panel id behaves.
+
+The System panel registers its pages by name in
+**`panels/system/cc-system-panel.c`, `cc_system_panel_init()`**:
+
+```c
+cc_panel_add_static_subpage (CC_PANEL (self), "about", CC_TYPE_ABOUT_PAGE);
+cc_panel_add_static_subpage (CC_PANEL (self), "datetime", CC_TYPE_DATE_TIME_PAGE);
+cc_panel_add_static_subpage (CC_PANEL (self), "region", CC_TYPE_REGION_PAGE);
+cc_panel_add_static_subpage (CC_PANEL (self), "remote-desktop", CC_TYPE_REMOTE_DESKTOP_PAGE);
+cc_panel_add_static_subpage (CC_PANEL (self), "users", CC_TYPE_USERS_PAGE);
+```
+
+Panel ids are printed by `gnome-control-center --list`. **Subpage names are
+printed by nothing** — they exist only in that source file — which is why the
+five above are written down here and in the launcher's header.
+
+#### The API
+
+```qml
+SettingsLauncher.open(panel, parameters)     // parameters is optional
+
+SettingsLauncher.open("")                    // the app, on its default page
+SettingsLauncher.open("wifi")                // the Wi-Fi panel
+SettingsLauncher.open("bluetooth")           // the Bluetooth panel
+SettingsLauncher.open("power")               // the Power panel
+SettingsLauncher.open("system")              // the System panel's front page
+SettingsLauncher.open("system", ["about"])   // the About page itself
+```
+
+**Why two arguments and not one string.** `open("system about")` reads shorter
+and is what you would type in a terminal — and it is the wrong shape here,
+because this function does not run a shell. It hands `execDetached` a *list* of
+arguments, and building that list by splitting on spaces means every caller's
+argument is silently reshaped by its own whitespace; the day a value legitimately
+contains a space, the split quietly produces two arguments and the wrong page
+opens. A panel and a list is exactly the shape of the argv that comes out the
+other end, so nothing is parsed and nothing can be misparsed. `parameters` is
+optional, so every caller written before this is unchanged.
+
+Passing parameters with **no** panel is refused with a warning rather than
+obeyed: word 0 is always the panel id, so those parameters would be read as a
+panel name and open some unrelated page.
+
+`tests/test-shell.sh` **section 34b** checks that `open()` still takes the second
+argument, and that About This PC still passes `["about"]`.
 
 **What this does not fix, honestly.** Starting is not working. Some of that app's
 panels talk to parts of GNOME that an Aquarius session does not run — Displays
@@ -193,10 +295,16 @@ Then:
    should happen. Press Enter again — *only now* should it act. (On the bench,
    test with Sleep first, which does not ask twice, so you do not reboot the
    machine by accident.)
-3. **About This PC / System Settings.** Each should open GNOME's Settings — the
-   About/System page and the top level respectively. Confirm the panel id on the
-   shipped GNOME with `gnome-control-center --list` if either opens the wrong
-   page. **This is the item that failed on 2026-09-06**, so also check the two
+3. **About This PC / System Settings.** *About This PC* should land **on the
+   About page**, with the machine's model, memory and disk on screen — not on the
+   System panel's list of rows. (Landing on that list is the exact 2026-09-06
+   complaint; if it happens again, run `gnome-control-center system about` in a
+   terminal inside the session. If that lands on About, the shell has stopped
+   passing the second word; if it does not, the shipped GNOME has renamed the
+   subpage and the new name is in its `panels/system/cc-system-panel.c`.)
+   *System Settings* should open the app at its top level. Confirm the panel id
+   on the shipped GNOME with `gnome-control-center --list` if either opens the
+   wrong page. **This is the item that failed on 2026-09-06**, so also check the two
    other roads to the same app: the Settings icon in the dock, and the Quick
    Settings chevrons. If any of them still does nothing, run
    `env XDG_CURRENT_DESKTOP=GNOME gnome-control-center` in a terminal inside the

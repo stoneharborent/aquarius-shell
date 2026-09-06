@@ -9,7 +9,9 @@
 //   opens under it — the desktop's equivalent of the Apple menu:
 //
 //     ┌────────────────────────────┐
-//     │  About This PC             │   -> Settings, on its About page
+//     │  About This PC             │   -> Settings, ON its About page — the
+//     │                            │      page itself, not the panel that
+//     │                            │      lists it (see run(), below)
 //     │  System Settings          │   -> Settings
 //     │  Check for Update         │   -> /usr/libexec/aquarius-updater
 //     ├────────────────────────────┤
@@ -173,7 +175,14 @@ Scope {
     // the header for why each is what it is.
     function run(id: string): void {
         if (id === "about") {
-            SettingsLauncher.open("system");
+            // The panel, THEN the page inside it. "system" alone opens the
+            // System panel's front page — a list of rows, one of which says
+            // About — which is not what an item called "About This PC" says it
+            // does (bench, Royce, 2026-09-06). The second word is the subpage
+            // name, "about" is what panels/system/cc-system-panel.c registers
+            // it as, and services/SettingsLauncher.qml carries the whole paper
+            // trail from the command line to the page.
+            SettingsLauncher.open("system", ["about"]);
         } else if (id === "settings") {
             SettingsLauncher.open("");
         } else if (id === "update") {

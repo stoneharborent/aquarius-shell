@@ -89,6 +89,17 @@
 //   That gap is not a bug in this file. It is the reason AquariusOS is meant to
 //   grow its own Settings app (R6 work), and borrowing GNOME's is the interim.
 //
+// THE SECOND HALF, FOUND ON THE SAME BENCH THE FOLLOWING RUN
+//
+//   With the env prefix in place every one of those clicks opened the Settings
+//   app — and "About This PC" opened it on the SYSTEM panel's front page, which
+//   is a list of rows, one of which says About. That is not what the item says
+//   it does. gnome-control-center takes a PAGE INSIDE a panel as a second
+//   command-line word (`gnome-control-center system about`), so `open()` below
+//   takes an optional list of parameters and the menu asks for that page by
+//   name. The full paper trail — the three functions in that app's own source
+//   that carry the word from the command line to the page — is on `open()`.
+//
 // NOT PROVEN. No QML engine has run this file. It is checked statically by
 // tests/test-shell.sh section 34b and will be exercised on the bench.
 // =============================================================================
@@ -148,24 +159,96 @@ Singleton {
         return false;
     }
 
-    // Open the Settings app, optionally on one page.
+    // Open the Settings app: a panel, and optionally a page INSIDE that panel.
     //
-    //   open("")           the app, wherever it opens by default
-    //   open("wifi")       the Wi-Fi page
-    //   open("bluetooth")  the Bluetooth page
-    //   open("power")      the Power page
-    //   open("system")     the About / system information page
+    //   open("")                     the app, wherever it opens by default
+    //   open("wifi")                 the Wi-Fi panel
+    //   open("bluetooth")            the Bluetooth panel
+    //   open("power")                the Power panel
+    //   open("system")               the System panel, on its own front page
+    //   open("system", ["about"])    the System panel, ALREADY ON About
     //
-    // Those short words are gnome-control-center's own panel ids, stable across
-    // GNOME versions; `gnome-control-center --list` prints the full set on any
-    // machine that has it. An unknown id is not a crash — the app opens on its
-    // default page — so a rename costs the wrong page, never a dead click.
+    // THE SHAPE OF THE API, AND WHY IT IS TWO ARGUMENTS RATHER THAN ONE STRING
+    //
+    //   `open("system about")` would have read a little shorter, and it is the
+    //   thing you would type in a terminal. It is the wrong shape here, because
+    //   this function does not run a shell: it hands `execDetached` a LIST of
+    //   arguments, and a list has to be built by somebody. Splitting a string on
+    //   spaces to build it means every caller's argument is silently reshaped by
+    //   its own whitespace, and the day a value legitimately contains a space
+    //   the split quietly produces two arguments and the wrong page opens. Two
+    //   parameters — a panel, and a list — is exactly the shape of the argv that
+    //   comes out the other end, so nothing is parsed and nothing can be
+    //   misparsed. `parameters` is optional; leaving it off is the whole of the
+    //   old one-argument behaviour, which is why every existing caller is
+    //   unchanged.
+    //
+    // WHERE "system" AND "about" COME FROM — read out of the app's own source
+    //
+    //   The FIRST word after the program name is the panel id, and everything
+    //   after it is passed on to that panel. gnome-control-center says so
+    //   itself. In shell/cc-application.c, `cc_application_command_line()` takes
+    //   the leftover command-line words and does this:
+    //
+    //       start_id = start_panels[0];
+    //       g_variant_builder_init (&builder, G_VARIANT_TYPE ("av"));
+    //       for (i = 1; start_panels[i] != NULL; i++)
+    //         g_variant_builder_add (&builder, "v",
+    //                                g_variant_new_string (start_panels[i]));
+    //       parameters = g_variant_builder_end (&builder);
+    //       ...
+    //       cc_window_set_active_panel_from_id (self->window, start_id,
+    //                                           parameters, &err)
+    //
+    //   — word 0 is the panel, words 1..n become an array of strings called
+    //   `parameters`. Its own `--help` text says the same in one line:
+    //   `N_("[PANEL] [ARGUMENT…]")`.
+    //
+    //   That array then reaches the panel. shell/cc-window.c's
+    //   `set_active_panel_from_id()` (called by
+    //   `cc_window_set_active_panel_from_id`) ends with
+    //
+    //       g_object_set (G_OBJECT (self->current_panel), "parameters",
+    //                     parameters, NULL);
+    //
+    //   and shell/cc-panel.c handles that property in `cc_panel_set_property()`,
+    //   case PROP_PARAMETERS:
+    //
+    //       g_variant_get_child (parameters, 0, "v", &v);
+    //       if (g_variant_is_of_type (v, G_VARIANT_TYPE_STRING))
+    //         set_subpage (CC_PANEL (object), g_variant_get_string (v, NULL));
+    //
+    //   — the FIRST parameter, if it is a string, is the name of a SUBPAGE to
+    //   open. `set_subpage()` looks that name up among the panel's pages and,
+    //   failing, warns `Invalid subpage: '%s'` and stays on the front page. So a
+    //   wrong name costs the wrong page and never a crash, exactly as a wrong
+    //   panel id does.
+    //
+    //   And the System panel registers its subpages by name in
+    //   panels/system/cc-system-panel.c, in `cc_system_panel_init()`:
+    //
+    //       cc_panel_add_static_subpage (CC_PANEL (self), "about", ...);
+    //       cc_panel_add_static_subpage (CC_PANEL (self), "datetime", ...);
+    //       cc_panel_add_static_subpage (CC_PANEL (self), "region", ...);
+    //       cc_panel_add_static_subpage (CC_PANEL (self), "remote-desktop", ...);
+    //       cc_panel_add_static_subpage (CC_PANEL (self), "users", ...);
+    //
+    //   Which is why "About This PC" asks for `system` `about` and lands on the
+    //   About page itself, rather than on the System panel's front page with a
+    //   row called About that still has to be clicked. (Bench, Royce,
+    //   2026-09-06: About This PC opened Settings, but not the About page.)
+    //
+    //   Panel ids are stable across GNOME versions and
+    //   `gnome-control-center --list` prints the full set on any machine that
+    //   has it. Subpage names are NOT printed by anything — they are only in
+    //   that source file — so the five above are written down here rather than
+    //   left to be rediscovered.
     //
     // execDetached, not Process, for the same reason every other launch in this
     // shell uses it: the launched program has to outlive a shell reload, and
     // nothing here wants to own its lifetime. It is a launch, not the kind of
     // system-control shell-out tests/test-shell.sh section 22 guards.
-    function open(panel: string): void {
+    function open(panel: string, parameters: var): void {
         // slice() so the shared prefix is copied rather than appended to. Push
         // onto the property itself and the second launch would ask for
         // "gnome-control-center wifi bluetooth".
@@ -173,6 +256,25 @@ Singleton {
 
         if (panel !== undefined && panel !== null && String(panel) !== "")
             argv.push(String(panel));
+
+        // A parameter without a panel in front of it would be read by
+        // gnome-control-center as the PANEL — word 0 is the panel id, always —
+        // so a caller that passes parameters and no panel would silently open
+        // some other page. Dropping them is the safe half of that mistake, and
+        // saying so is better than doing it quietly.
+        if (parameters !== undefined && parameters !== null
+                && parameters.length !== undefined && parameters.length > 0) {
+            if (argv.length === root.argvPrefix.length) {
+                console.warn("aquarius-shell: SettingsLauncher.open was given"
+                             + " parameters with no panel; ignoring them");
+            } else {
+                for (let i = 0; i < parameters.length; i++) {
+                    const one = parameters[i];
+                    if (one !== undefined && one !== null && String(one) !== "")
+                        argv.push(String(one));
+                }
+            }
+        }
 
         Quickshell.execDetached(argv);
     }

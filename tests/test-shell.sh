@@ -2085,7 +2085,7 @@ fi
 # quietly gone back to launching that program by hand from here.
 #   description : the substring that must appear in LogoMenu.qml
 aq_logo_actions=(
-    'About This PC : SettingsLauncher.open("system")'
+    'About This PC : SettingsLauncher.open("system", ["about"])'
     'System Settings : SettingsLauncher.open("")'
     'Check for Update : /usr/libexec/aquarius-updater'
     'Log Out : "loginctl", "terminate-session"'
@@ -2262,6 +2262,56 @@ if printf '%s' "${aq_launcher_code}" | grep -qE 'function\s+open\s*\('; then
 else
     fail "services/SettingsLauncher.qml no longer offers an open(panel) function." \
          "Every caller in the shell calls it."
+fi
+
+# THE SECOND HALF OF THE SAME BENCH REPORT (2026-09-06). With the env prefix in,
+# "About This PC" opened the Settings app — on the System panel's FRONT page,
+# which is a list of rows one of which says About. Not what the item claims.
+#
+# gnome-control-center takes a page inside a panel as a further command-line
+# word. Its own source, in three steps:
+#
+#   shell/cc-application.c, cc_application_command_line():
+#       start_id = start_panels[0];                       <- word 0 is the panel
+#       for (i = 1; start_panels[i] != NULL; i++)          <- words 1.. become
+#           g_variant_builder_add (&builder, "v", ...);       "parameters"
+#       cc_window_set_active_panel_from_id (self->window, start_id, parameters, &err)
+#
+#   shell/cc-window.c, set_active_panel_from_id():
+#       g_object_set (G_OBJECT (self->current_panel), "parameters", parameters, NULL);
+#
+#   shell/cc-panel.c, cc_panel_set_property(), case PROP_PARAMETERS:
+#       g_variant_get_child (parameters, 0, "v", &v);
+#       if (g_variant_is_of_type (v, G_VARIANT_TYPE_STRING))
+#           set_subpage (CC_PANEL (object), g_variant_get_string (v, NULL));
+#
+# and panels/system/cc-system-panel.c, cc_system_panel_init(), registers the
+# names: about, datetime, region, remote-desktop, users. So the command form is
+#
+#     gnome-control-center system about
+#
+# and in this shell that is SettingsLauncher.open("system", ["about"]). These two
+# checks are what stops the second argument being dropped again — losing it is
+# not a crash, it is a menu item that quietly opens the wrong page.
+
+if printf '%s' "${aq_launcher_code}" | grep -qE 'function\s+open\s*\(\s*panel[^)]*,'; then
+    pass "SettingsLauncher.qml's open() takes parameters as well as a panel"
+else
+    fail "services/SettingsLauncher.qml's open() no longer takes a second" \
+         "argument. It must be open(panel, parameters), where parameters are" \
+         "the words gnome-control-center passes on to the panel — that is how" \
+         "a page INSIDE a panel is asked for, and it is how About This PC" \
+         "reaches the About page rather than the System panel's front page."
+fi
+
+if grep -qF 'SettingsLauncher.open("system", ["about"])' components/bar/LogoMenu.qml; then
+    pass "About This PC opens the About page itself (system + about)"
+else
+    fail "components/bar/LogoMenu.qml no longer opens Settings on the About" \
+         "page. Expected:  SettingsLauncher.open(\"system\", [\"about\"])" \
+         "\"system\" on its own opens the System panel's front page, which is" \
+         "a list of rows — the bench complaint of 2026-09-06. \"about\" is the" \
+         "subpage name registered in panels/system/cc-system-panel.c."
 fi
 
 # THE GUARD THAT MATTERS MOST. No component may name that program. If one does,
