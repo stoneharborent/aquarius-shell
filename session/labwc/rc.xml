@@ -57,6 +57,7 @@
     W-Tab       switch to the next window (hold Super, tap Tab)
     W-S-Tab     switch to the previous window
     W-S-e       leave the session and return to the login screen
+    W-l         lock the screen
 
   "W" is labwc's letter for Super (the Windows/Command key). Its other
   modifiers are S=shift, C=control, A=alt.
@@ -245,6 +246,39 @@
     <keybind key="W-S-e">
       <action name="Exit" />
     </keybind>
+
+    <!-- ==================================================================== -->
+    <!-- BEGIN: the lock screen (Super+L). Added 2026-09-06.                  -->
+    <!-- ==================================================================== -->
+    <!--
+      Lock the screen.
+
+      This does not launch a program. It sends a message to the shell that is
+      ALREADY running, which is the whole reason Super+L is instant: there is
+      no Qt to start and no QML to load, so the screens are covered on the next
+      frame rather than most of a second later, by which time you have stood up
+      and walked away.
+
+      The target "lock" and its function "lock" are declared by the IpcHandler
+      in lock/LockLayer.qml. Same mechanism, and the same trap, as the search
+      palette above: `qs ipc` takes NO configuration name, only the target and
+      the function, and it finds the right instance from QS_CONFIG_PATH.
+
+      ONE BINDING COVERS BOTH KEYBOARD STYLES. In Aquarius Keys' Mac mode the
+      Command key is mapped to Super, so a person pressing Command+L is really
+      sending Super+L and lands here. That is also why this is not bound to
+      labwc's letter for anything else: Command+L is deliberately simpler than
+      the Control+Command+Q macOS itself uses.
+
+      If nothing happens, ask the running shell what it offers:
+          qs ipc show
+    -->
+    <keybind key="W-l">
+      <action name="Execute" command="qs ipc call lock lock" />
+    </keybind>
+    <!-- ==================================================================== -->
+    <!-- END: the lock screen                                                 -->
+    <!-- ==================================================================== -->
 
   </keyboard>
 
