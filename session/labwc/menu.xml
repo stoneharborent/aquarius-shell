@@ -24,10 +24,20 @@
     Left-clicking the desktop still does nothing.
 
   THE ONE RULE THIS FILE OBEYS THAT MIGHT SURPRISE YOU
-    NO COLOURS. Same as rc.xml: labwc draws this menu with its own Openbox theme,
-    and it would be easy to tint it here. Colour in this project lives in
-    theme/Ice.qml and theme/Midnight.qml and nowhere else. When the shell draws
-    the root menu itself one day, it will own the colour too.
+    NO COLOURS IN THIS FILE. This file is the menu's CONTENTS — what the items
+    say and what they run. What the menu LOOKS like is `themerc-override`, next
+    to this one: the card colour, the hairline, the text inks, the accent-tinted
+    row under the pointer, the padding and the width, all copied out of
+    theme/Ice.qml and checked against it by tests/test-shell.sh section 15b. Its
+    font is in rc.xml's <theme> section, because labwc splits colours and fonts
+    across two files.
+
+    That themerc is the ONLY file outside theme/Ice.qml and theme/Midnight.qml
+    allowed to hold a colour value, and it is an exception only because labwc
+    cannot read QML. Do not add a second one, and do not tint anything here.
+    (Before 2026-09-06 there was no exception and labwc drew this menu in its own
+    default grey, which is the bench note "the right click menu does not have a
+    design yet".)
 
   Format reference: labwc-menu(5).
   =============================================================================

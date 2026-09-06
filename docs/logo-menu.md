@@ -270,10 +270,96 @@ menu is the right tool for a right-click on labwc's own root. On a different
 compositor the mark menu and `Super+Space` still work; only this root menu is
 labwc's.
 
+### What it looks like
+
+*Added 2026-09-06, second bench pass — "the right click menu does not have a
+design yet".*
+
+labwc drew this menu in its own default Openbox grey, because nothing had told
+it otherwise. It now wears the Aquarius look, and the reference for that look is
+the shell's own menu two inches above it: a bright Ice card, one hairline around
+it, deep-navy text, an accent-tinted row under the pointer, hairline separators,
+and a fixed width.
+
+That look lives in **`session/labwc/themerc-override`**, a flat text file labwc
+reads out of its configuration directory — the same folder as `rc.xml`, which for
+this session is `session/labwc/` because `aquarius-session` starts the compositor
+with `labwc -C "${AQ_SESSION_DIR}/labwc"`. (labwc-theme(5): *"Theme settings
+specified in themerc can be overridden by creating a 'themerc-override' file in
+the configuration directory"*; and its `src/common/dir.c` is explicit that `-C`
+"trumps everything else".)
+
+| themerc key | Ice token | Value |
+|---|---|---|
+| `menu.items.bg.color` | `surface` | `#F7FBFE` |
+| `menu.items.text.color` | `ink` | `#16273A` |
+| `menu.items.active.bg.color` | `accentWash` — aquariusBlue at 16% | `#2C8FC429` |
+| `menu.items.active.text.color` | `ink` | `#16273A` |
+| `menu.border.color` | `lineStrong` — ink at 18% | `#16273A2E` |
+| `menu.separator.color` | `line` — ink at 10% | `#16273A1A` |
+| `menu.title.bg.color` / `.text.color` | `surfaceAlt` / `inkSoft` | `#E4EDF6` / `#47586B` |
+| `menu.width.min` / `.max` | `Theme.logoMenuMinWidth`, both, so it is one fixed width | `240` |
+| `menu.items.padding.x` / `.y` | `Theme.logoMenuRowPaddingH`, and a `y` chosen to land near `logoMenuRowHeight` | `16` / `9` |
+| `menu.border.width`, `menu.separator.width` | `Theme.hairline` | `1` |
+| `menu.separator.padding.width` / `.height` | `Theme.logoMenuSeparatorMargin` | `8` / `8` |
+
+**The same file draws window title bars,** so it styles those too — otherwise an
+Aquarius menu and a stock Openbox title bar would share a screen. Active title
+bar `panel` (`#F0F6FC`, the top bar's own colour), inactive `surfaceAlt`, label
+`ink` / `inkMute`, borders `lineStrong` / `line` at one pixel, button hover
+`hoverWash`. Restrained on purpose: no accent anywhere, because a window frame is
+chrome, and chrome that draws attention to itself is chrome you end up looking
+at. The window-switcher OSD is not given keys of its own — labwc's documented
+inheritance already points it at those same four values.
+
+**The font is not in that file.** labwc splits one look across two: colours come
+from the themerc, fonts come from `rc.xml`'s `<theme>` section. So `rc.xml` sets
+`MenuItem`, `MenuHeader`, `ActiveWindow` and `InactiveWindow` to **Inter** — what
+`Theme.fontBody` picks — at sizes in pixels (labwc-config(5): *"Font size in
+pixels"*, the same unit `Theme` uses), `19` = `Theme.fsBody` for a menu row and
+`15` = `Theme.fsCaption` for the rest.
+
+#### The colour rule, and the one exception to it
+
+Colour in this project lives in `theme/Ice.qml` and `theme/Midnight.qml` and
+nowhere else. A themerc cannot import QML, so **`themerc-override` is the single
+sanctioned second copy** — and it is enforced rather than trusted:
+`tests/test-shell.sh` **section 15b** pulls every `#rrggbb` out of that file's
+setting lines and fails the build unless that exact value appears in
+`theme/Ice.qml`. Section 15, which bans hex colours across `session/`, excludes
+that one file so 15b can be the check that speaks about it.
+
+Translucent values are written labwc's way (`#rrggbbaa`, opacity last) and Ice's
+way (`#aarrggbb`, opacity first); the test compares the six colour digits, and
+every such line names its token and percentage in a comment so a person can check
+the other two.
+
+`themerc-override` has no end-of-line comments — labwc takes everything after the
+first colon as the value, so `key: value  # why` silently sets nothing. There is
+a check for that too.
+
+#### ⚠️ Ice only, and the os-image copy
+
+Two things are deliberately unfinished and written down rather than remembered:
+
+- **Midnight.** A themerc is read once, at start-up. When
+  `services/SystemAppearance.qml` flips the shell to dark, labwc's menu and title
+  bars stay light. Closing that needs a second file built from
+  `theme/Midnight.qml`, something to swap them, and **`labwc --reconfigure`**
+  afterwards. Step two — the shell writing into the session's config directory —
+  is why it is not done yet. `AQ_UI_SCALE` has the same gap and wants the same
+  fix.
+- **The os-image twin.** An installed machine reads
+  `system_files/usr/share/aquarius/labwc/themerc-override` in the `os-image`
+  repo, and that file **does not exist yet**. Until it does, an installed machine
+  still shows the grey menu. **CHANGE ONE, CHANGE BOTH**, the same rule
+  `menu.xml` and `autostart` already carry.
+
 | File | What it is |
 |---|---|
 | `session/labwc/menu.xml` | The menu's contents (`root-menu`). |
-| `session/labwc/rc.xml` | The `<mouse>` section that binds Root right-click to it, with `<default />` so window dragging still works. |
+| `session/labwc/themerc-override` | Its look — and window title bars'. The one file outside `theme/` allowed to hold a colour. |
+| `session/labwc/rc.xml` | The `<mouse>` section that binds Root right-click to it, with `<default />` so window dragging still works; and the `<theme><font>` block those surfaces are drawn in. |
 
 `Log Out` here uses labwc's own `Exit` — the same teardown as `Super+Shift+E`.
 
@@ -313,8 +399,24 @@ Then:
 4. **Check for Update.** With the updater installed it should launch it; with it
    removed the item should be greyed and read *Updates unavailable*.
 5. **Right-click the empty desktop.** The labwc menu should appear at the
-   pointer. Try Search (the palette should open), Change Wallpaper (Settings'
+   pointer, and it should **look like the mark's menu** — a bright card, a
+   hairline round it, navy text, the row under the pointer tinted blue. If it is
+   grey with black text, labwc has not read `themerc-override`: check that the
+   file is in the same folder as the `rc.xml` labwc was started with (`labwc -C`
+   names that folder), and that no setting line has a `#` comment after its
+   value. Try Search (the palette should open), Change Wallpaper (Settings'
    background page), and — carefully — Sleep.
-6. **Drag a window's title bar, resize from an edge, alt-drag to move.** All must
+6. **Look at a window's title bar.** It should be the same pale blue as the top
+   bar, with the focused window's title in navy and an unfocused one's in grey,
+   and a one-pixel border. The menu and the window frame should read as the same
+   design.
+7. **Press Super + Return.** A terminal should open (`ptyxis` on AquariusOS;
+   nothing at all on a plain Fedora clone that does not have it, which is
+   expected).
+8. **Switch the system to dark** (`gsettings set org.gnome.desktop.interface
+   color-scheme prefer-dark`). The shell should turn Midnight and **the desktop
+   menu and title bars should stay light** — that is the known Ice-only seam, not
+   a bug. It is written up in `docs/session.md` and in the themerc's header.
+9. **Drag a window's title bar, resize from an edge, alt-drag to move.** All must
    still work: that is the check that `<default />` in the `<mouse>` section kept
    labwc's own bindings.

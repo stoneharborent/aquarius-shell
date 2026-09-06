@@ -32,12 +32,19 @@
   =============================================================================
   TWO RULES THIS FILE OBEYS
   =============================================================================
-  1. NO COLOURS. labwc's title bars and borders come from an Openbox theme, and
-     it would be easy to paste Ice's hex values into a themerc file here. Do
-     not. Colour in this project lives in theme/Ice.qml and theme/Midnight.qml
-     and nowhere else. Two places holding "the Aquarius blue" is how a desktop
-     stops looking designed. When the shell owns window decoration, it will own
-     the colour too.
+  1. NO COLOURS IN THIS FILE. Colour in this project lives in theme/Ice.qml and
+     theme/Midnight.qml, and there is exactly ONE other file allowed to hold a
+     colour value: `themerc-override` next to this one, which is how labwc's own
+     menu and title bars get the Aquarius look. It is an exception because it has
+     to be — labwc is a C program reading a flat text file and cannot import QML,
+     so somebody has to write the numbers out twice. Every value in it is copied
+     digit for digit from theme/Ice.qml and tests/test-shell.sh section 15b fails
+     the build if one of them is not in Ice. Nothing else here, this file
+     included, may name a colour; section 15 still enforces that.
+
+     What this file DOES carry is the FONT for those same surfaces (the <theme>
+     section below), because a font is not a colour and there is no themerc key
+     for it — labwc takes fonts from rc.xml and colours from the themerc.
 
   2. NO PATHS. The shell is started from the autostart file next to this one,
      with a bare `qs`, because ../aquarius-session exports QS_CONFIG_PATH first.
@@ -46,6 +53,7 @@
   KEY BINDINGS ADDED BY US
   =============================================================================
     W-space     open or close the Aquarius search palette (the shell's own IPC)
+    W-Return    a terminal (ptyxis, the one AquariusOS ships)
     W-Tab       switch to the next window (hold Super, tap Tab)
     W-S-Tab     switch to the previous window
     W-S-e       leave the session and return to the login screen
@@ -67,7 +75,12 @@
   alone, so the desktop stays inert to a left click, which is what a clean
   desktop with no icons should do.
 
-  Format reference: labwc-config(5), labwc-actions(5) and labwc-menu(5).
+  The menu's LOOK is neither of those files: it is `themerc-override`, also
+  next to this one, which is the only place in this project outside theme/ that
+  is allowed to hold a colour. Read its header before touching it.
+
+  Format reference: labwc-config(5), labwc-actions(5), labwc-menu(5) and
+  labwc-theme(5), all as of labwc 0.20.2.
   =============================================================================
 -->
 
@@ -79,6 +92,71 @@
     <decoration>server</decoration>
     <gap>8</gap>
   </core>
+
+  <!--
+    =========================================================================
+    THE FONT labwc DRAWS ITS OWN SURFACES IN
+    =========================================================================
+    The COLOURS of the desktop menu and the window title bars are in
+    `themerc-override` next to this file. Their FONT is not: labwc takes theme
+    colours from a themerc and fonts from rc.xml, so the two halves of one look
+    live in two files. That is labwc's split, not ours.
+
+    Inter is the shell's own UI face — theme/Theme.qml picks it as `fontBody`,
+    and every label in the bar, the dock, the menus and the panels is drawn in
+    it. Without these four lines labwc would draw its menu in "sans", whatever
+    that resolves to on the machine, and the desktop menu would be in a
+    different typeface from the shell menu two inches above it.
+
+    IF INTER IS NOT INSTALLED labwc falls back to its default on its own, which
+    is the same outcome the shell's Theme.pickFont() arranges for itself. The OS
+    image installs Sora, Inter and JetBrains Mono; a plain Fedora clone may not
+    have them, and neither half breaks when it does not.
+
+    THE SIZES ARE THE SHELL'S, and labwc's <size> is in PIXELS
+    (labwc-config(5): "Font size in pixels. Default is 10."), which is the same
+    unit theme/Theme.qml uses — it sets font.pixelSize, never pointSize. So:
+
+      MenuItem   19  = Theme.fsBody     — one row of the Aquarius menu
+      MenuHeader 15  = Theme.fsCaption  — a menu title, quieter than its items
+      ActiveWindow / InactiveWindow
+                 15  = Theme.fsCaption  — the size the top bar draws its own
+                                          labels at, and a title bar is the same
+                                          kind of chrome as the bar
+
+    ⚠️ AQ_UI_SCALE DOES NOT REACH HERE. The shell multiplies every size by that
+    variable; labwc knows nothing about it. Set it and the shell grows while
+    these do not. Written up as a follow-up in themerc-override's header,
+    alongside the Midnight problem, because both want the same fix.
+
+    Attribute ORDER matters in labwc when a font is written on one line —
+    labwc-config(5) is explicit that `place` must come before `name` and `size`,
+    or the setting lands on every place at once. Child elements have no such
+    trap, so these are written as children.
+  -->
+  <theme>
+
+    <font place="MenuItem">
+      <name>Inter</name>
+      <size>19</size>
+    </font>
+
+    <font place="MenuHeader">
+      <name>Inter</name>
+      <size>15</size>
+    </font>
+
+    <font place="ActiveWindow">
+      <name>Inter</name>
+      <size>15</size>
+    </font>
+
+    <font place="InactiveWindow">
+      <name>Inter</name>
+      <size>15</size>
+    </font>
+
+  </theme>
 
   <keyboard>
 
@@ -109,6 +187,32 @@
     -->
     <keybind key="W-space">
       <action name="Execute" command="qs ipc call search toggle" />
+    </keybind>
+
+    <!--
+      A terminal on Super+Return.
+
+      <default /> above already binds Super+Return to a terminal — labwc's own
+      default, which reaches for xterm/foot/alacritty in turn. AquariusOS ships
+      ptyxis, so this names it and the key opens the terminal the OS actually
+      has.
+
+      ⚠️ THIS LINE EXISTS TO MAKE THE TWO COPIES OF THIS FILE IDENTICAL. What an
+      installed machine reads is system_files/usr/share/aquarius/labwc/rc.xml in
+      the os-image repo, and that copy already had this keybind. This one did
+      not, which meant the two files differed in a way that was not a comment —
+      and once that is true, "diff them and read the prose" stops being a way to
+      check they agree. The shell's rc.xml is deliberately the SUPERSET, so the
+      two can be kept content-identical apart from the comments.
+
+      On a plain Fedora clone with no ptyxis installed the keybind is simply
+      inert: labwc runs the command, the command does not exist, and nothing
+      happens. It costs one key, not a broken session.
+    -->
+    <keybind key="W-Return">
+      <action name="Execute">
+        <command>ptyxis</command>
+      </action>
     </keybind>
 
     <!--

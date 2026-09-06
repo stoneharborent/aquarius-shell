@@ -586,6 +586,7 @@ for aq_file in \
     session/niri/config.kdl \
     session/labwc/rc.xml \
     session/labwc/menu.xml \
+    session/labwc/themerc-override \
     session/labwc/autostart \
     session/labwc/shutdown \
     session/labwc/environment \
@@ -749,16 +750,156 @@ echo "=== 15. the colour rule reaches the session files too ==="
 # one of them has it, "the Aquarius blue" lives in two places and starts to
 # drift. The compositors' own chrome stays at their own defaults until the shell
 # owns it.
+#
+# ⚠️ ONE FILE IS EXEMPT, AND ONLY ONE: session/labwc/themerc-override.
+#
+# labwc draws two things the shell cannot — the desktop right-click menu and
+# every window's title bar — and it is a C program reading a flat text file, so
+# it cannot import QML. Until this repo owns window decoration itself, the only
+# way those surfaces can look like Aquarius is for somebody to write the numbers
+# out a second time. That was signed off on 2026-09-06, after the bench note
+# "the right click menu does not have a design yet".
+#
+# The exemption is not a hole, because section 15b immediately below checks every
+# colour in that file against theme/Ice.qml. It is excluded here so that 15b can
+# be the one that speaks about it, with a message that actually helps.
 
 if grep -rn -E '#[0-9A-Fa-f]{3,8}\b' \
-        session/niri session/labwc session/portals > /dev/null 2>&1; then
+        session/niri session/labwc session/portals \
+        --exclude=themerc-override > /dev/null 2>&1; then
     grep -rn -E '#[0-9A-Fa-f]{3,8}\b' \
-        session/niri session/labwc session/portals || true
+        session/niri session/labwc session/portals \
+        --exclude=themerc-override || true
     fail "a session configuration contains what looks like a hex colour." \
          "Colour belongs in theme/Ice.qml and theme/Midnight.qml only." \
-         "Leave the compositor's own chrome at the compositor's defaults."
+         "The single exception is session/labwc/themerc-override, which exists" \
+         "because labwc cannot read QML — and every value in THAT file has to" \
+         "appear in theme/Ice.qml (section 15b). Leave everything else at the" \
+         "compositor's own defaults."
 else
     pass "no colours in the compositor or portal configurations"
+fi
+
+# ------------------------------------------------------------------------------
+echo ""
+echo "=== 15b. every colour in labwc's themerc came out of Ice ==="
+# ------------------------------------------------------------------------------
+# THE ONE SANCTIONED COPY OF THE PALETTE, AND THE CHECK THAT KEEPS IT HONEST.
+#
+# session/labwc/themerc-override gives labwc's own menu and title bars the
+# Aquarius look. It is the only file outside theme/ allowed to hold a colour,
+# because labwc reads a flat text file and cannot import QML.
+#
+# A second copy of a palette is a palette that drifts. Somebody adjusts Ice's
+# surface colour, nobody remembers this file, and six months later the desktop
+# menu is a slightly different white from every other card on screen — the exact
+# failure the "colour lives in theme/ only" rule was written to prevent.
+#
+# So: pull every #rrggbb out of that file and require each one to appear, byte
+# for byte, in theme/Ice.qml. Comparison is case-insensitive because a themerc is
+# conventionally lower case and Ice writes its values upper case; the DIGITS are
+# what must match.
+#
+# Translucent values are written labwc's way, #rrggbbaa, with the opacity last;
+# QML writes the same colour #aarrggbb, with the opacity first. Only the six
+# colour digits are compared, which is why each such line in that file names the
+# Ice token and the percentage in a comment beside it — the alpha byte is checked
+# by a person, not by this.
+
+aq_themerc="session/labwc/themerc-override"
+
+if [ -f "${aq_themerc}" ]; then
+    pass "${aq_themerc}"
+
+    # SETTING lines only — anything whose first character is '#' is a comment
+    # and labwc never reads it. That matters for more than tidiness: the
+    # comments in that file quote the QML spelling of each colour (#aarrggbb,
+    # opacity first), and the first six digits of THOSE are the opacity plus
+    # four colour digits — a string that means nothing and would be compared
+    # against Ice as though it did. Check what labwc actually reads.
+    aq_themerc_colours="$(grep -v '^[[:space:]]*#' "${aq_themerc}" \
+        | grep -oE '#[0-9A-Fa-f]{6}' | sort -u)"
+
+    if [ -z "${aq_themerc_colours}" ]; then
+        fail "${aq_themerc} contains no colours at all." \
+             "It exists to give labwc's menu and title bars the Ice palette." \
+             "An empty one means the desktop menu is back to labwc's grey."
+    else
+        aq_themerc_drift=0
+        while IFS= read -r aq_colour; do
+            # Quoted, so a value can only match a WHOLE token in Ice. Without
+            # the quotes, "#16273A" would also be found inside Ice's
+            # "#1A16273A" — and a six-digit slice of an eight-digit value is
+            # not the same colour, it is a coincidence.
+            if grep -qiE "\"${aq_colour}\"" theme/Ice.qml; then
+                pass "themerc ${aq_colour} is an Ice value"
+            else
+                fail "${aq_themerc} uses ${aq_colour}, which is not in" \
+                     "theme/Ice.qml." \
+                     "Every colour in that file is a COPY of an Ice token — not" \
+                     "a new colour, not a nudged one, not one somebody" \
+                     "eyeballed. If Ice needs a value it does not have, that is" \
+                     "a design decision and it goes into theme/Ice.qml first." \
+                     "(Translucent values are written #rrggbbaa there and" \
+                     "#aarrggbb in QML; only the six colour digits are compared," \
+                     "so this is complaining about the colour, not the opacity.)"
+                aq_themerc_drift=1
+            fi
+        done <<< "${aq_themerc_colours}"
+
+        if [ "${aq_themerc_drift}" -eq 0 ]; then
+            pass "the themerc holds no colour Ice does not"
+        fi
+    fi
+
+    # The file has to SAY that it is the exception and that a test watches it,
+    # because the person who opens it is the only one who can keep it in step.
+    for aq_needle in 'theme/Ice.qml' 'system_files/usr/share/aquarius/labwc/themerc-override'; do
+        if grep -qF "${aq_needle}" "${aq_themerc}"; then
+            pass "the themerc mentions ${aq_needle}"
+        else
+            fail "${aq_themerc} does not mention ${aq_needle}." \
+                 "It must say where its colours come from, and that an" \
+                 "installed machine reads the os-image copy rather than this" \
+                 "one — the same change-one-change-both note menu.xml and" \
+                 "autostart next to it already carry."
+        fi
+    done
+
+    # Only Ice for now. The follow-up — a Midnight file plus a reconfigure — has
+    # to be written down in the file, not remembered.
+    if grep -qF 'labwc --reconfigure' "${aq_themerc}"; then
+        pass "the themerc records the Midnight follow-up"
+    else
+        fail "${aq_themerc} does not record how a dark theme would work." \
+             "It is Ice only, so on a dark desktop the menu and title bars stay" \
+             "light. That needs a second file built from theme/Midnight.qml," \
+             "something to swap them when SystemAppearance flips, and" \
+             "'labwc --reconfigure' afterwards. Say so in the file."
+    fi
+
+    # labwc's themerc has no end-of-line comments: process_line() returns early
+    # on a leading '#', and parse_config_line() takes everything after the first
+    # colon as the value. So `key: value   # why` sets the value to
+    # "value   # why", which parses as a colour of nothing and silently keeps
+    # labwc's default. This is the single most likely way to break that file.
+    if grep -nE '^[^#].*:.*#' "${aq_themerc}" \
+            | grep -vE ':[[:space:]]*#[0-9A-Fa-f]{6,8}[[:space:]]*$' \
+            > /dev/null 2>&1; then
+        grep -nE '^[^#].*:.*#' "${aq_themerc}" \
+            | grep -vE ':[[:space:]]*#[0-9A-Fa-f]{6,8}[[:space:]]*$' || true
+        fail "${aq_themerc} has what looks like an end-of-line comment." \
+             "labwc has none: it takes everything after the first colon as the" \
+             "value, so the setting is silently ignored and the default stands." \
+             "Put the comment on its own line, starting with #."
+    else
+        pass "the themerc has no end-of-line comments"
+    fi
+else
+    fail "${aq_themerc} is missing." \
+         "Without it labwc draws the desktop right-click menu and every window" \
+         "title bar in its own default grey — the bench note of 2026-09-06," \
+         "'the right click menu does not have a design yet'."
 fi
 
 # ------------------------------------------------------------------------------
@@ -2652,6 +2793,57 @@ else
     fail "session/labwc/rc.xml defines <mouse> bindings without <default />." \
          "That throws away window dragging, edge-resize and click-to-focus." \
          "Add <default /> at the top of the <mouse> section."
+fi
+
+# THE MENU'S FONT IS IN rc.xml, NOT IN THE THEMERC. labwc splits one look across
+# two files: colours come from themerc-override, fonts come from rc.xml's
+# <theme> section. Lose these and the desktop menu is drawn in "sans" while the
+# shell menu two inches above it is drawn in Inter — the same menu in two
+# typefaces, which is worse than either on its own.
+#
+# Inter is what theme/Theme.qml picks as `fontBody`, and labwc's <size> is in
+# pixels (labwc-config(5): "Font size in pixels"), the same unit Theme uses, so
+# 19 here is literally Theme.fsBody.
+if python3 - "$(printf '%s' session/labwc/rc.xml)" <<'AQ_PY'
+import sys, xml.etree.ElementTree as ET
+
+root = ET.parse(sys.argv[1]).getroot()
+wanted = {"MenuItem", "MenuHeader", "ActiveWindow", "InactiveWindow"}
+found = set()
+
+for theme in root.iter("theme"):
+    for font in theme.iter("font"):
+        place = font.get("place")
+        name = font.findtext("name") or font.get("name") or ""
+        size = font.findtext("size") or font.get("size") or ""
+        if place in wanted and name.strip() == "Inter" and size.strip().isdigit():
+            found.add(place)
+
+sys.exit(0 if found == wanted else 1)
+AQ_PY
+then
+    pass "rc.xml draws labwc's menu and title bars in the shell's own font"
+else
+    fail "session/labwc/rc.xml does not set Inter for all four <theme><font>" \
+         "places (MenuItem, MenuHeader, ActiveWindow, InactiveWindow)." \
+         "labwc takes colours from themerc-override and FONTS from here, so" \
+         "without these the desktop menu is drawn in whatever 'sans' resolves" \
+         "to while the shell's own menu is drawn in Inter."
+fi
+
+# The two copies of rc.xml — this one and the os-image's — are meant to differ
+# only in their comments, and the shell's is deliberately the superset. The
+# terminal keybind is the line that was only in the OS's copy until 2026-09-06.
+# On a machine with no ptyxis it is inert; what it buys is that `diff` between
+# the two files stops showing a real difference.
+if grep -qF '<command>ptyxis</command>' session/labwc/rc.xml \
+   && grep -qF 'key="W-Return"' session/labwc/rc.xml; then
+    pass "rc.xml binds a terminal on Super+Return, as the os-image copy does"
+else
+    fail "session/labwc/rc.xml has no W-Return keybind running ptyxis." \
+         "The os-image copy has one, and this file is meant to be the superset" \
+         "so the two can be kept content-identical apart from comments." \
+         "On a machine without ptyxis the keybind is simply inert."
 fi
 
 # ------------------------------------------------------------------------------

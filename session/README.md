@@ -14,7 +14,7 @@ This one is just the map.
 | `aquarius.desktop` | The entry that makes "Aquarius Session (experimental)" appear at the login screen. |
 | `install-session.sh` | Puts those two, plus the configs, in the right places — **without modifying the OS image.** Also `--uninstall`. |
 | `niri/config.kdl` | The session on **niri** (scrollable tiling). |
-| `labwc/rc.xml` + `autostart` + `shutdown` + `environment` | The session on **labwc** (plain stacking windows). |
+| `labwc/rc.xml` + `menu.xml` + `themerc-override` + `autostart` + `shutdown` + `environment` | The session on **labwc** (plain stacking windows). `menu.xml` is the desktop right-click menu's contents; `themerc-override` is how that menu and the window title bars get the Aquarius look, and it is the ONE file outside `theme/` allowed to hold a colour — read its header before touching it. |
 | `portals/aquarius-niri-portals.conf` | Which portal back ends answer which question, on niri. |
 | `portals/aquarius-labwc-portals.conf` | The same, for labwc. **Different file, on purpose** — the two compositors need different screen-capture back ends. |
 

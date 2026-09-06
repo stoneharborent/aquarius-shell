@@ -444,7 +444,7 @@ Everything except the first line is niri's own; the first line is ours.
 
 ### On labwc
 
-The Aquarius Session's labwc configuration adds four bindings and keeps labwc's
+The Aquarius Session's labwc configuration adds five bindings and keeps labwc's
 own defaults for everything else.
 
 | Keys | What it does |
@@ -452,13 +452,22 @@ own defaults for everything else.
 | **Super + Space** | **Open or close the Aquarius search palette** — ours |
 | **Super + Tab / Super + Shift + Tab** | **Next / previous window** — ours |
 | **Super + Shift + E** | **Leave the session** — ours |
-| Super + Return | A terminal |
+| **Super + Return** | **A terminal — `ptyxis`, the one AquariusOS ships** |
 | Alt + Tab / Alt + Shift + Tab | Next / previous window |
 | Alt + F4 | Close the window |
 | Super + A | Maximise |
 | Super + D | Show the desktop |
 | Super + ← → ↑ ↓ | Snap the window to half or a quarter of the screen |
 | Alt + Space | Window menu |
+
+**About Super + Return.** labwc's own `<default />` already binds it to a
+terminal, reaching for xterm, foot and alacritty in turn. AquariusOS ships
+`ptyxis`, so `rc.xml` names that one. This binding was in the os-image's copy of
+`rc.xml` and not in this repo's, which meant the two files differed in a way that
+was not a comment — and once that is true, "diff them and read the prose" stops
+being a way to check they agree. The shell's copy is deliberately the **superset**
+now. On a plain Fedora clone with no ptyxis installed the keybind is simply
+inert: labwc runs the command, the command is not there, nothing happens.
 
 ### About Super + Tab
 
@@ -599,6 +608,22 @@ start normally anyway.
 > They are still kept in step by hand, and the lines that actually *run* are
 > byte-for-byte identical between the two, so a diff between them shows only
 > prose. When you change one, change the other.
+
+**⚠️ `themerc-override` is new and the os-image does not have it yet.**
+`session/labwc/themerc-override` (added 2026-09-06) is what gives the desktop
+right-click menu and every window title bar the Aquarius look. Like `autostart`
+and `menu.xml`, it needs an os-image twin, at
+
+```
+system_files/usr/share/aquarius/labwc/themerc-override
+```
+
+Until that copy exists, an *installed* machine still draws its menu and title
+bars in labwc's own default grey while a machine running the session from a
+clone draws them in Ice. **CHANGE ONE, CHANGE BOTH** applies to it exactly as it
+does to the other two. `session/labwc/rc.xml` needs the same treatment: it now
+carries the `<theme><font>` block those surfaces are drawn in, and a
+`Super+Return` keybind that the os-image copy already had.
 
 ---
 
@@ -747,6 +772,35 @@ general-purpose D-Bus type in QML. Quickshell's own FAQ points at the answer
 used here: drive `gdbus` with its `Process` type. The whole implementation is
 `services/SystemAppearance.qml`, and its header explains the two alternatives
 that were considered and dropped.
+
+### ⚠️ labwc's own surfaces do not follow
+
+The theme swap moves the **shell** — the bar, the dock, the panels, the menus the
+shell draws. It does not move the two things **labwc** draws: the desktop
+right-click menu and window title bars. Those are coloured by
+`session/labwc/themerc-override`, a flat text file labwc reads **once, at
+start-up**, and a compositor has no way of knowing what a QML singleton has just
+decided.
+
+So that file is **Ice only**, and on a dark desktop the menu and title bars stay
+light while everything else goes dark. That seam is deliberate for now rather
+than unnoticed. Closing it needs three things, none of them hard and all of them
+a separate piece of work:
+
+1. a second file built from `theme/Midnight.qml` the same way, checked by the
+   same test (`tests/test-shell.sh` section 15b);
+2. something that copies the wanted one over `themerc-override` when
+   `services/SystemAppearance.qml` flips;
+3. **`labwc --reconfigure`** immediately afterwards — labwc's own "re-read your
+   files now" command, which is what makes the change appear without a logout.
+
+Step 2 is the reason it is not done yet: the shell would have to write into the
+session's configuration directory, which is a new kind of thing for it to do and
+wants a conversation first.
+
+The same gap applies to size. `AQ_UI_SCALE` grows every number in the shell and
+reaches nothing in labwc, so on a scaled desktop the menu keeps its unscaled
+padding. Whatever writes a Midnight file can write a scaled one.
 
 ### If nothing happens
 
