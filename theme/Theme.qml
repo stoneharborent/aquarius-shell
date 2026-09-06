@@ -126,6 +126,7 @@ Singleton {
     readonly property color pressWash: root.colors.pressWash
 
     readonly property color scrim: root.colors.scrim
+    readonly property color dimInk: root.colors.dimInk
 
     readonly property color success: root.colors.success
     readonly property color warn: root.colors.warn
@@ -621,6 +622,85 @@ Singleton {
     readonly property int greeterPillPaddingV: root.px(8)
     readonly property int greeterPillRadius: root.px(10)
     readonly property int greeterHintGap: root.px(18)        // the card -> the keyboard hints
+
+    // =========================================================================
+    // THE LOCK SCREEN
+    // =========================================================================
+    // The lock screen — lock/ — is the login screen's sibling. It is drawn
+    // INSIDE your session, over the top of everything, when you press Super+L
+    // or walk away from the machine. It is built out of the same pieces as the
+    // login screen: the same card, the same avatar, the same password box.
+    //
+    // So most of its sizes ARE the login screen's sizes and are not repeated
+    // here — lock/ uses greeterCardWidth, greeterCardPadding, greeterAvatarSize
+    // and the rest directly, because "the card is the same card" is the whole
+    // design idea and two sets of numbers would let them drift apart.
+    //
+    // What IS below is only what the lock screen does differently, and every
+    // one of those numbers comes from the approved spec (Royce, 2026-09-06):
+    // a bigger clock that shrinks when you start typing, a frosted veil over
+    // the wallpaper, and the shake a wrong password does.
+    //
+    // ⚠️ The three groups at the bottom — the seconds, the milliseconds and the
+    // fractions — are NOT sizes and must never be multiplied by the size knob.
+    // A bigger design must not wait longer before locking the machine. They are
+    // listed by name in tests/test-shell.sh section 30 as exemptions, and each
+    // one has to earn its place there.
+
+    // ---- the clock ----------------------------------------------------------
+    // Bigger than the login screen's (fsHero, 80) while nothing is being typed,
+    // and half that once the card is up, so the card is what the eye lands on.
+    readonly property int lockClockCalm: root.px(128)
+    readonly property int lockClockTyping: root.px(64)
+
+    // ---- the veil -----------------------------------------------------------
+    // A real blur of the wallpaper plus a wash of the theme's own background
+    // colour. Not a picture of the desktop: the desktop is never shown.
+    readonly property int lockVeilBlur: root.px(18)
+
+    // ---- the card -----------------------------------------------------------
+    // NOTE: the spec also asked for a SECOND, tighter blur behind the card
+    // itself. There is no token for it because the card does not do one. The
+    // veil underneath is already blurred, and a translucent surface over a
+    // blurred picture is what frosted glass looks like; a second full-screen
+    // render pass to blur the same wallpaper twice would cost real frames for a
+    // difference you have to be told about to see. Written up as a deviation in
+    // docs/lock-screen.md, the same way the search palette's missing drop
+    // shadow is.
+    readonly property int lockCardRise: root.px(24)   // how far it slides up as it appears
+    readonly property int lockNameSize: root.px(20)   // the person's name on the card
+    readonly property int lockFieldHeight: root.px(48)
+    readonly property int lockFieldRadius: root.px(12)
+
+    // ---- the mark at the top ------------------------------------------------
+    readonly property int lockMarkSize: root.px(18)
+    readonly property int lockWordmarkSize: root.px(13)
+
+    // ---- a wrong password ---------------------------------------------------
+    readonly property int lockShakeDistance: root.px(6)  // how far the box moves
+    readonly property int lockRingWidth: root.px(2)      // the danger ring around it
+
+    // ---- seconds. NOT sizes. ------------------------------------------------
+    // The idle timings are the defaults from the spec: dim at 5 minutes, lock at
+    // 10, screen off at 15. They will get a plain-language Settings page later;
+    // until then this is where they are changed.
+    readonly property int lockIdleDimSeconds: 300
+    readonly property int lockIdleLockSeconds: 600
+    readonly property int lockIdleOffSeconds: 900
+    // Three wrong passwords and the box waits, counting down in the status line.
+    readonly property int lockWaitSeconds: 10
+    // The card puts itself away again if you wake the screen and then do nothing.
+    readonly property int lockCalmBackSeconds: 30
+
+    // ---- milliseconds. NOT sizes. -------------------------------------------
+    readonly property int lockVeilFadeMs: 200   // the veil arriving and leaving
+    readonly property int lockShakeMs: 240      // the whole shake, three moves
+
+    // ---- fractions. NOT sizes. ----------------------------------------------
+    readonly property real lockClockTopFraction: 0.13  // where the clock sits while typing
+    readonly property real lockVeilWash: 0.45          // how much theme colour over the blur
+    readonly property real lockCardOpacity: 0.86       // the card's own surface
+    readonly property real lockDimWash: 0.55           // the 5-minute dim, before locking
 
     // =========================================================================
     // TYPE
