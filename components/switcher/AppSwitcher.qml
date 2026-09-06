@@ -162,17 +162,20 @@ Scope {
     // `aq keys windows` and the next Tab lists windows instead of apps.
     readonly property bool grouped: KeyProfile.mac
 
-    readonly property var entries: root.windows.entries
+    readonly property var entries: root.switcherModel.entries
 
     signal opened()
     signal closed()
 
     // ---- what it lists --------------------------------------------------------
-    // ⚠️ NOT called `model`. `model` is the name a Repeater's delegate gets its
-    //   own row data under, and a name an object already has wins over a name
-    //   declared further up the file. Section 26 of tests/test-shell.sh exists
-    //   because of exactly that class of bug.
-    property SwitcherModel windows: SwitcherModel {
+    // ⚠️ NOT called `model`, and not called `windows` either.
+    //   `model` is the name a Repeater's delegate gets its own row data under,
+    //   and a name an object already has wins over a name declared further up
+    //   the file — section 26 of tests/test-shell.sh exists because of exactly
+    //   that class of bug. `windows` was the other candidate and is worse for a
+    //   different reason: SwitcherModel has a `windows` property OF ITS OWN, so
+    //   half the file would read `root.windows.windows`.
+    property SwitcherModel switcherModel: SwitcherModel {
         grouped: root.grouped
     }
 
@@ -241,8 +244,8 @@ Scope {
             return;
         }
 
-        const windows = root.selectedWindows;
-        if (windows.length < 2)
+        const openWindows = root.selectedWindows;
+        if (openWindows.length < 2)
             return;
 
         if (!root.expanded) {
@@ -251,7 +254,7 @@ Scope {
             return;
         }
 
-        root.expandedIndex = (root.expandedIndex + 1) % windows.length;
+        root.expandedIndex = (root.expandedIndex + 1) % openWindows.length;
     }
 
     // Up. The mirror of the above: walk back up the window list, and step off
@@ -290,7 +293,7 @@ Scope {
         root.close();
 
         if (target)
-            root.windows.goTo(target);
+            root.switcherModel.goTo(target);
     }
 
     // Escape, or a click on the dimmed desktop. Changes nothing.
@@ -315,9 +318,9 @@ Scope {
     // deliberate: a panel that flashed up to say "there is only one" would be
     // worse than silence.
     function cycleWindows(): void {
-        const next = root.windows.nextSibling(root.windows.activeWindow);
+        const next = root.switcherModel.nextSibling(root.switcherModel.activeWindow);
         if (next)
-            root.windows.goTo(next);
+            root.switcherModel.goTo(next);
     }
 
     // ---- what the selection points at ------------------------------------------
@@ -336,12 +339,12 @@ Scope {
     // you are on; otherwise it is the app's most recently used window, which is
     // the one you last had in front of you.
     readonly property var targetWindow: {
-        const windows = root.selectedWindows;
-        if (windows.length === 0)
+        const openWindows = root.selectedWindows;
+        if (openWindows.length === 0)
             return null;
-        if (root.expanded && root.expandedIndex < windows.length)
-            return windows[root.expandedIndex];
-        return windows[0];
+        if (root.expanded && root.expandedIndex < openWindows.length)
+            return openWindows[root.expandedIndex];
+        return openWindows[0];
     }
 
     // =========================================================================
