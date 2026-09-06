@@ -11,6 +11,17 @@ running ones, with the running dot the design has been asking for since V2.*
 > against the very light Ice desktop it floats over instead of washing into it.
 > The `Theme.panel` → `Theme.dockSurface` swap is the only colour change; the
 > borderless icons and the running-dot contrast are untouched.
+>
+> **Bench fixes, later the same day.** The first run of that drives list showed
+> **about thirty tiles with nothing plugged in** — they were the folders in the
+> home directory. Qt's `FolderListModel` silently lists the process's working
+> directory when the folder it is given does not exist at the moment it is
+> created, and `/run/media/<user>` does not exist until the first drive is
+> mounted. It is fixed, and the trap is written out in
+> [Mounted drives](#mounted-drives) so nobody re-introduces it. The **Settings
+> tile** also did nothing when clicked, for a completely separate reason that
+> had nothing to do with the dock — see
+> [The Settings tile is a special case](#the-settings-tile-is-a-special-case).
 
 **It runs — 2026-09-01, on the bench PC.** The dock draws its six pinned apps
 with their real artwork, the hairline rule and the `+` tile, and opening an
@@ -120,6 +131,66 @@ list and nothing else. Unmounting takes the GIO road because `gio mount -u` is
 the one unmount that works from a mount **path** alone, which is all a directory
 listing gives us. When a UDisks2 or GIO binding lands in a future Quickshell,
 `DockDrives.qml` is the one file that changes.
+
+### ⚠️ The trap underneath it: a model that lists the wrong directory
+
+**What happened.** On the bench on 2026-09-06, with nothing plugged into the
+machine, the right end of the dock drew about thirty tiles — *"a bunch of random
+folders instead of external drives"*. They were the folders in Royce's home
+directory.
+
+**Why.** Not the path, and not udisks2. It is what Qt's `FolderListModel` does
+when the folder it is given does not exist **at the moment the model is
+created**. From `qquickfolderlistmodel.cpp`, in `componentComplete()`:
+
+```cpp
+QString localPath = QQmlFile::urlToLocalFileOrQrc(d->currentDir);
+if (localPath.isEmpty() || !QDir(localPath).exists())
+    setFolder(QUrl::fromLocalFile(QDir::currentPath()));
+```
+
+A missing directory does not make the model empty and does not make it complain:
+it re-points the model at the **process's current working directory**. The shell
+is started from the session, whose working directory is the user's home — so
+every folder in the home directory became a "drive". And `/run/media/<user>` is
+missing most of the time, because udisks2 creates it on the first mount and
+removes it after the last unmount. So on a machine with nothing plugged in at
+login — the ordinary case — the model was always born pointing at the wrong
+place, and since `folder` was bound to a constant it never re-pointed when a real
+drive appeared later.
+
+(Calling `setFolder()` later with a missing directory is *not* the same thing —
+that just empties the model. The silent substitution happens only at completion,
+which is why "set it again when it appears" is not the fix.)
+
+**How it is fixed.** The list is a chain of three watchers, each level created
+only while the level above says its directory exists, and destroyed when it goes:
+
+```
+/run                    always exists — the one model created unconditionally
+  └─ has "media"?  ──▶  /run/media            (created by a Loader)
+        └─ has "<user>"?  ──▶  /run/media/<user>   (created by a Loader — the list)
+```
+
+Because a `FolderListModel` has no "list nothing" switch, **not creating it** is
+the switch — hence the Loaders. And because a Loader builds a *fresh* model each
+time it becomes active, plugging a drive in an hour after login now builds the
+list properly instead of being ignored.
+
+**Belt and braces.** Each created model also reads its own `folder` back once it
+is complete and compares it to the directory that was asked for. That is a direct
+question about whether the fallback fired, because the fallback works by writing
+into that very property. A mismatch marks the model unhealthy, warns once on the
+console, and makes `hasDrives` false — so a listing the shell does not trust
+draws **nothing**, not somebody's home directory. `tests/test-shell.sh`
+**section 35b** guards the whole shape of this.
+
+**The honest edges.** The existence checks re-run when the listing above them
+changes size; a directory swapped for another in the same instant, with the count
+landing back where it started, would not be noticed until the next change — the
+health check is the net under that. A username containing characters a URL has to
+escape would fail the read-back comparison and leave the list empty, which fails
+safe rather than wrong.
 
 ---
 
@@ -265,6 +336,39 @@ yet. Cycling is obvious after one try, and the whole behaviour is
 
 There is **no right-click menu.** The KDE dock had one, most of it built from a
 C++ helper this shell does not have. An empty menu is worse than no menu.
+
+### The Settings tile is a special case
+
+Every tile launches its app the ordinary way — `DesktopEntry.execute()`, which is
+`execDetached` with the entry's own parsed command. Exactly one program on the
+machine cannot be started that way, and on 2026-09-06 the bench found it: clicking
+the **Settings** icon did nothing at all.
+
+Nothing to do with the dock. GNOME's Settings app reads `XDG_CURRENT_DESKTOP` and
+exits immediately — printing `Running gnome-control-center is only supported under
+GNOME and Unity, exiting` where nobody can see it — unless one of the
+colon-separated names is `GNOME`, and an Aquarius session deliberately calls
+itself `aquarius-labwc:aquarius:wlroots` (that name is how the desktop portals are
+found, so it cannot change). Running its `.desktop` entry runs that same command,
+so the dock hit the same wall as the Aquarius menu and the Quick Settings
+chevrons.
+
+So `DockItem.launch()` asks first:
+
+```qml
+if (SettingsLauncher.ownsDesktopEntry(root.entry)) {
+    SettingsLauncher.open("");
+    return;
+}
+root.entry.execute();
+```
+
+The dock knows nothing about that program; it asks the shell's one Settings door,
+`services/SettingsLauncher.qml`, which is also what the Aquarius menu, the Quick
+Settings chevrons and the search palette use, and which runs it as `env
+XDG_CURRENT_DESKTOP=GNOME gnome-control-center`. Every other entry on the machine
+takes the ordinary road. The whole story is in
+[`logo-menu.md`](logo-menu.md#opening-settings).
 
 ---
 
@@ -536,7 +640,12 @@ likely it is to bite:
    two-letter tile, so the worst case is ugly rather than broken.
 7. **`DesktopEntry.execute()`** for a Flatpak app, and whether it needs
    `workingDirectory` passed. The docs say `execute()` is equivalent to
-   `execDetached` with both, so it should be handled.
+   `execDetached` with both, so it should be handled. Settings is the one entry
+   that never reaches `execute()` — see [The Settings tile is a special
+   case](#the-settings-tile-is-a-special-case) — and the id it is matched on
+   (`org.gnome.Settings`, or `gnome-control-center` on older packaging) has not
+   been read off the shipped machine, so check that the tile really opens the app
+   rather than merely stopping doing nothing.
 8. **`minimized = true` as a way to hide a focused window.** It is a *request*;
    `Toplevel`'s docs say a compositor may ignore it. If clicking a focused app's
    tile does nothing on the bench, that is why, and the fallback is to drop the
@@ -557,6 +666,16 @@ likely it is to bite:
 12. **`qsTr("%n window(s) open", "", n)`** — the plural form. Nothing translates
     this shell yet, so it renders the source string; the `%n` substitution itself
     is untested.
+13. **A `Loader` holding a non-visual object.** The drives chain has each level's
+    `FolderListModel` created by a `Loader` through `sourceComponent`, because not
+    creating a model is the only way to stop it listing the wrong directory. Qt
+    documents `Loader.item` as a `QtObject` and Loader as able to load a
+    non-visual component, but this repo has never done it before. If the models
+    never appear, that is the first thing to check, and the fallback is
+    `Instantiator` from `QtQml`, which is built for non-visual delegates.
+14. **Whether the drives chain actually recovers.** Plugging a drive in *after*
+    login is the case the old code got wrong and the case a static check cannot
+    prove. It is step 14 on the bench list below.
 
 ---
 
@@ -625,6 +744,24 @@ Then, in order:
 
 13. **Plug in a second monitor**, if the bench has one. A second dock should
     appear, centred on that screen, showing the same apps.
+
+14. **The drives, in this order, because the order is the bug.** Start the shell
+    with **nothing plugged in**: the right end of the dock must be empty — no
+    separator, no tiles, and above all not a row of your home folders (that is
+    the 2026-09-06 failure, and the console would say
+    `aquarius-shell: dock drives:` if the health check caught a substitution).
+    *Then* plug a USB drive in, while it is running: a tile should appear, with
+    the separator before it. Unplug it: both should go. Plug it in again: the
+    tile should come back. That last one is the recovery the old code did not
+    have. `ls /run/media/$USER` in a terminal is the ground truth to compare
+    against.
+
+15. **Click the Settings tile.** GNOME's Settings should open. If it does not,
+    run `env XDG_CURRENT_DESKTOP=GNOME gnome-control-center` in a terminal inside
+    the session: if that opens the window, the tile is not going through
+    `SettingsLauncher`; if it does not, the problem has moved into the app
+    itself. See [The Settings tile is a special
+    case](#the-settings-tile-is-a-special-case).
 
 Write down what actually happened. The roadmap's P1 gate — *does it feel better
 than the themed panel?* — has a dock-shaped sibling, and it can only be answered

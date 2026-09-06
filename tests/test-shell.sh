@@ -2386,6 +2386,133 @@ fi
 
 # ------------------------------------------------------------------------------
 echo ""
+echo "=== 35b. the drives list can never list the wrong directory ==="
+# ------------------------------------------------------------------------------
+# THIS SECTION EXISTS BECAUSE OF A BUG THAT PUT THIRTY WRONG TILES IN THE DOCK.
+#
+# Bench, 2026-09-06: with nothing plugged into the machine, the right end of the
+# dock drew "a bunch of random folders instead of external drives" — they were
+# the folders in the user's home directory.
+#
+# The cause is in Qt, in qquickfolderlistmodel.cpp, componentComplete():
+#
+#     QString localPath = QQmlFile::urlToLocalFileOrQrc(d->currentDir);
+#     if (localPath.isEmpty() || !QDir(localPath).exists())
+#         setFolder(QUrl::fromLocalFile(QDir::currentPath()));
+#
+# When the folder does not exist AT CREATION, FolderListModel does not go empty —
+# it silently lists the process's working directory instead, which for the shell
+# is the user's home. And /run/media/<user> does not exist most of the time:
+# udisks2 makes it on the first mount and removes it after the last unmount.
+#
+# So the rule this section enforces is: the shell may only point a
+# FolderListModel at a directory it has just seen exist. DockDrives.qml does that
+# with a chain — /run (always there) tells it whether /run/media exists, which
+# tells it whether /run/media/<user> exists — with each level created by a Loader
+# and destroyed when its directory goes, plus a read-back health check on each
+# created model as the net underneath the reasoning.
+#
+# These are grep-level checks, like the rest of this file. They cannot prove the
+# chain works; they can prove nobody has quietly put the constant-bound model
+# back, which is the shape of the bug.
+
+aq_drives_code="$(sed -E 's,//.*,,' components/dock/DockDrives.qml)"
+
+# The always-present root is watched unguarded; the two below it are not. These
+# two checks read the FILE, not the comment-stripped copy above: a file:// URL
+# contains "//" and the comment stripper would cut the path in half. They match
+# the property declarations rather than a loose mention, so a path named in prose
+# cannot stand in for the real thing.
+if grep -qE 'runRoot:[[:space:]]*"file:///run"' components/dock/DockDrives.qml; then
+    pass "DockDrives.qml starts from /run, which always exists"
+else
+    fail "components/dock/DockDrives.qml no longer watches file:///run." \
+         "That is the one directory a FolderListModel may be pointed at" \
+         "unconditionally, and the whole chain hangs off what it sees."
+fi
+
+if grep -qE 'mediaBase:[[:space:]]*"file:///run/media"' \
+        components/dock/DockDrives.qml; then
+    pass "DockDrives.qml watches the mount root as its own level"
+else
+    fail "components/dock/DockDrives.qml no longer names file:///run/media as a" \
+         "level of its own. /run/media is created by udisks2 on the first mount" \
+         "and removed after the last unmount, so it has to be watched rather" \
+         "than assumed."
+fi
+
+# The two lower models are built from Components by Loaders, which is the only
+# way to have a FolderListModel that does not exist yet: the type has no switch
+# for "do not list anything", so not creating it is the switch.
+if printf '%s' "${aq_drives_code}" | grep -qF 'sourceComponent:'; then
+    pass "DockDrives.qml creates its lower models from Components"
+else
+    fail "components/dock/DockDrives.qml no longer creates its models from" \
+         "Components. A FolderListModel that is simply declared is created at" \
+         "start-up, before any drive is plugged in, which is the whole bug."
+fi
+
+# Two Loaders, two levels: /run/media and /run/media/<user>. One Loader means a
+# level is being created unguarded again.
+aq_drive_loaders="$(printf '%s' "${aq_drives_code}" \
+    | grep -cE '^[[:space:]]*Loader[[:space:]]*\{' || true)"
+if [ "${aq_drive_loaders}" -ge 2 ]; then
+    pass "DockDrives.qml builds the nested watch (${aq_drive_loaders} Loaders)"
+else
+    fail "components/dock/DockDrives.qml has ${aq_drive_loaders} Loader(s)," \
+         "and the nested watch needs two: one for /run/media and one for" \
+         "/run/media/<user>. Each level must be created only while its own" \
+         "directory exists and torn down when it goes."
+fi
+
+# Each created model checks, once it is complete, that `folder` reads back as
+# the directory that was asked for. That is a direct question about whether Qt's
+# fallback fired, because the fallback works by writing into that property.
+if printf '%s' "${aq_drives_code}" | grep -qF '.folder' \
+   && printf '%s' "${aq_drives_code}" | grep -qF 'healthy'; then
+    pass "DockDrives.qml reads its folder back and marks the model healthy or not"
+else
+    fail "components/dock/DockDrives.qml no longer reads model.folder back." \
+         "That read-back is the belt to the chain's braces: if Qt substituted" \
+         "the working directory, the folder property is where it says so."
+fi
+
+if printf '%s' "${aq_drives_code}" | grep -qF 'console.warn'; then
+    pass "DockDrives.qml says so out loud when the listing is not trusted"
+else
+    fail "components/dock/DockDrives.qml no longer warns when its model is" \
+         "listing a directory nobody asked for. A silently empty dock is how" \
+         "this bug hid for a day."
+fi
+
+# hasDrives is what Dock.qml believes. An unhealthy model must make it false, so
+# a distrusted listing draws no separator and no tiles.
+if printf '%s' "${aq_drives_code}" | grep -A6 'property bool hasDrives' \
+        | grep -qF 'healthy'; then
+    pass "hasDrives is false unless the model passed its health check"
+else
+    fail "components/dock/DockDrives.qml computes hasDrives without consulting" \
+         "the health check. A model that fell back to the home directory would" \
+         "report drives, which is exactly what the dock drew on 2026-09-06."
+fi
+
+# THE RULE ITSELF, stated as a grep: no FolderListModel anywhere in the shell may
+# have its folder bound to a path that was not just verified. In practice that
+# means the only literal folder assignments allowed are the /run ones and a
+# property built from them, and every other one has to come from a checked
+# property. Anything pointing straight into a home directory is the old bug.
+if grep -rn --include='*.qml' -E 'folder\s*:\s*"file:///(home|Users)' . \
+        > /dev/null 2>&1; then
+    grep -rn --include='*.qml' -E 'folder\s*:\s*"file:///(home|Users)' . || true
+    fail "a QML file points a folder model straight at a home directory." \
+         "The shell only lists directories it has verified exist, and it never" \
+         "lists somebody's home. See the header of DockDrives.qml."
+else
+    pass "no folder model is pointed at a home directory"
+fi
+
+# ------------------------------------------------------------------------------
+echo ""
 echo "=== 36. the desktop right-click menu is wired up ==="
 # ------------------------------------------------------------------------------
 # Right-clicking the empty desktop opens the Aquarius menu, drawn by labwc from
