@@ -944,6 +944,50 @@ def here():
     return os.path.dirname(os.path.abspath(__file__))
 
 
+def find_palette_dir(template_dir):
+    """
+    Where Ice.qml and Midnight.qml are, on whichever machine this is.
+
+    This program runs in two quite different places and the palette is not in
+    the same spot in both:
+
+      a clone of aquarius-shell   session/labwc/generate-theme, and the palette
+                                  two folders up, in theme/
+      an installed AquariusOS     /usr/share/aquarius/labwc/generate-theme, and
+                                  the palette in /usr/share/aquarius/shell/theme
+                                  — a different folder, because the OS fetches
+                                  the whole shell at a pinned commit and puts it
+                                  somewhere of its own.
+
+    So rather than one path that is right in one place and wrong in the other,
+    this looks in a short list and takes the first that actually has the file.
+    --palette-dir, and then AQ_PALETTE_DIR, win over both, which is what makes
+    "point it at my working copy for five minutes" possible.
+    """
+    candidates = [
+        os.environ.get("AQ_PALETTE_DIR", ""),
+        os.path.join(template_dir, "..", "..", "theme"),
+        "/usr/share/aquarius/shell/theme",
+        "/usr/local/share/aquarius-shell/theme",
+        "/usr/share/aquarius-shell/theme",
+    ]
+    for candidate in candidates:
+        if candidate and os.path.isfile(os.path.join(candidate, "Ice.qml")):
+            return candidate
+
+    die(
+        "the colour palette could not be found.\n"
+        "Looked for a folder containing Ice.qml in:\n"
+        + "".join(
+            "    %s\n" % (c or "$AQ_PALETTE_DIR (unset)") for c in candidates
+        )
+        + "\n"
+        "That folder is theme/ in the aquarius-shell repository. Without it\n"
+        "there is nothing to build a window frame out of.\n"
+        "Fix: pass --palette-dir, or set AQ_PALETTE_DIR."
+    )
+
+
 def main(argv):
     parser = argparse.ArgumentParser(
         description="Build labwc's look out of the Aquarius shell's palette.",
@@ -1000,7 +1044,7 @@ def main(argv):
     )
 
     template_dir = args.template_dir or here()
-    palette_dir = args.palette_dir or os.path.join(template_dir, "..", "..", "theme")
+    palette_dir = args.palette_dir or find_palette_dir(template_dir)
     config_out = args.config_out or os.path.join(config_home, "aquarius", "labwc")
     theme_out = args.theme_out or os.path.join(
         data_home, "themes", THEME_NAME, "labwc"
