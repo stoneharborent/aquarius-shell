@@ -25,8 +25,11 @@ import "components/search"
 
 ShellRoot {
     TopBar {
-        // Clicking the Aquarius mark opens the search palette.
-        onLauncherRequested: flowSearch.toggleSearch()
+        // Clicking the Aquarius mark opens the Aquarius menu — the desktop's
+        // Apple-menu: About This PC, System Settings, Check for Update, and the
+        // session actions. Search moved to Super+Space and the desktop's
+        // right-click menu. See components/bar/LogoMenu.qml.
+        onLauncherRequested: logoMenu.toggle()
 
         // Clicking the clock opens the notifications panel, and the clock stays
         // lit while it is open.
@@ -49,6 +52,16 @@ ShellRoot {
         // `qs ipc call dock openAppGrid` fires the same signal from outside.
         // See docs/dock.md.
         onAppGridRequested: flowSearch.toggleSearch()
+    }
+
+    // The Aquarius menu, off the mark at the top-left of the bar. Invisible
+    // until the mark is clicked or a keybind calls:
+    //
+    //     qs ipc -c aquarius-shell call logomenu toggle
+    //
+    // See docs/logo-menu.md.
+    LogoMenu {
+        id: logoMenu
     }
 
     // The notification daemon, the toasts and the panel. See

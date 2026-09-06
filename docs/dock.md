@@ -3,6 +3,15 @@
 *The second real piece of the Aquarius Shell. Bottom-centred, pinned apps plus
 running ones, with the running dot the design has been asking for since V2.*
 
+> **R6 update, 2026-09-06.** Two changes landed together, both Royce's call:
+> the dashed **"+" tile at the right end is gone**, replaced by a **live list of
+> the external drives that are mounted right now** (see
+> [Mounted drives](#mounted-drives) below); and the **slab is a touch darker**
+> than the bar now (`Theme.dockSurface`, one step off `panel`) so it has an edge
+> against the very light Ice desktop it floats over instead of washing into it.
+> The `Theme.panel` → `Theme.dockSurface` swap is the only colour change; the
+> borderless icons and the running-dot contrast are untouched.
+
 **It runs — 2026-09-01, on the bench PC.** The dock draws its six pinned apps
 with their real artwork, the hairline rule and the `+` tile, and opening an
 application added a tile with **the running dot underneath it**. Details and
@@ -71,10 +80,46 @@ shrink the dock's apparent size and nobody would connect the two.
 |---|---|
 | `components/dock/Dock.qml` | The layer-shell panel, one per monitor, and the slab it draws. Owns the `appGridRequested` seam. |
 | `components/dock/DockItem.qml` | One app: tile, icon, hover lift, running dots, and what a click does. |
-| `components/dock/DockAddTile.qml` | The dashed `+` tile. |
+| `components/dock/DockDrives.qml` | The live list of mounted external drives at the right end (R6). |
+| `components/dock/DockDrive.qml` | One mounted drive: glyph, open in Files, right-click to eject (R6). |
+| `components/dock/DockAddTile.qml` | The dashed `+` tile. **No longer drawn** (the drives list took its place, R6); the file is kept because the structural tests still list it and it is one Rectangle from returning if an app grid ever wants a launch tile. |
 | `components/dock/DockModel.qml` | Turns *pinned list* + *live windows* into one ordered list of tiles. |
 | `components/dock/DockConfig.qml` | Reads `~/.config/aquarius-shell/dock.json`. |
 | `theme/Theme.qml` | Every number above, in the block headed **THE DOCK**. |
+
+## Mounted drives
+
+The right end of the dock (R6, 2026-09-06) is a live list of the removable /
+external drives that are plugged in and mounted right now — one tile per drive,
+with a separator before them. Plug a drive in and a tile appears; unplug it and
+it goes. **When nothing is plugged in, the dock draws nothing there** — no
+separator, no placeholder.
+
+- **Left-click** opens the drive in the file manager (`xdg-open <mount path>`).
+- **Right-click** offers *Eject / Unmount*, which unmounts it through GVfs/GIO
+  (`gio mount -u -f <mount path>`).
+- Each tile draws the shell's own **drive glyph** (from `QsGlyph`) rather than
+  app artwork, because a drive has no `.desktop` entry; the volume's name is on
+  the tile's accessibility label and at the head of the right-click menu.
+
+**Where the list comes from — the standardised route, and why this one.** The
+task was to read the mounts through UDisks2 over D-Bus or the GVfs/GIO volume
+monitor, whichever the shipped Quickshell can do cleanly. The shipped build
+(quickshell 0.2.1 git, Qt 6.11) has **neither** binding — there is no storage
+service in its probed module list — so there is no D-Bus object to bind to from
+QML without hand-rolling a client, which the standardised-protocols law exists to
+avoid. What *is* clean, standard and reactive is watching the directory udisks2
+mounts removable drives into — `/run/media/<user>/<label>` — with Qt's own
+`FolderListModel`, which updates the instant a mount appears or disappears, no
+polling and no compositor-specific anything. It is a plain reading of the mount
+table's user-facing face. The trade, written down so nobody has to rediscover
+it: it depends on the os-image side auto-mounting removable drives to
+`/run/media` (which it does, passwordless) and on `Qt.labs.folderlistmodel`
+being present — and it is behind a `Loader` so a missing module costs the drives
+list and nothing else. Unmounting takes the GIO road because `gio mount -u` is
+the one unmount that works from a mount **path** alone, which is all a directory
+listing gives us. When a UDisks2 or GIO binding lands in a future Quickshell,
+`DockDrives.qml` is the one file that changes.
 
 ---
 

@@ -82,8 +82,8 @@ these. Full explanation and troubleshooting: **[`harness/README.md`](harness/REA
 |---|---|
 | `shell.qml` | The front door. Everything hangs off this file. Deliberately tiny. |
 | `theme/` | **Ice** (light) and **Midnight** (dark) as the single source of truth for every colour, size and typeface. No component anywhere contains a hex value. |
-| `components/bar/` | The top bar — the first real piece. Aquarius mark, active app name, status cluster (live glyphs + system tray), clock. |
-| `components/dock/` | The centred dock: pinned + running apps, hover lift, the centred running dot. `docs/dock.md`. |
+| `components/bar/` | The top bar — the first real piece. Aquarius mark (opens the Aquarius menu — `docs/logo-menu.md`), active app name, status cluster (live glyphs + system tray), clock. |
+| `components/dock/` | The centred dock: pinned + running apps, hover lift, the centred running dot, and mounted external drives at the right end. `docs/dock.md`. |
 | `components/quicksettings/` | The Quick Settings panel and the bar glyphs that open it. `docs/quick-settings.md`. |
 | `components/notifications/` | The notification daemon, toasts, and the panel off the clock. `docs/notifications.md`. |
 | `components/search/` | The Flow Search palette — apps, math, session actions. `docs/flow-search.md`. |

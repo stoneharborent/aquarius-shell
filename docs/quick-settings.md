@@ -14,6 +14,18 @@ AquariusOS ships, and the bench PC **does** have a wireless adapter. The tile
 read "No adapter" all day because a ReferenceError killed its subtitle binding
 the instant NetworkManager reported the adapter — see "Wi-Fi" below.*
 
+*R6, 2026-09-06. The Wi-Fi, Bluetooth and Performance tiles grew a small
+**chevron** in the top-right corner — a **separate hit target from the switch**:
+tapping the tile still toggles, tapping the chevron opens that thing's full page
+in GNOME's Settings (`gnome-control-center wifi` / `bluetooth` / `power`, all
+stable panel ids). It is `QsTile`'s `hasDetail` + `detailRequested()`; the glyph
+is `"chevron"` from `QsGlyph`, and each tile handles `onDetailRequested` with
+`Quickshell.execDetached`. Focus (a shell switch, nothing behind it) and Game
+Mode (a session hand-off) have no page, so they show no chevron. The chevron is
+keyboard-reachable (`activeFocusOnTab` + Enter/Space), ready for the day the
+panel can take keyboard focus. Until the shell has its own Settings, these open
+GNOME's.*
+
 ---
 
 ## What was built

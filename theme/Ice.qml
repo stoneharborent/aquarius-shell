@@ -49,6 +49,17 @@ Singleton {
     readonly property color surfaceAlt: "#E4EDF6"  // secondary cards
     readonly property color panel: "#F0F6FC"       // panels and chrome — THE TOP BAR
 
+    // The dock's slab. It is a touch DARKER than `panel` on purpose (Royce, on
+    // the bench, 2026-09-06): the dock floats over a very light Ice desktop, and
+    // at the bar's own `panel` colour the slab and the wallpaper behind it read
+    // as nearly the same tone, so the dock stops looking like a solid object and
+    // starts looking like a faint rectangle. This is one step down the surface
+    // ladder from `panel` (#F0F6FC) toward `bgSoft` (#DFEAF4) — enough to give
+    // the slab an edge against the ground, not so much that it reads as a dark
+    // bar on a light desktop. Small and tasteful, not heavy. Midnight has its
+    // own twin; see the note there.
+    readonly property color dockSurface: "#E3ECF5"
+
     // --- Ink: the text ---------------------------------------------------------
     readonly property color ink: "#16273A"         // primary text — deep navy, not black
     readonly property color inkProse: "#0E1B2A"    // long-form reading text (deepest)

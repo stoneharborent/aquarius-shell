@@ -584,6 +584,7 @@ for aq_file in \
     session/install-session.sh \
     session/niri/config.kdl \
     session/labwc/rc.xml \
+    session/labwc/menu.xml \
     session/labwc/autostart \
     session/labwc/shutdown \
     session/labwc/environment \
@@ -2014,6 +2015,292 @@ if grep -q "${aq_greeter_helper}" greeter/GreeterState.qml; then
 else
     fail "greeter/GreeterState.qml no longer calls ${aq_greeter_helper}." \
          "The AquariusOS image installs the helper at exactly that path."
+fi
+
+# ==============================================================================
+# THE LOGO MENU (components/bar/LogoMenu.qml) — checks 33
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+echo ""
+echo "=== 33. the Aquarius (logo) menu holds together ==="
+# ------------------------------------------------------------------------------
+# Clicking the Aquarius mark opens a shell-drawn dropdown (R6, 2026-09-06). It is
+# a keyboard-navigable layer-shell overlay like Flow Search, so the same three
+# things have to be true of it: its files are there, it obeys the one-overlay-at-
+# a-time rule, and every item it offers names a real command. The last part is
+# what a cheap check can genuinely protect — a menu item that launches the wrong
+# thing, or a settings panel id that was renamed, is exactly the sort of typo
+# that draws perfectly and does nothing.
+
+for aq_file in \
+    components/bar/LogoMenu.qml \
+    components/bar/MenuRow.qml \
+    docs/logo-menu.md
+do
+    if [ -f "${aq_file}" ]; then
+        pass "${aq_file}"
+    else
+        fail "${aq_file} is missing."
+    fi
+done
+
+# It is an exclusive overlay, so it must register/unregister/claim like the
+# other three and import the services singleton. Comments are stripped first, the
+# same way section 27 does, because the file explains all of this at length.
+aq_logo_code="$(sed -E 's,//.*,,' components/bar/LogoMenu.qml)"
+
+for aq_call in register unregister claim; do
+    if printf '%s' "${aq_logo_code}" | grep -qF "Overlays.${aq_call}("; then
+        pass "LogoMenu.qml calls Overlays.${aq_call}()"
+    else
+        fail "components/bar/LogoMenu.qml does not call Overlays.${aq_call}()." \
+             "It takes the keyboard, so it has to close the other overlays and" \
+             "be closable by them. See services/Overlays.qml."
+    fi
+done
+
+if printf '%s' "${aq_logo_code}" | grep -qE '^\s*import\s+"\.\./\.\./services"'; then
+    pass "LogoMenu.qml imports services/"
+else
+    fail "components/bar/LogoMenu.qml uses Overlays but does not import services/."
+fi
+
+if printf '%s' "${aq_logo_code}" | grep -qE '^\s*import\s+QtQuick'; then
+    pass "LogoMenu.qml imports QtQuick (for Component.onCompleted)"
+else
+    fail "components/bar/LogoMenu.qml uses Component.onCompleted without QtQuick."
+fi
+
+# Every menu item, by the exact command it runs. The label a person reads and the
+# command a click sends are declared in the same file; this checks the command,
+# which is the half that can be silently wrong.
+#   description : the substring that must appear in LogoMenu.qml
+aq_logo_actions=(
+    'About This PC : "gnome-control-center", "system"'
+    'System Settings : execDetached(["gnome-control-center"])'
+    'Check for Update : /usr/libexec/aquarius-updater'
+    'Log Out : "loginctl", "terminate-session"'
+    'Sleep : "systemctl", "suspend"'
+    'Restart : "systemctl", "reboot"'
+    'Power Off : "systemctl", "poweroff"'
+)
+for aq_row in "${aq_logo_actions[@]}"; do
+    aq_desc="${aq_row%% : *}"
+    aq_needle="${aq_row#* : }"
+    if grep -qF "${aq_needle}" components/bar/LogoMenu.qml; then
+        pass "the logo menu's '${aq_desc}' runs the right command"
+    else
+        fail "components/bar/LogoMenu.qml has no '${aq_desc}' action." \
+             "Expected to find:  ${aq_needle}"
+    fi
+done
+
+# The updater item is guarded: it is only offered when the file is executable, so
+# the menu never launches something that is not installed.
+if grep -qF '"test", "-x"' components/bar/LogoMenu.qml \
+   && grep -q 'updaterAvailable' components/bar/LogoMenu.qml; then
+    pass "the 'Check for Update' item is guarded by a [ -x ] probe"
+else
+    fail "components/bar/LogoMenu.qml no longer guards the updater with a" \
+         "'test -x' probe and an updaterAvailable flag. Without it the menu can" \
+         "offer to launch an updater that is not on the machine."
+fi
+
+# The IPC door, so a keybind or a script can open the Aquarius menu.
+if grep -q 'target: "logomenu"' components/bar/LogoMenu.qml; then
+    pass "LogoMenu.qml registers the IPC target 'logomenu'"
+else
+    fail "components/bar/LogoMenu.qml no longer registers IPC target \"logomenu\"."
+fi
+
+# The bar's mark opens the menu, not the search palette any more.
+if grep -q 'logoMenu.toggle()' shell.qml; then
+    pass "shell.qml opens the logo menu from the Aquarius mark"
+else
+    fail "shell.qml no longer wires the Aquarius mark to logoMenu.toggle()." \
+         "Clicking the mark is meant to open the Aquarius menu (R6)."
+fi
+
+# ------------------------------------------------------------------------------
+echo ""
+echo "=== 34. the Quick Settings tiles' detail arrows open the right panels ==="
+# ------------------------------------------------------------------------------
+# Wi-Fi, Bluetooth and Performance grew a small chevron (R6, 2026-09-06) that
+# opens that thing's full page in Settings — a SEPARATE hit target from the
+# switch. The failure a check can catch is the chevron opening the wrong panel,
+# or a tile that should have one not having one.
+
+# The shared machinery on QsTile.
+for aq_bit in 'property bool hasDetail' 'signal detailRequested()' 'glyph: "chevron"'; do
+    if grep -qF "${aq_bit}" components/quicksettings/QsTile.qml; then
+        pass "QsTile.qml has: ${aq_bit}"
+    else
+        fail "components/quicksettings/QsTile.qml is missing: ${aq_bit}" \
+             "The detail chevron is drawn by QsTile and opened by each tile."
+    fi
+done
+
+# Each tile that has a page behind it, and the panel it opens.
+#   file : the gnome-control-center panel id it must open
+aq_detail_tiles=(
+    'components/quicksettings/TileWifi.qml : "gnome-control-center", "wifi"'
+    'components/quicksettings/TileBluetooth.qml : "gnome-control-center", "bluetooth"'
+    'components/quicksettings/TilePowerProfile.qml : "gnome-control-center", "power"'
+)
+for aq_row in "${aq_detail_tiles[@]}"; do
+    aq_tile="${aq_row%% : *}"
+    aq_panel="${aq_row#* : }"
+    if grep -q 'hasDetail: true' "${aq_tile}" \
+       && grep -qF "${aq_panel}" "${aq_tile}"; then
+        pass "$(basename "${aq_tile}") opens its Settings panel"
+    else
+        fail "${aq_tile} does not set hasDetail:true and open ${aq_panel}." \
+             "Its chevron is meant to open that gnome-control-center panel."
+    fi
+done
+
+# ------------------------------------------------------------------------------
+echo ""
+echo "=== 35. the dock reads a live list of mounted drives ==="
+# ------------------------------------------------------------------------------
+# The dashed "+" at the end of the dock was replaced (R6, 2026-09-06) by a live
+# list of the external drives that are mounted right now. This checks the files
+# are there, that the list is read through a standard route rather than a
+# compositor hack, that opening and unmounting go through the documented commands,
+# and that the "+" tile is genuinely no longer instantiated.
+
+for aq_file in \
+    components/dock/DockDrives.qml \
+    components/dock/DockDrive.qml
+do
+    if [ -f "${aq_file}" ]; then
+        pass "${aq_file}"
+    else
+        fail "${aq_file} is missing."
+    fi
+done
+
+# The list is read by watching the udisks2 mount root with a Qt FolderListModel —
+# a standard, compositor-agnostic route (see the header of DockDrives.qml for why
+# this rather than a D-Bus binding the shipped Quickshell does not have).
+if grep -q 'FolderListModel' components/dock/DockDrives.qml \
+   && grep -q '/run/media/' components/dock/DockDrives.qml; then
+    pass "DockDrives.qml reads mounts from the udisks2 mount root"
+else
+    fail "components/dock/DockDrives.qml no longer reads the mount list." \
+         "It is meant to watch /run/media/<user> with a FolderListModel."
+fi
+
+# Opening a drive goes to the file manager; unmounting takes the GVfs/GIO road,
+# which is the one unmount that works from a mount path alone.
+if grep -qF '"xdg-open"' components/dock/DockDrive.qml; then
+    pass "DockDrive.qml opens a drive in the file manager"
+else
+    fail "components/dock/DockDrive.qml no longer opens the drive (xdg-open)."
+fi
+if grep -qF '"gio", "mount", "-u"' components/dock/DockDrive.qml; then
+    pass "DockDrive.qml unmounts through GVfs/GIO"
+else
+    fail "components/dock/DockDrive.qml no longer unmounts with 'gio mount -u'."
+fi
+
+# The drive tile draws the drive glyph, which therefore has to exist in the
+# glyph table (section 20 only scans quicksettings/ and bar/, so the dock's use
+# of it is checked here instead).
+if grep -q 'glyph: "drive"' components/dock/DockDrive.qml; then
+    pass "DockDrive.qml uses the 'drive' glyph"
+    if grep -qE '^\s*"drive"\s*:\s*\{' components/quicksettings/QsGlyph.qml; then
+        pass "QsGlyph.qml has a 'drive' glyph"
+    else
+        fail "components/quicksettings/QsGlyph.qml has no 'drive' glyph," \
+             "but DockDrive.qml asks for one."
+    fi
+fi
+
+# The drives list is drawn where the "+" used to be, and the "+" is gone.
+if grep -q 'DockDrives.qml' components/dock/Dock.qml; then
+    pass "Dock.qml draws the drives list"
+else
+    fail "components/dock/Dock.qml no longer draws DockDrives."
+fi
+if grep -qE '^\s*DockAddTile\s*\{' components/dock/Dock.qml; then
+    fail "components/dock/Dock.qml still instantiates DockAddTile." \
+         "The '+' was replaced by the drives list; the file stays in the repo" \
+         "(section 18 still lists it) but the dock must not draw it any more."
+else
+    pass "Dock.qml no longer instantiates the '+' tile"
+fi
+
+# ------------------------------------------------------------------------------
+echo ""
+echo "=== 36. the desktop right-click menu is wired up ==="
+# ------------------------------------------------------------------------------
+# Right-clicking the empty desktop opens the Aquarius menu, drawn by labwc from
+# menu.xml and bound in rc.xml (R6, 2026-09-06). menu.xml fails SILENTLY when
+# malformed — labwc just shows nothing — so it is parsed here the same way rc.xml
+# is, and its items are checked.
+
+if python3 -c "import xml.etree.ElementTree as e,sys; e.parse(sys.argv[1])" \
+        session/labwc/menu.xml 2>/dev/null; then
+    pass "session/labwc/menu.xml is well-formed XML"
+else
+    fail "session/labwc/menu.xml is not well-formed XML."
+fi
+
+if grep -q 'id="root-menu"' session/labwc/menu.xml; then
+    pass "menu.xml defines the root menu"
+else
+    fail "session/labwc/menu.xml does not define a menu with id=\"root-menu\"." \
+         "rc.xml binds right-click to ShowMenu menu=\"root-menu\"; the names must" \
+         "match or the menu is empty."
+fi
+
+# The items the menu must offer, by the command each runs.
+#   description : substring that must be in menu.xml
+aq_menu_items=(
+    'Search : qs ipc call search toggle'
+    'System Settings : <command>gnome-control-center</command>'
+    'Change Wallpaper : gnome-control-center background'
+    'Sleep : systemctl suspend'
+    'Restart : systemctl reboot'
+    'Power Off : systemctl poweroff'
+)
+for aq_row in "${aq_menu_items[@]}"; do
+    aq_desc="${aq_row%% : *}"
+    aq_needle="${aq_row#* : }"
+    if grep -qF "${aq_needle}" session/labwc/menu.xml; then
+        pass "the desktop menu offers '${aq_desc}'"
+    else
+        fail "session/labwc/menu.xml has no '${aq_desc}' item." \
+             "Expected to find:  ${aq_needle}"
+    fi
+done
+
+# Log Out reuses labwc's own Exit — the same teardown as Super+Shift+E — rather
+# than a second one invented here.
+if grep -q 'name="Exit"' session/labwc/menu.xml; then
+    pass "the desktop menu's Log Out uses labwc's own Exit"
+else
+    fail "session/labwc/menu.xml no longer offers Log Out via labwc's Exit."
+fi
+
+# rc.xml has to actually bind a right-click to it, and keep labwc's own mouse
+# defaults so window dragging still works.
+if grep -q 'ShowMenu' session/labwc/rc.xml \
+   && grep -q 'menu="root-menu"' session/labwc/rc.xml; then
+    pass "rc.xml binds a click to the root menu"
+else
+    fail "session/labwc/rc.xml does not bind anything to ShowMenu root-menu." \
+         "Without it the menu.xml is never shown."
+fi
+if grep -Pzoq '(?s)<mouse>.*<default\s*/>.*</mouse>' session/labwc/rc.xml \
+   2>/dev/null || grep -A3 '<mouse>' session/labwc/rc.xml | grep -q '<default'; then
+    pass "rc.xml keeps labwc's default mouse bindings"
+else
+    fail "session/labwc/rc.xml defines <mouse> bindings without <default />." \
+         "That throws away window dragging, edge-resize and click-to-focus." \
+         "Add <default /> at the top of the <mouse> section."
 fi
 
 # ------------------------------------------------------------------------------

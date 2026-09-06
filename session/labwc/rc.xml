@@ -53,7 +53,21 @@
   "W" is labwc's letter for Super (the Windows/Command key). Its other
   modifiers are S=shift, C=control, A=alt.
 
-  Format reference: labwc-config(5) and labwc-actions(5).
+  =============================================================================
+  THE DESKTOP RIGHT-CLICK MENU
+  =============================================================================
+  Right-clicking the empty desktop opens the Aquarius menu (Search, System
+  Settings, Change Wallpaper, and the session actions). The menu's CONTENTS are
+  in menu.xml next to this file; the <mouse> section below is only what binds a
+  right-click on the root to it.
+
+  <default /> inside <mouse> loads labwc's built-in mouse bindings — window
+  dragging, edge-resize, focus-on-click, alt-drag to move — so this section adds
+  the root menu WITHOUT throwing those away. Left-clicking the root is left
+  alone, so the desktop stays inert to a left click, which is what a clean
+  desktop with no icons should do.
+
+  Format reference: labwc-config(5), labwc-actions(5) and labwc-menu(5).
   =============================================================================
 -->
 
@@ -129,5 +143,23 @@
     </keybind>
 
   </keyboard>
+
+  <mouse>
+
+    <!-- labwc's own mouse bindings: dragging a title bar, edge-resize, click to
+         focus and raise, alt-drag to move a window. Keeping them means this
+         section only has to describe what is different about Aquarius. -->
+    <default />
+
+    <!-- Right-click the empty desktop -> the Aquarius menu (menu.xml). Left
+         click on the root is deliberately left unbound, so a clean desktop with
+         no icons does nothing on a left click. -->
+    <context name="Root">
+      <mousebind button="Right" action="Press">
+        <action name="ShowMenu" menu="root-menu" />
+      </mousebind>
+    </context>
+
+  </mouse>
 
 </labwc_config>

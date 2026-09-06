@@ -57,10 +57,23 @@ Rectangle {
     // False when the hardware or the service behind this tile is missing.
     property bool available: true
 
+    // Some tiles have a fuller settings page behind them — Wi-Fi has a network
+    // picker, Bluetooth a device list, Performance the whole power panel. When a
+    // tile sets this true it grows a small chevron in its top-right corner, a
+    // SEPARATE hit target from the switch: tapping the tile still toggles, and
+    // tapping the chevron opens that page. Focus (a shell switch, nothing behind
+    // it) and Game Mode (a session hand-off, not a settings page) leave it false.
+    // Added 2026-09-06 (R6).
+    property bool hasDetail: false
+
     // Emitted on click. The Tile*.qml decides what a click means — and for
     // TileGameMode it does not mean "toggle" at all, which is why this signal is
     // named for the gesture rather than for a state change.
     signal activated()
+
+    // Emitted when the detail chevron is used, by click or by keyboard. The
+    // Tile*.qml that sets `hasDetail` handles this by opening its Settings page.
+    signal detailRequested()
 
     implicitHeight: Theme.qsTileHeight
     radius: Theme.radiusLg
@@ -94,7 +107,9 @@ Rectangle {
     RowLayout {
         anchors.fill: parent
         anchors.leftMargin: Theme.qsTilePaddingH
-        anchors.rightMargin: Theme.qsTilePaddingH
+        // Keep the two text lines clear of the chevron in the top-right corner
+        // when there is one, so a long network name does not run under it.
+        anchors.rightMargin: root.hasDetail ? Theme.qsDetailHitSize : Theme.qsTilePaddingH
         anchors.topMargin: Theme.qsTilePaddingV
         anchors.bottomMargin: Theme.qsTilePaddingV
         spacing: Theme.qsTileInnerGap
@@ -173,5 +188,67 @@ Rectangle {
         acceptedButtons: Qt.LeftButton
         cursorShape: root.available ? Qt.PointingHandCursor : Qt.ArrowCursor
         onClicked: root.activated()
+    }
+
+    // ---- the detail chevron --------------------------------------------------
+    // A distinct hit target from the switch above. It is DECLARED AFTER `mouse`
+    // so it stacks above it in the corner it covers: a click that lands on the
+    // chevron opens the settings page, a click anywhere else on the tile toggles
+    // the switch. Only present when the tile has a page behind it AND the thing
+    // is available at all — offering "more settings" for hardware that is not
+    // there would be a dead end.
+    Item {
+        id: detail
+        visible: root.hasDetail && root.available
+        enabled: detail.visible
+
+        width: Theme.qsDetailHitSize
+        height: Theme.qsDetailHitSize
+        anchors.top: parent.top
+        anchors.right: parent.right
+
+        // Reachable from the keyboard as well as the pointer. The Quick Settings
+        // panel does not take keyboard focus today (it opens as a PopupWindow
+        // without it), so Tab cannot reach this yet — but the handlers are here
+        // so it works the day it can, the same forward-looking choice the dock's
+        // add tile made.
+        activeFocusOnTab: detail.visible
+        Keys.onReturnPressed: root.detailRequested()
+        Keys.onEnterPressed: root.detailRequested()
+        Keys.onSpacePressed: root.detailRequested()
+
+        Accessible.role: Accessible.Button
+        Accessible.name: qsTr("%1 settings").arg(root.title)
+        Accessible.description: qsTr("Open the full settings page")
+
+        QsGlyph {
+            anchors.centerIn: parent
+            glyph: "chevron"
+            size: Theme.qsDetailArrowSize
+            // Quiet by default, and it lifts to the primary ink when the pointer
+            // is over its box, so it is discoverable without shouting.
+            color: chevronMouse.containsMouse ? Theme.ink : Theme.inkMute
+        }
+
+        // A faint focus ring, so keyboard users can see where they are once the
+        // panel can be tabbed into.
+        Rectangle {
+            anchors.fill: parent
+            anchors.margins: Theme.hairline
+            radius: Theme.radiusSm
+            color: "transparent"
+            border.width: Theme.hairline
+            border.color: Theme.accent
+            visible: detail.activeFocus
+        }
+
+        MouseArea {
+            id: chevronMouse
+            anchors.fill: parent
+            hoverEnabled: true
+            acceptedButtons: Qt.LeftButton
+            cursorShape: Qt.PointingHandCursor
+            onClicked: root.detailRequested()
+        }
     }
 }

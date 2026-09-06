@@ -160,7 +160,12 @@ Scope {
                 height: slab.implicitHeight
 
                 radius: Theme.dockRadius
-                color: Theme.panel
+                // A touch darker than the bar's `panel`, so the slab has an edge
+                // against the very light Ice desktop it floats over instead of
+                // washing into it (Royce, on the bench, 2026-09-06). The token,
+                // and the reason it is a step off `panel` rather than equal to
+                // it, are in theme/Ice.qml beside `dockSurface`.
+                color: Theme.dockSurface
                 border.width: Theme.hairline
                 border.color: Theme.line
 
@@ -191,18 +196,36 @@ Scope {
                         delegate: DockItem {}
                     }
 
-                    // The rule between the apps and the "+", straight from the
-                    // design: 1px wide, 28px tall, in the stronger hairline.
-                    Rectangle {
+                    // The right end of the dock: the drives that are plugged in
+                    // and mounted right now, each their own tile, with a
+                    // separator before them. This REPLACED the dashed "+" on
+                    // 2026-09-06 (Royce). See DockDrives.qml.
+                    //
+                    // It is behind a Loader for one reason: DockDrives imports
+                    // Qt.labs.folderlistmodel, and a file that imports a missing
+                    // module fails to load ENTIRELY. If that file were loaded
+                    // directly and the module were absent, the whole dock would
+                    // vanish. Behind a Loader a missing module costs the drives
+                    // list and nothing else — the same reasoning as the status
+                    // cluster's per-glyph Loaders.
+                    //
+                    // The Loader is hidden, so the parent Row allots it no space
+                    // or spacing, until DockDrives says there is at least one
+                    // drive. That is what makes an empty list show nothing at
+                    // all — no separator, no gap, no "+".
+                    Loader {
+                        id: drivesLoader
                         anchors.verticalCenter: parent.verticalCenter
-                        width: Theme.hairline
-                        height: Theme.dockSeparatorHeight
-                        color: Theme.lineStrong
+                        source: "DockDrives.qml"
+                        visible: drivesLoader.item ? drivesLoader.item.hasDrives : false
                     }
 
-                    DockAddTile {
-                        onActivated: root.appGridRequested()
-                    }
+                    // The dashed "+" (DockAddTile.qml) is no longer drawn — the
+                    // drives list took its place. The file is kept in the repo
+                    // (the shell's structural tests still list it, and it is one
+                    // Rectangle away from returning if an app grid ever wants a
+                    // launch tile), and the `appGridRequested` seam below stays
+                    // live so `qs ipc call dock openAppGrid` still opens search.
                 }
             }
         }

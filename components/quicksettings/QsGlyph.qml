@@ -153,6 +153,32 @@ Item {
         "speaker-mute": {
             w: 16, h: 16, s: 1.5,
             p: ["M8.6 3 5.1 6.2H2.4v3.6h2.7L8.6 13z", "M11.2 6.4 14.4 9.6M14.4 6.4 11.2 9.6"]
+        },
+
+        // --- ours ---------------------------------------------------------------
+        // A right-pointing chevron. The V2 mock never drew one — its tiles are
+        // single-state and have no "open the full page" affordance. This is the
+        // little arrow on the Wi-Fi, Bluetooth and Performance tiles (2026-09-06)
+        // that says "there is more of this in Settings". Drawn on the same 24-grid
+        // as the other line glyphs so it sits at the same weight beside them.
+        "chevron": {
+            w: 24, h: 24, s: 2.0,
+            p: ["M9 5.5 15.5 12 9 18.5"]
+        },
+
+        // --- ours ---------------------------------------------------------------
+        // An external drive: a rounded slab lying on its side, a slot along the
+        // top, and an activity light in the corner — the conventional reading of
+        // a plugged-in disk. It marks a mounted-drive tile at the right of the
+        // dock (2026-09-06). Drawn on a 24-grid to match the rest of this table.
+        // The light is the one filled shape; everything else is stroked.
+        "drive": {
+            w: 24, h: 24, s: 1.8,
+            p: [
+                "M4.5 8.5a2 2 0 0 1 2-2h11a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-11a2 2 0 0 1-2-2z",
+                "M8 6.5v-1a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v1"
+            ],
+            f: "M7 13.5a1.1 1.1 0 1 0 2.2 0 1.1 1.1 0 1 0-2.2 0"
         }
     })
 

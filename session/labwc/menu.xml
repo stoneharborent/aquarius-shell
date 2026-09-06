@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<!--
+  =============================================================================
+  The Aquarius desktop's right-click menu (labwc)
+  =============================================================================
+  Right-clicking the empty desktop opens this menu. rc.xml, next to this file,
+  binds Root right-click to "ShowMenu root-menu"; this file is what root-menu
+  contains.
+
+  WHY THIS IS A labwc MENU AND NOT A SHELL-DRAWN ONE
+    The shell draws its OWN menu off the Aquarius mark (components/bar/LogoMenu.qml)
+    — that one can be a layer-shell popup because it hangs off a bar item the
+    shell owns. The DESKTOP root is the compositor's, not the shell's, and there
+    is no standard, compositor-agnostic way for a layer-shell client to be told
+    "the user right-clicked the wallpaper at these coordinates" and to place a
+    popup there. labwc's own menu is the right tool for a right-click on labwc's
+    own root, and it is drawn by labwc from this file. On a different compositor
+    the shell's mark menu and Super+Space still work; only this root menu is
+    labwc's.
+
+  WHAT IS DELIBERATELY NOT HERE
+    Desktop icons. Royce chose a clean desktop; this is only a context menu.
+    Left-clicking the desktop still does nothing.
+
+  THE ONE RULE THIS FILE OBEYS THAT MIGHT SURPRISE YOU
+    NO COLOURS. Same as rc.xml: labwc draws this menu with its own Openbox theme,
+    and it would be easy to tint it here. Colour in this project lives in
+    theme/Ice.qml and theme/Midnight.qml and nowhere else. When the shell draws
+    the root menu itself one day, it will own the colour too.
+
+  Format reference: labwc-menu(5).
+  =============================================================================
+-->
+
+<openbox_menu>
+  <menu id="root-menu" label="Aquarius">
+
+    <!-- The Aquarius search palette, the same message Super+Space sends. -->
+    <item label="Search">
+      <action name="Execute">
+        <command>qs ipc call search toggle</command>
+      </action>
+    </item>
+
+    <separator />
+
+    <!-- The full Settings app, and its wallpaper page directly. `background` is
+         a stable gnome-control-center panel id. -->
+    <item label="System Settings">
+      <action name="Execute">
+        <command>gnome-control-center</command>
+      </action>
+    </item>
+
+    <item label="Change Wallpaper">
+      <action name="Execute">
+        <command>gnome-control-center background</command>
+      </action>
+    </item>
+
+    <separator />
+
+    <!-- Leave the session. This is labwc's own Exit, the SAME teardown
+         Super+Shift+E runs (see rc.xml) — not a second way out. -->
+    <item label="Log Out">
+      <action name="Exit" />
+    </item>
+
+    <item label="Sleep">
+      <action name="Execute">
+        <command>systemctl suspend</command>
+      </action>
+    </item>
+
+    <item label="Restart">
+      <action name="Execute">
+        <command>systemctl reboot</command>
+      </action>
+    </item>
+
+    <item label="Power Off">
+      <action name="Execute">
+        <command>systemctl poweroff</command>
+      </action>
+    </item>
+
+  </menu>
+</openbox_menu>

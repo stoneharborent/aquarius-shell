@@ -112,6 +112,7 @@ Singleton {
     readonly property color surface: root.colors.surface
     readonly property color surfaceAlt: root.colors.surfaceAlt
     readonly property color panel: root.colors.panel
+    readonly property color dockSurface: root.colors.dockSurface
 
     readonly property color ink: root.colors.ink
     readonly property color inkProse: root.colors.inkProse
@@ -302,6 +303,28 @@ Singleton {
     readonly property int barTrayIconSize: root.px(20)    // a system tray application's own icon
 
     // =========================================================================
+    // THE LOGO MENU — the dropdown that opens off the Aquarius mark
+    // =========================================================================
+    // Clicking the mark at the top-left of the bar opens a small Ice dropdown:
+    // About This PC, System Settings, Check for Update, then the session actions
+    // (Log Out, Sleep, Restart, Power Off). It is the desktop's equivalent of the
+    // Apple menu, and it is drawn by the shell — a layer-shell overlay, not a
+    // compositor menu — so it looks like the rest of the shell and answers the
+    // keyboard. Added 2026-09-06 (R6). See components/bar/LogoMenu.qml.
+    //
+    // The V2 artboard never drew this menu, so these are not measured off it.
+    // They are the shell's own ladder: rows the height of a search result row's
+    // text line, the card corner (radiusMd) and hairlines used everywhere else.
+    readonly property int logoMenuMinWidth: root.px(240)   // the card is at least this wide
+    readonly property int logoMenuPaddingV: root.px(8)     // top/bottom padding inside the card
+    readonly property int logoMenuRowHeight: root.px(36)   // one item
+    readonly property int logoMenuRowPaddingH: root.px(16) // space inside a row, left and right
+    readonly property int logoMenuRowGap: root.px(12)      // label -> its trailing note
+    readonly property int logoMenuRadius: root.px(12)      // the card's corners
+    readonly property int logoMenuGapUnderBar: root.px(6)  // bar's bottom edge -> the card
+    readonly property int logoMenuSeparatorMargin: root.px(8) // the rule's inset and the air around it
+
+    // =========================================================================
     // QUICK SETTINGS — measured off the V2 artboard, then grown 1.25x
     // =========================================================================
     // Source: os-image/branding/design-system/"AquariusOS Desktop Shell.html",
@@ -335,6 +358,15 @@ Singleton {
     readonly property int qsTileInnerGap: root.px(13)     // chip -> text
     readonly property int qsChipSize: root.px(40)
     readonly property int qsChipGlyphSize: root.px(19)
+
+    // The little chevron in the top-right corner of a tile that HAS a settings
+    // page behind it (Wi-Fi, Bluetooth, Performance). It is a separate hit
+    // target from the tile's main toggle: tapping the tile flips the switch,
+    // tapping the chevron opens that page in full Settings. Added 2026-09-06.
+    // The glyph is small — it is an affordance, not a control competing with the
+    // switch — and its hit box is a comfortable finger/pointer target around it.
+    readonly property int qsDetailArrowSize: root.px(14)  // the chevron glyph itself
+    readonly property int qsDetailHitSize: root.px(30)    // the square you can click
     readonly property int qsSlidersTop: root.px(20)       // grid -> first slider
     readonly property int qsSliderGap: root.px(18)        // slider -> slider
     readonly property int qsSliderLabelGap: root.px(10)   // label row -> track
@@ -438,6 +470,15 @@ Singleton {
     readonly property real dockHoverScale: 1.08   // and how much it grows
     readonly property int dockGlyphSize: root.px(20)       // the two-letter icon fallback
     readonly property int dockAddGlyphSize: root.px(27)    // the "+" on the add tile
+
+    // The line-drawn drive icon on a mounted-drive tile. The right end of the
+    // dock is a live list of plugged-in external drives now, not a "+" (Royce,
+    // 2026-09-06 — see components/dock/DockDrives.qml). A drive is drawn with the
+    // "drive" glyph from QsGlyph rather than an app's artwork, so it needs its
+    // own size: bigger than the two-letter fallback because it is the whole mark,
+    // a little smaller than a full app icon because a stroked glyph reads heavier
+    // than a filled one at the same box.
+    readonly property int dockDriveGlyphSize: root.px(30)
 
     // * The design draws two-letter placeholders rather than real icons, so it
     //   has no inset to measure. The artboard's inset was 6: the Plasma theme's

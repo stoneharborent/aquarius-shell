@@ -64,12 +64,24 @@
 // =============================================================================
 import QtQuick
 
+import Quickshell
 import Quickshell.Networking
 
 QsTile {
     id: root
 
     title: qsTr("Wi-Fi")
+
+    // There is a whole network picker behind this switch — choosing a network,
+    // typing its password — and that is a Settings surface, not something a
+    // 165px tile can hold (see the note at the foot of this file). So the tile
+    // grows a chevron that opens GNOME's Wi-Fi panel, until the shell has its
+    // own Settings. `gnome-control-center wifi` is a stable panel id across
+    // GNOME versions. execDetached so it outlives a shell reload; it is a launch,
+    // not the kind of system-control shell-out tests/test-shell.sh section 22
+    // guards.
+    hasDetail: true
+    onDetailRequested: Quickshell.execDetached(["gnome-control-center", "wifi"])
 
     // ---- finding the wireless device ----------------------------------------
     // `Networking.devices` is an ObjectModel, and the docs are explicit that a

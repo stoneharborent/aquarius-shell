@@ -32,12 +32,20 @@
 // =============================================================================
 import QtQuick
 
+import Quickshell
 import Quickshell.Bluetooth
 
 QsTile {
     id: root
 
     title: qsTr("Bluetooth")
+
+    // Pairing a device, forgetting one, seeing battery levels — that is the
+    // Bluetooth panel's job, not a tile's. The chevron opens it. `bluetooth` is
+    // a stable gnome-control-center panel id. See TileWifi.qml for why this is
+    // execDetached and why it does not trip section 22.
+    hasDetail: true
+    onDetailRequested: Quickshell.execDetached(["gnome-control-center", "bluetooth"])
 
     // Usually there is exactly one. A machine with none — most desktop towers —
     // gets a dimmed tile rather than a switch with nothing behind it.

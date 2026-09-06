@@ -39,6 +39,15 @@ Singleton {
     readonly property color surfaceAlt: "#1B2940"
     readonly property color panel: "#152033"       // THE TOP BAR
 
+    // The dock's slab — Ice's twin. See the long note beside `dockSurface` in
+    // Ice.qml for why the dock is drawn a step off the bar's `panel` tone. On
+    // Midnight the ground is already dark, so the dock does not have the "faint
+    // rectangle on white" problem Ice has; the job here is only to keep the two
+    // themes coherent, so this is the same one-step move — a touch DARKER than
+    // `panel` (#152033), toward `bg` (#0B1220) — which reads as the slab sitting
+    // a little deeper than the bar rather than as a second panel colour.
+    readonly property color dockSurface: "#111A2B"
+
     // --- Ink --------------------------------------------------------------------
     readonly property color ink: "#DCE9F4"         // ice-blue text
     readonly property color inkProse: "#DCE9F4"    // Midnight has no deeper prose ink
