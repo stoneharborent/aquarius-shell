@@ -87,6 +87,7 @@ these. Full explanation and troubleshooting: **[`harness/README.md`](harness/REA
 | `components/quicksettings/` | The Quick Settings panel and the bar glyphs that open it. `docs/quick-settings.md`. |
 | `components/notifications/` | The notification daemon, toasts, and the panel off the clock. `docs/notifications.md`. |
 | `components/search/` | The Flow Search palette — apps, math, session actions. `docs/flow-search.md`. |
+| `components/switcher/` | The app switcher — hold Command (or Alt), tap Tab, let go. Applications on the Mac keyboard style, windows on the Windows one. `docs/app-switcher.md`. |
 | `greeter/` | **The login screen** — this repo's second entry point (`qs -p greeter/greeter.qml`). The Ice wallpaper, the Aquarius mark, a password box, and the conversation with greetd that starts your desktop. `docs/greeter.md`. |
 | `lock/` | **The lock screen** — Super+L, the Aquarius menu's Lock Screen row, or ten minutes of nobody touching the machine. Part of the desktop shell rather than a program of its own, so that locking is instant; `lock/lock.qml` is a way to look at it in the harness. The password is checked by PAM and never by this shell. `docs/lock-screen.md`. |
 | `services/` | Shared single-instance state: Focus (do-not-disturb), the system light/dark preference, the one-overlay-at-a-time rule, and the shell's single door to the Settings app. |

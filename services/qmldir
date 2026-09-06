@@ -13,7 +13,9 @@
 # This directory is pulled in by `import "../../services"` from the components.
 # =============================================================================
 
+singleton AppIdentity 1.0 AppIdentity.qml
 singleton FocusState 1.0 FocusState.qml
+singleton KeyProfile 1.0 KeyProfile.qml
 singleton Overlays 1.0 Overlays.qml
 singleton SettingsLauncher 1.0 SettingsLauncher.qml
 singleton SystemAppearance 1.0 SystemAppearance.qml

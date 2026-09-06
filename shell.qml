@@ -23,6 +23,7 @@ import "components/dock"
 import "components/notifications"
 import "components/search"
 import "lock"
+import "components/switcher"
 
 ShellRoot {
     TopBar {
@@ -69,6 +70,18 @@ ShellRoot {
     // docs/notifications.md.
     NotificationLayer {
         id: notifications
+    }
+
+    // The app switcher — the panel Command-Tab (Mac keys) or Alt-Tab (Windows
+    // keys) puts in the middle of the screen. Invisible until labwc's keybind
+    // calls:
+    //
+    //     qs ipc call switcher next
+    //
+    // It commits when you let go of the modifier, which is the hard part and is
+    // written out at the top of components/switcher/AppSwitcher.qml. See
+    // docs/app-switcher.md.
+    AppSwitcher {
     }
 
     // The search palette. Invisible until something asks for it — the bar or

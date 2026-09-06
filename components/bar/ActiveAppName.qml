@@ -42,6 +42,8 @@ import QtQuick
 import Quickshell
 import Quickshell.Wayland
 
+import "../../services"
+
 import "../../theme"
 
 Text {
@@ -58,27 +60,15 @@ Text {
     readonly property var toplevel: ToplevelManager.activeToplevel
     readonly property string appId: root.toplevel ? root.toplevel.appId : ""
 
-    readonly property var entry: root.appId === ""
-        ? null
-        : DesktopEntries.heuristicLookup(root.appId)
+    readonly property var entry: AppIdentity.lookup(root.appId)
 
     readonly property string appName: {
-        if (root.entry && root.entry.name)
-            return root.entry.name;
-        if (root.appId !== "")
-            return root.tidyAppId(root.appId);
-        return root.fallbackText;
-    }
-
-    // "org.kde.dolphin" -> "Dolphin". Last dot-separated piece, first letter
-    // raised. Crude, but only ever used when the proper lookup already failed,
-    // and much kinder than showing the raw string.
-    function tidyAppId(id: string): string {
-        const pieces = id.split(".");
-        const last = pieces[pieces.length - 1];
-        if (last.length === 0)
-            return id;
-        return last.charAt(0).toUpperCase() + last.slice(1);
+        // Naming an application from its window is the same question the dock
+        // and the app switcher ask, and it is answered once, in
+        // services/AppIdentity.qml. An empty answer means the window told us
+        // nothing at all, which is what fallbackText is for.
+        const name = AppIdentity.displayName(root.entry, root.appId);
+        return name === "" ? root.fallbackText : name;
     }
 
     text: root.appName

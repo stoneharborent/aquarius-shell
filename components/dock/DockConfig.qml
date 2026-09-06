@@ -115,6 +115,8 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 
+import "../../services"
+
 Scope {
     id: root
 
@@ -166,18 +168,11 @@ Scope {
     // accepts either ending, and a desktop entry's own id never carries one.
     // This is the form they are compared in.
     //
-    // DockModel.qml has the same function, for the same reason, and the two must
-    // agree — a name this file thinks is pinned and that file thinks is not
-    // would put a menu item in front of somebody that does nothing. They are
-    // eight lines each and neither imports the other; if a third copy ever
-    // appears, that is the moment to give it a home of its own.
+    // The third copy of this arrived with the app switcher, exactly as the note
+    // that used to live here predicted. It has a home now:
+    // services/AppIdentity.qml. This line is what is left of it.
     function normaliseId(id: string): string {
-        if (!id)
-            return "";
-        let text = String(id);
-        if (text.toLowerCase().endsWith(".desktop"))
-            text = text.slice(0, -8);
-        return text.toLowerCase();
+        return AppIdentity.normaliseId(id);
     }
 
     // Is this app in the pinned list, whichever way its name is spelled?

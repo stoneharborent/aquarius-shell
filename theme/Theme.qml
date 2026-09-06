@@ -127,6 +127,7 @@ Singleton {
 
     readonly property color scrim: root.colors.scrim
     readonly property color dimInk: root.colors.dimInk
+    readonly property color switcherScrim: root.colors.switcherScrim
 
     readonly property color success: root.colors.success
     readonly property color warn: root.colors.warn
@@ -532,6 +533,80 @@ Singleton {
 
     readonly property int searchFooterPaddingH: root.px(18)
     readonly property int searchFooterPaddingV: root.px(11)
+
+    // =========================================================================
+    // THE APP SWITCHER — the panel Command-Tab / Alt-Tab puts on screen
+    // =========================================================================
+    // WHERE THESE NUMBERS COME FROM, AND WHY THEY ARE NOT MULTIPLIED BY 1.25
+    //
+    // Every other block in this file quotes an ARTBOARD number and then grows
+    // it (1.25x for the shell, 1.5x for the dock). The app switcher has no
+    // artboard. Its sizes were decided directly, in the build spec of
+    // 2026-09-06, and that spec quotes them as "design px x AQ_UI_SCALE" —
+    // finished numbers with the growth already in them.
+    //
+    // You can check that for yourself against the dock, which the spec says the
+    // panel borrows its slab from: the spec asks for a corner radius of 24 and
+    // padding of 14, and `dockRadius` and `dockPaddingV` below are already
+    // px(24) and px(14). Those are the SHIPPED dock numbers, not its artboard's
+    // 16 and 9. So the spec is speaking in shipped pixels, and every token here
+    // is the spec's number passed straight through px().
+    //
+    // TYPE IS THE ONE EXCEPTION, and it is not an exception to the rule so much
+    // as a consequence of it. The spec asks for "Inter 400 15", "Inter 400 12"
+    // and "Inter 600 11". This file does not let a component invent a type
+    // size — the ladder above is named once and used everywhere (read the note
+    // under fsMicro about three tracks inventing three different 11s). 15, 12
+    // and 11 are exactly the DESIGN steps that fsBody, fsCaption and fsMicro
+    // are the shipped forms of, so the switcher uses those three tokens and
+    // adds none of its own.
+    //
+    // THE PANEL is the dock's slab, lifted to the middle of the screen: the
+    // same `dockSurface` fill, the same `lineStrong` hairline, no blur. Solid
+    // was decided, not glass.
+    readonly property int switcherRadius: root.px(24)        // the slab's corners
+    readonly property int switcherPadding: root.px(14)       // space inside the slab's edge
+    readonly property int switcherGap: root.px(12)           // space BETWEEN tiles
+
+    // THE APP TILE — one running app, in the Mac profile's row.
+    readonly property int switcherTileSize: root.px(124)     // the tile, square
+    readonly property int switcherTileRadius: root.px(20)    // its corners
+    readonly property int switcherIconSize: root.px(96)      // the app's icon inside it
+
+    // The two-letter stand-in drawn when the icon theme has no artwork for an
+    // app. Not a type size — it is a mark that has to fill a tile, which is why
+    // the dock names its own (`dockGlyphSize`) rather than using the ladder.
+    // 38 is that same 20-in-a-66-tile proportion at 124: 20 / 66 * 124 = 37.6.
+    readonly property int switcherGlyphSize: root.px(38)
+
+    // THE WINDOW-COUNT PILL — top-right of a tile, only when an app has more
+    // than one window open. Its label is fsMicro; see the note above.
+    readonly property int switcherPillHeight: root.px(18)
+    readonly property int switcherPillPaddingH: root.px(6)
+    readonly property int switcherPillRadius: root.px(9)     // half the height: a capsule
+
+    // THE EXPANDED LIST — what the Down arrow drops under the row of tiles:
+    // this app's windows, one per line. The spec's "12px gap + 1px rule + 12px"
+    // is one token used twice with `hairline` between.
+    readonly property int switcherExpandGap: root.px(12)
+    readonly property int switcherExpandRowHeight: root.px(36)
+    readonly property int switcherExpandRowRadius: root.px(9)
+    readonly property int switcherExpandIconSize: root.px(20)
+    readonly property int switcherExpandRowPaddingH: root.px(10)
+    readonly property int switcherExpandRowGap: root.px(10)
+
+    // THE WINDOW ROW — the Windows profile's whole panel is a column of these,
+    // one per window, with the window's title over its application's name.
+    readonly property int switcherWindowWidth: root.px(560)  // the panel's width in this mode
+    readonly property int switcherWindowRowHeight: root.px(52)
+    readonly property int switcherWindowRowRadius: root.px(12)
+    readonly property int switcherWindowIconSize: root.px(32)
+    readonly property int switcherWindowRowPaddingH: root.px(12)
+    readonly property int switcherWindowRowGap: root.px(12)
+
+    // How small the panel is allowed to start before it grows into place. The
+    // spec: "fades + scales from 96% over 120 ms". 120 ms is `durFast`.
+    readonly property real switcherOpenScale: 0.96
 
     // =========================================================================
     // NOTIFICATIONS — measured off the V2 artboard, then grown 1.25x

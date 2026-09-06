@@ -444,21 +444,40 @@ Everything except the first line is niri's own; the first line is ours.
 
 ### On labwc
 
-The Aquarius Session's labwc configuration adds five bindings and keeps labwc's
-own defaults for everything else.
+The Aquarius Session's labwc configuration adds its own bindings and keeps
+labwc's defaults for everything else.
 
 | Keys | What it does |
 |---|---|
 | **Super + Space** | **Open or close the Aquarius search palette** — ours |
-| **Super + Tab / Super + Shift + Tab** | **Next / previous window** — ours |
+| **Super + Tab / Super + Shift + Tab** | **The Aquarius app switcher, forwards / backwards** — ours |
+| **Alt + Tab / Alt + Shift + Tab** | **The same switcher, for the Windows keyboard style** — ours |
+| **Super + `** | **Cycle the windows of the app you are in, no panel** — ours |
 | **Super + Shift + E** | **Leave the session** — ours |
 | **Super + Return** | **A terminal — `ptyxis`, the one AquariusOS ships** |
-| Alt + Tab / Alt + Shift + Tab | Next / previous window |
 | Alt + F4 | Close the window |
 | Super + A | Maximise |
 | Super + D | Show the desktop |
 | Super + ← → ↑ ↓ | Snap the window to half or a quarter of the screen |
 | Alt + Space | Window menu |
+
+**About the Tab keys.** They used to be labwc's own `NextWindow` and
+`PreviousWindow`, which draw labwc's list of window titles. They now open the
+Aquarius app switcher instead — the shell's own panel, which groups an
+application's windows together the way a Mac does and is drawn from the same
+icon theme and colours as the dock. labwc's own list is switched off in the same
+block of `rc.xml`, so there is no way to get two switchers on screen at once.
+
+Both Super+Tab and Alt+Tab are bound, all the time, because Aquarius Keys swaps
+the two keys beside the space bar in the Mac style and does not in the Windows
+style. Which one you press is up to your keyboard profile; both arrive at the
+same panel, and the panel decides what to LIST from
+`~/.config/aquarius/keys.conf` — applications in the Mac style, windows in the
+Windows style.
+
+The whole feature, including the genuinely hard part (how the shell knows you
+let go of the modifier, and the two approaches that were tried first), is
+written up in **`docs/app-switcher.md`**.
 
 **About Super + Return.** labwc's own `<default />` already binds it to a
 terminal, reaching for xterm, foot and alacritty in turn. AquariusOS ships

@@ -90,6 +90,12 @@ Singleton {
     // themes, deliberately: a screen going dim is a screen going dark, and it
     // does not have an opinion about light and dark mode.
     readonly property color dimInk: "#05070B"
+    // Ice's twin — read Ice.qml for why the app switcher dims so much less than
+    // everything else. Midnight dims harder here for the same reason it dims
+    // harder above: a dark panel over a dark desktop needs more separation
+    // before it reads as being in front. 30% against Ice's 12%, in the same
+    // ratio the two `scrim` values already sit in.
+    readonly property color switcherScrim: "#4D0B1220" // bg navy at 30%
 
     // --- Semantic colours, tuned for a dark ground -------------------------------
     readonly property color success: "#5FC9B0"
