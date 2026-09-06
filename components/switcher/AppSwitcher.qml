@@ -193,13 +193,18 @@ Scope {
 
     // Move the selection along by `delta`, opening the panel if it is shut.
     //
-    // WHERE IT OPENS, AND WHY IT IS NOT ON THE FIRST TILE. The list is in
-    // most-recently-used order, so the app you are in IS the first tile. Opening
-    // with that one selected would mean one tap of Command-Tab took you
-    // nowhere. So the first tap lands on the SECOND tile — the app you were in
+    // WHERE IT OPENS, AND WHY IT IS NOT ON THE TILE YOU ARE ALREADY ON. The list
+    // is in most-recently-used order, so the app you are in is the first tile.
+    // Opening with that one selected would mean one tap of Command-Tab took you
+    // nowhere. So the first tap lands on the tile AFTER it — the app you were in
     // before — which is why tap-and-release flips between two apps, exactly as
-    // it does on a Mac. Going backwards (Shift) opens on the LAST one, which is
-    // the same idea from the other end.
+    // it does on a Mac. Going backwards (Shift) opens on the one BEFORE it,
+    // which with a list this shape is the last tile: the same idea from the
+    // other end.
+    //
+    // It steps from `currentIndex` rather than assuming that is 0, because it is
+    // only ALMOST always 0 — a window with no app id at all is not listed, and
+    // then the app you are in is not on the row for the first tap to move off.
     function step(delta: int): void {
         const list = root.entries;
         if (list.length === 0)
@@ -210,9 +215,12 @@ Scope {
 
             root.expanded = false;
             root.expandedIndex = 0;
-            root.selectedIndex = delta >= 0
-                ? Math.min(1, list.length - 1)
-                : list.length - 1;
+
+            const at = root.switcherModel.currentIndex;
+            const from = at >= 0 ? at : 0;
+            const count = list.length;
+            root.selectedIndex =
+                ((from + (delta >= 0 ? 1 : -1)) % count + count) % count;
 
             root.isOpen = true;
             root.opened();
