@@ -161,11 +161,12 @@ of how labwc handles key releases.
 * **The modifier on its own is bound to nothing.** Only ⌘Tab is a keybind.
   There is a warning in `rc.xml` saying never to bind `Super_L` or `Alt_L` on
   their own, and this is why.
-* **labwc forwards the releases of keys it did not swallow.** From
-  `handle_key_release()` in `src/input/keyboard.c`: *"Release events for keys
-  that were not bound should always be forwarded to clients to avoid stuck
-  keys."* Since nothing swallowed the Super *press*, the Super *release* is
-  passed on to whatever surface holds the keyboard.
+* **labwc forwards the releases of keys it did not swallow.** Its
+  `handle_key_release()`, in `src/input/keyboard.c`, says a release is always
+  forwarded to clients when the matching press was not bound — the comment above
+  it gives the reason as avoiding stuck keys. Since nothing swallowed the Super
+  *press*, the Super *release* is passed on to whatever surface holds the
+  keyboard.
 * **The panel holds the keyboard.** It is a layer-shell surface asking for
   `keyboardFocus: Exclusive`, which labwc honours (`layer_try_set_focus()` in
   `src/layers.c`), and when labwc hands the keyboard over it passes along the
