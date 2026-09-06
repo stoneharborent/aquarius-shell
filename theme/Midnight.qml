@@ -86,6 +86,11 @@ Singleton {
     // down, beside the accents it belongs to.)
     readonly property color scrim: "#990B1220"       // bg navy at 60%
 
+    // Ice's twin — read Ice.qml for what it is for. The SAME value in both
+    // themes, deliberately: a screen going dim is a screen going dark, and it
+    // does not have an opinion about light and dark mode.
+    readonly property color dimInk: "#05070B"
+
     // --- Semantic colours, tuned for a dark ground -------------------------------
     readonly property color success: "#5FC9B0"
     readonly property color warn: "#E0A35A"

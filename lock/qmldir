@@ -1,0 +1,28 @@
+# =============================================================================
+# lock/qmldir — the lock screen's one piece of shared state
+# =============================================================================
+# LockState is a SINGLETON: there is exactly one of it, and anything in the
+# lock screen can reach it without being handed a reference.
+#
+# It has to be a singleton for the same reason GreeterState does, and for one
+# more besides.
+#
+#   1. The lock screen draws one full-screen surface PER MONITOR, and all of
+#      those surfaces are looking at the same one question: is this machine
+#      locked, and what has been typed so far. Two copies of that on a
+#      two-monitor machine is a bug you only find when you plug a second screen
+#      in — and on a lock screen, "only found later" means "found by the person
+#      who cannot get into their computer".
+#
+#   2. Things OUTSIDE the lock screen have to be able to lock the machine: the
+#      Aquarius menu's "Lock Screen" row, the Super+L key binding, and the idle
+#      watcher. A singleton is a name they can all say. None of them has to know
+#      where the lock screen's windows are, or whether any exist yet.
+#
+# QML will not treat a file as a singleton on the strength of its `pragma
+# Singleton` line alone — it also has to be named here. Forget this and the
+# lock screen fails to start with "LockState is not a type", which is a
+# confusing way to be told you did not write it down.
+# =============================================================================
+
+singleton LockState 1.0 LockState.qml

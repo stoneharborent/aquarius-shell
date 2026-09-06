@@ -104,6 +104,15 @@ Singleton {
     // push the desktop back without turning a light desktop into a dark one.
     readonly property color scrim: "#5916273A"       // ink at 35%
 
+    // `dimInk` is what the screen fades towards after five minutes of nobody
+    // touching it. It is a DIFFERENT job from `scrim`: a scrim pushes the
+    // desktop behind a panel you are looking at, so it must not be too dark to
+    // read through. This one is the machine going quiet, and it goes to the
+    // same near-black in both themes — a dim that turned the screen navy would
+    // look like a fault. It is opaque here; how far it is taken is
+    // Theme.lockDimWash.
+    readonly property color dimInk: "#05070B"
+
     // --- Semantic colours, tuned for a light ground ----------------------------
     readonly property color success: "#1F9E8C"
     readonly property color warn: "#C2792E"

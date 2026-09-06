@@ -49,6 +49,12 @@ Scope {
     // open.
     property bool panelOpen: false
 
+    // How many notifications are being held. The lock screen shows this number
+    // — and ONLY this number, never a title or a sender — on its calm state.
+    // Exposed here rather than reached for from outside, so the store stays
+    // this file's business. See lock/LockSurface.qml.
+    readonly property alias notificationCount: store.count
+
     // ---- one overlay at a time ----------------------------------------------
     // The shell's rule: opening any exclusive overlay closes the others. See
     // services/Overlays.qml, and defect 1 in docs/first-run-on-hardware.md.
