@@ -83,13 +83,13 @@ these. Full explanation and troubleshooting: **[`harness/README.md`](harness/REA
 | `shell.qml` | The front door. Everything hangs off this file. Deliberately tiny. |
 | `theme/` | **Ice** (light) and **Midnight** (dark) as the single source of truth for every colour, size and typeface. No component anywhere contains a hex value. |
 | `components/bar/` | The top bar — the first real piece. Aquarius mark (opens the Aquarius menu — `docs/logo-menu.md`), active app name, status cluster (live glyphs + system tray), clock. |
-| `components/dock/` | The centred dock: pinned + running apps, hover lift, the centred running dot, and mounted external drives at the right end. `docs/dock.md`. |
+| `components/dock/` | The centred dock: pinned + running apps, hover lift, the centred running dot, a right-click menu on every tile (open, pin, quit), and mounted external drives at the right end. `docs/dock.md`. |
 | `components/quicksettings/` | The Quick Settings panel and the bar glyphs that open it. `docs/quick-settings.md`. |
 | `components/notifications/` | The notification daemon, toasts, and the panel off the clock. `docs/notifications.md`. |
 | `components/search/` | The Flow Search palette — apps, math, session actions. `docs/flow-search.md`. |
 | `greeter/` | **The login screen** — this repo's second entry point (`qs -p greeter/greeter.qml`). The Ice wallpaper, the Aquarius mark, a password box, and the conversation with greetd that starts your desktop. `docs/greeter.md`. |
-| `services/` | Shared single-instance state: Focus (do-not-disturb) and the system light/dark preference. |
-| `session/` | The experimental Aquarius Session: login entry, launcher, niri + labwc configs, portals. `docs/session.md`. |
+| `services/` | Shared single-instance state: Focus (do-not-disturb), the system light/dark preference, the one-overlay-at-a-time rule, and the shell's single door to the Settings app. |
+| `session/` | The experimental Aquarius Session: login entry, launcher, niri + labwc configs, portals. `labwc/themerc-override` is the one file outside `theme/` allowed to hold a colour — it is how labwc's own desktop menu and window title bars get the Aquarius look, and a test checks every value in it against `theme/Ice.qml`. `docs/session.md`. |
 | `assets/` | The Aquarius logo, copied from `os-image/branding/`. |
 | `harness/` | How to run it on Linux, written for a beginner. |
 | `docs/adr/` | Decision records. `0001-framework.md` is why this is built on Quickshell and why the licence is still Apache-2.0. |

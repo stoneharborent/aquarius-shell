@@ -190,10 +190,20 @@ Scope {
                         model: dockModel.items
 
                         // DockItem declares `required property var modelData`
-                        // itself, so the Repeater fills it in. Nothing to pass
-                        // by hand, and a required property means a missing
-                        // model role fails loudly instead of drawing a blank.
-                        delegate: DockItem {}
+                        // itself, so the Repeater fills that in. A required
+                        // property means a missing model role fails loudly
+                        // instead of drawing a blank.
+                        //
+                        // `config` is handed over by name because DockConfig is
+                        // NOT a singleton — there is one of it for the whole
+                        // shell, declared above, and a delegate cannot see an id
+                        // declared two files up. The tile needs it for the
+                        // "Keep in Dock" / "Remove from Dock" item in its
+                        // right-click menu, which is the only thing in the dock
+                        // that writes to the pinned list.
+                        delegate: DockItem {
+                            config: dockConfig
+                        }
                     }
 
                     // The right end of the dock: the drives that are plugged in

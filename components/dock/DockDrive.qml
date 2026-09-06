@@ -16,6 +16,11 @@
 // does NOT have is a running dot: a drive is either mounted (and shown) or not
 // (and gone), so there is no second state to indicate.
 //
+// The right-click menu below is the PATTERN the app tiles copied when they grew
+// one of their own (DockItem.qml, 2026-09-06): a PopupWindow with `grabFocus`,
+// hanging above the tile, drawn out of the Aquarius menu's own MenuRow. If you
+// change the shape of one, look at the other.
+//
 // WHY A GLYPH AND NOT AN ICON
 //   A drive has no .desktop entry and no artwork of its own, so there is nothing
 //   for Quickshell.iconPath to resolve. The shell draws its own drive mark from
@@ -45,6 +50,7 @@ import Quickshell
 
 import "../bar"
 import "../quicksettings"
+import "../../services"
 import "../../theme"
 
 Item {
@@ -71,6 +77,25 @@ Item {
     function unmount(): void {
         if (root.mountPath !== "")
             Quickshell.execDetached(["gio", "mount", "-u", "-f", root.mountPath]);
+    }
+
+    // ---- one overlay at a time -----------------------------------------------
+    // This menu takes a compositor grab, exactly as Quick Settings does, so it
+    // belongs in the shell's one-exclusive-overlay-at-a-time registry like
+    // everything else that does. It was left out when this file was written on
+    // 2026-09-06 and put in the same day the app tiles next door grew a menu of
+    // their own — with two kinds of menu in one dock, "opening one closes the
+    // other" stopped being a nicety.
+    //
+    // Registering is per INSTANCE, and there is one per drive per monitor, which
+    // is why services/Overlays.qml keeps a list. Unregistering is not optional:
+    // this object is destroyed when the drive is unplugged or the monitor is,
+    // and a closer left in the registry would be called on a destroyed object.
+    Component.onCompleted: Overlays.register(root, () => root.closeMenu())
+    Component.onDestruction: Overlays.unregister(root)
+
+    function closeMenu(): void {
+        driveMenu.visible = false;
     }
 
     // ---- the tile, which lifts on hover (identical to DockItem) ---------------
@@ -146,7 +171,14 @@ Item {
         id: driveMenu
 
         function toggle(): void {
-            driveMenu.visible = !driveMenu.visible;
+            if (driveMenu.visible) {
+                driveMenu.visible = false;
+                return;
+            }
+            // Before the surface goes up, so anything else holding the keyboard
+            // has already let go by the time this asks for its grab.
+            Overlays.claim(root);
+            driveMenu.visible = true;
         }
 
         anchor {

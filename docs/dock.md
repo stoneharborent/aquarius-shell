@@ -249,9 +249,12 @@ inventing a second answer.
 
 ### Creating the file
 
-The shell **reads this file and never writes it.** There is no pin/unpin gesture
-yet, so there is nothing for it to save, and a shell that creates files you did
-not ask for is a shell you cannot predict. To start editing, make it yourself:
+The shell **never writes this file unless you ask it to.** Nothing is created at
+start-up, no default copy is written, and if the file is absent the defaults
+above simply stand — a shell that creates files you did not ask for is a shell
+you cannot predict. Since 2026-09-06 there *is* a gesture that changes the list
+(*Keep in Dock* / *Remove from Dock* in a tile's right-click menu), and that is
+the only thing that writes. To start by hand instead, make it yourself:
 
 ```bash
 mkdir -p ~/.config/aquarius-shell
@@ -273,9 +276,49 @@ JSON
 `watchChanges: true` and reloads on change, which is Quickshell's own documented
 pattern. No restart.
 
-When pin/unpin does arrive it belongs in `DockConfig.qml` — `FileView.setText()`,
-or a `JsonAdapter` write through `writeAdapter()`. The reader is already the
-right shape for it.
+### Pinning writes the file
+
+*Right-click a tile → **Keep in Dock** or **Remove from Dock**.* That is the only
+thing in the shell that changes `dock.json`.
+
+- **`writeAdapter()`, not `setText()`.** The `JsonAdapter` already holds the list
+  in the exact shape the file wants, so the whole write is: change the adapter's
+  property, call `writeAdapter()`, let it serialise. Building JSON by hand here
+  would be a second opinion about the format living three lines from the first.
+- **The dock moves immediately, before the disk write comes back.** `pinned` is a
+  binding onto the adapter's property, so the model rebuilds the moment the list
+  changes. The write then lands, `watchChanges` sees the file it just wrote,
+  `reload()` reads it, and the adapter ends up holding what is on disk. That
+  round trip is redundant and harmless — and it is what keeps this working when
+  the file is *also* being edited in a text editor.
+- **The list is reassigned, never pushed onto.** Pushing onto the existing array
+  changes it without the property system noticing, and the dock would not redraw
+  until something unrelated touched the binding.
+- **A name is written with `.desktop` on the end,** because that is how every
+  name in the defaults and in the example above is written, and a file somebody
+  opens should look like the one the documentation showed them. The reader
+  accepts either spelling, and *unpin* removes **every** spelling of the app —
+  a hand-edited file can perfectly well contain both `steam` and `steam.desktop`,
+  and removing one of them leaves the tile exactly where it was.
+- **Keeping an app puts it at the end,** which is where the tile already was: an
+  unpinned running app is drawn after every pinned one, so it does not jump out
+  from under the pointer.
+
+**⚠️ The parent directory is the one thing that can go wrong.** `FileView` writes
+a file; it does not create the folder above it, and `~/.config/aquarius-shell/`
+does not exist on a machine where nobody has hand-edited `dock.json` — which is
+every fresh install. So the first pin fails, and it fails silently unless
+something is listening. `onSaveFailed` is what listens: it runs `mkdir -p` on the
+folder **once** and retries. Not before the first attempt (a shell that spawns a
+process at start-up on the off-chance is exactly what the no-unprompted-writes
+rule was written against), and not twice — a second failure means something real,
+like a read-only home directory, and a retry loop would hide it. If both attempts
+fail, the list in memory is still right and the dock still shows it; what is lost
+is that the change does not survive a restart, and a warning says so.
+
+`tests/test-shell.sh` **section 37b** checks all of that: the three functions, the
+adapter write, the reassignment, the failure handler, the one-shot `mkdir`, and
+that nothing writes at start-up.
 
 ---
 
@@ -334,8 +377,68 @@ picker needs a popup, a layout and a keyboard story, none of which this dock has
 yet. Cycling is obvious after one try, and the whole behaviour is
 `DockItem.activate()` when the picker arrives.
 
-There is **no right-click menu.** The KDE dock had one, most of it built from a
-C++ helper this shell does not have. An empty menu is worse than no menu.
+### Right-click a tile
+
+*Added 2026-09-06 — the bench note was four words: "right click on the apps does
+nothing".* The drives at the other end of the same dock already had a menu; the
+app tiles ignored the right button entirely, because their `MouseArea` listed
+only `Qt.LeftButton | Qt.MiddleButton`.
+
+```
+┌──────────────────────────┐
+│  Firefox                 │   the app's name — quiet, not clickable
+├──────────────────────────┤
+│  New Window              │   "Open" when nothing is running
+│  Remove from Dock        │   "Keep in Dock" when it is not pinned
+├──────────────────────────┤
+│  Quit                    │   only while windows are open
+└──────────────────────────┘
+```
+
+It is drawn **by the shell**, the same way the drive menu next to it is — a
+`PopupWindow` with `grabFocus`, hanging above the tile — out of the same
+`MenuRow` the Aquarius menu at the top-left uses. All three menus in the shell
+are one design rather than three.
+
+| Row | What it does |
+|---|---|
+| the app's name | Nothing. A quiet header, so the menu says what it is about — exactly what the drive menu does with the volume's name. |
+| **Open** / **New Window** | `DockItem.launch()` — the same road the middle button takes, and the same one that knows Settings is a special case. The label changes because "Open" reads wrong for something already open. |
+| **Keep in Dock** / **Remove from Dock** | `DockConfig.pin()` / `.unpin()`. Writes `dock.json`; see [Pinning writes the file](#pinning-writes-the-file). |
+| **Quit** | Closes every window this app owns, through each Wayland toplevel's own `close()`. |
+
+- **Esc closes it. A click anywhere else closes it.** The click-away is the
+  compositor's doing (`grabFocus: true`); Esc needs the popup grab to deliver key
+  events, which is the half of this that is *not proven* — and the half that
+  matters least, since the click-away works either way.
+- **Opening it closes every other overlay,** and they close it.
+  `services/Overlays.qml` holds that rule; `DockDrive`'s menu joined the same
+  registry on the same day, because with two kinds of menu in one dock "opening
+  one closes the other" stopped being a nicety.
+- **It closes before it acts.** Quit and the pin toggle both change the things
+  the menu is drawn from — the window list, and whether this tile exists at all —
+  and a menu still on screen while its own tile is taken out from under it is a
+  menu hanging in mid-air.
+- **Right-clicking the tile again** has the same wrinkle Quick Settings
+  documents: the compositor dismisses the popup because the tile is "outside",
+  and the tile's own handler would reopen it immediately. The same 250 ms guard
+  is used, and it is a heuristic, not a protocol.
+- **No app-specific knowledge lands in `DockItem`.** The menu is built from what
+  a `DesktopEntry` offers everybody — a name, and the ability to run — plus the
+  two things the tile already knew: whether it is pinned, and which windows it
+  owns.
+
+**Quit copies the window list first.** `close()` makes the compositor drop the
+window, which rebuilds the very list the loop is walking, so iterating the live
+one skips windows and a five-window app is left with two open. That reads as Quit
+being unreliable rather than as a bug in a loop, which is the worst kind of bug
+to have. And `close()` is a *request*: an app with unsaved work may put up a
+dialog and stay, which is correct behaviour, not a failed Quit.
+
+*(The KDE dock had a right-click menu too, most of it built from a C++ helper
+this shell does not have. What is here is the part that can be built honestly:
+launch, pin, quit. A window picker is still absent for the same reason cycling is
+— it needs a popup, a layout and a keyboard story.)*
 
 ### The Settings tile is a special case
 
@@ -676,6 +779,25 @@ likely it is to bite:
 14. **Whether the drives chain actually recovers.** Plugging a drive in *after*
     login is the case the old code got wrong and the case a static check cannot
     prove. It is step 14 on the bench list below.
+15. **Whether **Esc** reaches the tile's right-click menu.** A compositor holding
+    an `xdg_popup` grab sends key events to the grabbing surface, so the card
+    inside it should be able to have keyboard focus — but no compositor has been
+    in front of this. If Esc does nothing, the menu is still perfectly usable:
+    clicking anywhere else closes it, and that is the compositor's own doing.
+16. **The 250 ms reopen guard on that menu.** Copied from
+    `QuickSettingsPopup.qml`, where it is also unproven. Symptom if the number is
+    wrong: right-clicking a tile a second time makes the menu flicker and never
+    close, or makes the *first* right-click after closing one do nothing.
+17. **The first pin on a machine with no `~/.config/aquarius-shell/`.** The
+    `mkdir -p`-and-retry path has never run. Symptom: pinning appears to work —
+    the tile moves — and the change is gone after a shell restart, with
+    `aquarius-shell: could not save ...` in the log. The 200 ms wait before the
+    retry is a pause, not a handshake, because a detached process gives nothing
+    to wait on.
+18. **`Toplevel.close()` on several windows at once.** Each is a request and each
+    application answers for itself; an app with unsaved work is *supposed* to put
+    up a dialog and stay. Quit having "not worked" and Quit having been declined
+    look identical from here.
 
 ---
 
@@ -756,7 +878,35 @@ Then, in order:
     have. `ls /run/media/$USER` in a terminal is the ground truth to compare
     against.
 
-15. **Click the Settings tile.** GNOME's Settings should open. If it does not,
+15. **Right-click an app tile.** A small menu should appear above it, in Ice,
+    looking like the Aquarius menu at the top-left: the app's name in grey at the
+    top, a hairline, then the rows. Hover down them — each should light as the
+    pointer crosses it. Press **Esc** (it should close; if it does not, that is
+    item 15 in *Not proven* and not a blocker). Right-click the tile again and
+    make sure the menu closes rather than flickering.
+
+16. **Right-click a *running* app.** It should say **New Window** and offer
+    **Quit**; a tile with nothing running should say **Open** and offer no Quit
+    at all. Click Quit with two windows open — **both** should close, not one.
+
+17. **Pin and unpin.** Open something that is not in the dock, right-click its
+    tile, choose **Keep in Dock**. The tile should stay after you close the app.
+    Check the file actually changed:
+
+    ```bash
+    cat ~/.config/aquarius-shell/dock.json
+    ```
+
+    On a machine where that folder did not exist, this is the first write ever —
+    watch the log for `aquarius-shell: could not save`. Then right-click a pinned
+    app and choose **Remove from Dock**: the tile should leave the moment the app
+    is closed, and the name should be gone from the file.
+
+18. **Right-click a drive tile while an app's menu is open** (and the other way
+    round). Only one menu should ever be on screen — that is
+    `services/Overlays.qml` doing its job.
+
+19. **Click the Settings tile.** GNOME's Settings should open. If it does not,
     run `env XDG_CURRENT_DESKTOP=GNOME gnome-control-center` in a terminal inside
     the session: if that opens the window, the tile is not going through
     `SettingsLauncher`; if it does not, the problem has moved into the app

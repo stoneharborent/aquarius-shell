@@ -1492,10 +1492,18 @@ fi
 # Every overlay must do BOTH halves: register a way to be closed, and claim on
 # the way open. One without the other is the bug half-fixed.
 #
+# The dock's two menus joined this list on 2026-09-06. Both are PopupWindows with
+# `grabFocus: true` — the very shape that caused defect 1 — and once there were
+# two kinds of menu in one dock, "opening one closes the other" stopped being a
+# nicety and became the same rule as everywhere else in the shell.
+#
 #   file : what registers it : what claims on open
 aq_overlay_rows="components/search/FlowSearch.qml
 components/quicksettings/QuickSettingsPopup.qml
-components/notifications/NotificationLayer.qml"
+components/notifications/NotificationLayer.qml
+components/bar/LogoMenu.qml
+components/dock/DockItem.qml
+components/dock/DockDrive.qml"
 
 while IFS= read -r aq_overlay; do
     aq_code="$(sed -E 's,//.*,,' "${aq_overlay}")"
@@ -2844,6 +2852,208 @@ else
          "The os-image copy has one, and this file is meant to be the superset" \
          "so the two can be kept content-identical apart from comments." \
          "On a machine without ptyxis the keybind is simply inert."
+fi
+
+# ------------------------------------------------------------------------------
+echo ""
+echo "=== 37. right-clicking an app in the dock opens a menu ==="
+# ------------------------------------------------------------------------------
+# Bench, 2026-09-06, Royce: "right click on the apps does nothing." The drives at
+# the other end of the same dock already had a menu; the app tiles ignored the
+# right button entirely.
+#
+# The menu is DockItem's, drawn the way DockDrive's is — a PopupWindow with
+# grabFocus, hanging above the tile — out of the same MenuRow the Aquarius menu
+# uses, so the shell's three menus are one design. These are grep-level checks:
+# they confirm the wiring is present and named the way the rest of the shell
+# names it. Whether it draws, and whether Esc reaches it through a compositor
+# grab, is bench work.
+
+aq_dock_item="components/dock/DockItem.qml"
+aq_dock_item_code="$(sed -E 's,//.*,,' "${aq_dock_item}")"
+
+# The right button has to be accepted at all. This is the whole bug in one line:
+# before this change the MouseArea took Left and Middle and nothing else, so the
+# click never reached any code.
+if printf '%s' "${aq_dock_item_code}" | grep -qF 'Qt.RightButton'; then
+    pass "the dock tile accepts a right-click"
+else
+    fail "${aq_dock_item} does not accept Qt.RightButton." \
+         "Its MouseArea must list it in acceptedButtons AND act on it —" \
+         "without both, right-clicking an app tile does nothing at all, which" \
+         "is the bench report of 2026-09-06."
+fi
+
+# Drawn by the shell, in the shell's own menu row, anchored above the tile —
+# the same three decisions DockDrive made.
+for aq_bit in 'PopupWindow' 'grabFocus: true' 'MenuRow' 'edges: Edges.Top'; do
+    if printf '%s' "${aq_dock_item_code}" | grep -qF "${aq_bit}"; then
+        pass "the dock menu uses: ${aq_bit}"
+    else
+        fail "${aq_dock_item} no longer has '${aq_bit}'." \
+             "The app menu reuses DockDrive.qml's pattern exactly: a" \
+             "PopupWindow with grabFocus, anchored above the tile, with" \
+             "MenuRow drawing the rows so it matches the Aquarius menu."
+    fi
+done
+
+# Esc, and the import that MenuRow needs. A dock file reaching into components/bar
+# is not an accident — MenuRow lives there because the logo menu owns it.
+if printf '%s' "${aq_dock_item_code}" | grep -qF 'Keys.onEscapePressed'; then
+    pass "the dock menu closes on Esc"
+else
+    fail "${aq_dock_item} does not handle Escape." \
+         "Every menu in this shell closes on Esc."
+fi
+
+if grep -qE '^\s*import\s+"\.\./bar"' "${aq_dock_item}"; then
+    pass "${aq_dock_item} imports ../bar for MenuRow"
+else
+    fail "${aq_dock_item} uses MenuRow without importing \"../bar\"." \
+         "QML fails at load with 'MenuRow is not a type'."
+fi
+
+# The three actions, by what each one calls. Losing any of them is a menu row
+# that opens and does nothing.
+#   description : what must appear in DockItem.qml
+aq_dock_menu_actions=(
+    'Open / New Window : root.launch()'
+    'Keep in Dock : root.config.pin(root.pinId)'
+    'Remove from Dock : root.config.unpin(root.pinId)'
+    'Quit : root.quitAll()'
+)
+for aq_row in "${aq_dock_menu_actions[@]}"; do
+    aq_desc="${aq_row%% : *}"
+    aq_needle="${aq_row#* : }"
+    if printf '%s' "${aq_dock_item_code}" | grep -qF "${aq_needle}"; then
+        pass "the dock menu's '${aq_desc}' does something"
+    else
+        fail "${aq_dock_item} has no '${aq_desc}' action." \
+             "Expected to find:  ${aq_needle}"
+    fi
+done
+
+# QUIT, AND THE DELETE-WHILE-ITERATING TRAP. Closing a window makes the
+# compositor drop it from ToplevelManager, which rebuilds the very list the loop
+# is walking — so iterating the live list skips windows, and a five-window app
+# ends up with two still open. That reads as Quit being unreliable rather than as
+# a bug in a loop, which is the worst kind of bug to have. slice() first.
+if printf '%s' "${aq_dock_item_code}" | grep -qE 'root\.windows\.slice\(\)'; then
+    pass "Quit copies the window list before closing anything"
+else
+    fail "${aq_dock_item}'s quitAll() walks root.windows directly." \
+         "close() makes the compositor drop the window, which rebuilds that" \
+         "list mid-loop and skips the ones after it. Take a copy first:" \
+         "const open = root.windows.slice();"
+fi
+
+if printf '%s' "${aq_dock_item_code}" | grep -qE '\.close\(\)'; then
+    pass "Quit closes through the Wayland toplevel handle"
+else
+    fail "${aq_dock_item} does not call close() on its toplevels." \
+         "Quit goes through the standard wlr-foreign-toplevel handle, like" \
+         "activate() and minimized next to it — never a compositor-specific" \
+         "back door."
+fi
+
+# The tile must be HANDED the config. DockConfig is not a singleton (there is one
+# for the whole shell, in Dock.qml), so a delegate cannot see it by id. If this
+# line goes, the pin rows quietly stop being offered — `canPin` goes false and
+# the menu simply has two items instead of three, with nothing said anywhere.
+if grep -qF 'config: dockConfig' components/dock/Dock.qml; then
+    pass "Dock.qml hands each tile the shared DockConfig"
+else
+    fail "components/dock/Dock.qml no longer passes config: dockConfig to" \
+         "DockItem. Without it root.canPin is false and the Keep in Dock /" \
+         "Remove from Dock rows silently vanish from the menu."
+fi
+
+# ------------------------------------------------------------------------------
+echo ""
+echo "=== 37b. the dock can write the pinned list, carefully ==="
+# ------------------------------------------------------------------------------
+# DockConfig was read-only until 2026-09-06, and its header said so at length:
+# the shell must not create files nobody asked for. That rule is intact — the
+# only thing that writes is a person clicking "Keep in Dock" — but there is now a
+# write, and it has two traps worth checking.
+
+aq_dock_config="components/dock/DockConfig.qml"
+aq_dock_config_code="$(sed -E 's,//.*,,' "${aq_dock_config}")"
+
+for aq_fn in 'function pin(' 'function unpin(' 'function isPinned('; do
+    if printf '%s' "${aq_dock_config_code}" | grep -qF "${aq_fn}"; then
+        pass "DockConfig.qml offers ${aq_fn})"
+    else
+        fail "${aq_dock_config} no longer offers ${aq_fn})." \
+             "The dock tile's right-click menu calls all three."
+    fi
+done
+
+# writeAdapter(), not setText(). The adapter already holds the list in the exact
+# shape the file wants; building JSON by hand here would be a second opinion
+# about the format living three lines from the first.
+if printf '%s' "${aq_dock_config_code}" | grep -qF 'writeAdapter()'; then
+    pass "DockConfig.qml saves through the JsonAdapter"
+else
+    fail "${aq_dock_config} does not call writeAdapter()." \
+         "The adapter holds the list already; serialising JSON by hand here" \
+         "would be a second opinion about the format."
+fi
+
+# TRAP 1: reassignment, not push. Pushing onto the adapter's array changes it
+# without the property system noticing, so the dock does not redraw until
+# something unrelated happens to touch the binding.
+if printf '%s' "${aq_dock_config_code}" | grep -qE 'adapter\.pinned\s*='; then
+    pass "DockConfig.qml reassigns the list rather than mutating it"
+else
+    fail "${aq_dock_config} never assigns to adapter.pinned." \
+         "Pushing onto the existing array changes it without notifying QML," \
+         "so the dock would not redraw until something else touched it."
+fi
+
+# TRAP 2: the parent directory. FileView writes a file; it does not create the
+# folder above it, and ~/.config/aquarius-shell/ does not exist on a machine
+# where nobody has hand-edited the file. So the FIRST pin on a fresh install
+# fails, and it fails silently unless something is listening.
+if printf '%s' "${aq_dock_config_code}" | grep -qF 'onSaveFailed'; then
+    pass "DockConfig.qml notices a failed save"
+else
+    fail "${aq_dock_config} does not handle onSaveFailed." \
+         "FileView does not create the folder above the file, so the first" \
+         "pin on a fresh machine fails — silently, unless this is here."
+fi
+
+if printf '%s' "${aq_dock_config_code}" | grep -qF '"mkdir", "-p"'; then
+    pass "a failed save creates the folder and retries"
+else
+    fail "${aq_dock_config} does not create ~/.config/aquarius-shell on a" \
+         "failed save. Without it the first pin on every fresh install is lost" \
+         "the moment the shell restarts."
+fi
+
+# ...but only once. A second failure is a real problem — a read-only home, a full
+# disk — and a retry loop would hide it behind a spinning shell.
+if printf '%s' "${aq_dock_config_code}" | grep -qF 'triedCreatingFolder'; then
+    pass "the folder is only created once per session"
+else
+    fail "${aq_dock_config} retries a failed save without a guard." \
+         "One mkdir, one retry. A second failure means something real is" \
+         "wrong and must be allowed to be reported, not retried forever."
+fi
+
+# AND NOTHING IS WRITTEN UNPROMPTED. The original rule — no file appears unless a
+# person asked for one — is the reason this file was read-only for as long as it
+# was, and it must survive the arrival of a write. A save call anywhere in a
+# start-up path would break it.
+if printf '%s' "${aq_dock_config_code}" \
+        | grep -qE 'Component\.onCompleted.*(writeAdapter|save\()'; then
+    fail "${aq_dock_config} writes the file at start-up." \
+         "Nothing is written unless somebody clicks Keep in Dock or Remove" \
+         "from Dock. A shell that creates files you did not ask for is a shell" \
+         "you cannot predict — that is why this file was read-only until there" \
+         "was a gesture that changed something."
+else
+    pass "DockConfig.qml never writes unless asked"
 fi
 
 # ------------------------------------------------------------------------------
