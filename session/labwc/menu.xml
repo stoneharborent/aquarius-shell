@@ -46,16 +46,43 @@
     <separator />
 
     <!-- The full Settings app, and its wallpaper page directly. `background` is
-         a stable gnome-control-center panel id. -->
+         a stable gnome-control-center panel id.
+
+         WHY EACH ONE STARTS WITH `env XDG_CURRENT_DESKTOP=GNOME`, AND WHY IT
+         IS NOT A TYPO. GNOME's Settings app checks which desktop it has been
+         started under, and refuses to run under any it does not recognise. Its
+         own source (shell/cc-application.c, is_supported_desktop()) reads the
+         XDG_CURRENT_DESKTOP environment variable, splits it on colons, and
+         unless one of the names is "GNOME" or "Unity" it prints
+
+             Running gnome-control-center is only supported under GNOME and
+             Unity, exiting
+
+         and stops, with nothing on screen. The Aquarius session sets that
+         variable to aquarius-labwc:aquarius:wlroots on purpose — it is how
+         xdg-desktop-portal finds aquarius-labwc-portals.conf, and changing it
+         would silently break screen recording and file dialogs — so the fix
+         belongs on the launch, not on the session. `env NAME=VALUE program`
+         is the standard POSIX way to hand one program an altered environment
+         and leave everything else alone. Take the prefix off either line below
+         and that menu item goes back to doing nothing at all (bench, Royce,
+         2026-09-06). The shell's own menu and Quick Settings do the same thing
+         from QML, in one place: ../../services/SettingsLauncher.qml.
+
+         ⚠️ THIS FILE HAS AN OS-SIDE COPY. What runs on an installed machine is
+         system_files/usr/share/aquarius/labwc/menu.xml in the os-image repo;
+         this one is what runs when the session is started from a clone of the
+         shell. CHANGE ONE, CHANGE BOTH — the same rule the autostart file next
+         to this one states, for the same reason. -->
     <item label="System Settings">
       <action name="Execute">
-        <command>gnome-control-center</command>
+        <command>env XDG_CURRENT_DESKTOP=GNOME gnome-control-center</command>
       </action>
     </item>
 
     <item label="Change Wallpaper">
       <action name="Execute">
-        <command>gnome-control-center background</command>
+        <command>env XDG_CURRENT_DESKTOP=GNOME gnome-control-center background</command>
       </action>
     </item>
 

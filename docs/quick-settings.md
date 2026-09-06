@@ -17,14 +17,26 @@ the instant NetworkManager reported the adapter — see "Wi-Fi" below.*
 *R6, 2026-09-06. The Wi-Fi, Bluetooth and Performance tiles grew a small
 **chevron** in the top-right corner — a **separate hit target from the switch**:
 tapping the tile still toggles, tapping the chevron opens that thing's full page
-in GNOME's Settings (`gnome-control-center wifi` / `bluetooth` / `power`, all
-stable panel ids). It is `QsTile`'s `hasDetail` + `detailRequested()`; the glyph
-is `"chevron"` from `QsGlyph`, and each tile handles `onDetailRequested` with
-`Quickshell.execDetached`. Focus (a shell switch, nothing behind it) and Game
-Mode (a session hand-off) have no page, so they show no chevron. The chevron is
-keyboard-reachable (`activeFocusOnTab` + Enter/Space), ready for the day the
+in GNOME's Settings (the `wifi` / `bluetooth` / `power` panel ids, all stable).
+It is `QsTile`'s `hasDetail` + `detailRequested()`; the glyph is `"chevron"` from
+`QsGlyph`, and each tile handles `onDetailRequested` with
+`SettingsLauncher.open(<panel>)`. Focus (a shell switch, nothing behind it) and
+Game Mode (a session hand-off) have no page, so they show no chevron. The chevron
+is keyboard-reachable (`activeFocusOnTab` + Enter/Space), ready for the day the
 panel can take keyboard focus. Until the shell has its own Settings, these open
 GNOME's.*
+
+*Bench fix, 2026-09-06. On the first run the chevrons drew and did nothing.
+They were launching `gnome-control-center` directly, and that program exits
+immediately — printing `Running gnome-control-center is only supported under
+GNOME and Unity, exiting` where nobody can see it — unless `XDG_CURRENT_DESKTOP`
+names GNOME, which in an Aquarius session it deliberately does not. All three
+chevrons now go through `services/SettingsLauncher.qml`, the shell's one door to
+that app, which runs it as `env XDG_CURRENT_DESKTOP=GNOME gnome-control-center
+<panel>` so the session's own variable — the one the desktop portals are keyed
+to — is left alone. The full story is in that file's header and in
+[`logo-menu.md`](logo-menu.md#opening-settings); `tests/test-shell.sh` section
+34b fails if a tile ever names that program itself again.*
 
 ---
 

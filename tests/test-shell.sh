@@ -94,6 +94,7 @@ for aq_file in \
     services/qmldir \
     services/FocusState.qml \
     services/Overlays.qml \
+    services/SettingsLauncher.qml \
     components/quicksettings/QuickSettingsPanel.qml \
     components/quicksettings/QuickSettingsPopup.qml \
     components/quicksettings/QsTile.qml \
@@ -1465,7 +1466,8 @@ echo "=== 28. every enum namespace is one the shipped build actually has ==="
 # three .pragma library JavaScript files (Fuzzy, Calc, Progress) — those are
 # `import "x.js" as Name`, so they are our own code and cannot be missing from a
 # Quickshell build.
-aq_ns_ours="Theme FocusState Overlays SystemAppearance Fuzzy Calc Progress GreeterState"
+aq_ns_ours="Theme FocusState Overlays SettingsLauncher SystemAppearance Fuzzy
+Calc Progress GreeterState"
 
 # Names Qt itself provides — globals, value types and attached types.
 aq_ns_qt="Qt Math JSON Date Object Locale Accessible Component Keys Easing Font
@@ -2075,10 +2077,16 @@ fi
 # Every menu item, by the exact command it runs. The label a person reads and the
 # command a click sends are declared in the same file; this checks the command,
 # which is the half that can be silently wrong.
+#
+# The two Settings items no longer name a program at all: they call the shell's
+# one Settings launcher, which is what puts `env XDG_CURRENT_DESKTOP=GNOME` in
+# front of gnome-control-center so the app does not exit the instant it starts.
+# Section 34b is the check that the launcher itself is right, and that nobody has
+# quietly gone back to launching that program by hand from here.
 #   description : the substring that must appear in LogoMenu.qml
 aq_logo_actions=(
-    'About This PC : "gnome-control-center", "system"'
-    'System Settings : execDetached(["gnome-control-center"])'
+    'About This PC : SettingsLauncher.open("system")'
+    'System Settings : SettingsLauncher.open("")'
     'Check for Update : /usr/libexec/aquarius-updater'
     'Log Out : "loginctl", "terminate-session"'
     'Sleep : "systemctl", "suspend"'
@@ -2095,6 +2103,18 @@ for aq_row in "${aq_logo_actions[@]}"; do
              "Expected to find:  ${aq_needle}"
     fi
 done
+
+# ...and it must not build that command line itself again. Every Settings launch
+# in the shell goes through the singleton, because the env prefix is the whole
+# fix and a second copy of the launch is a second place to forget it.
+if grep -qF 'gnome-control-center' components/bar/LogoMenu.qml; then
+    fail "components/bar/LogoMenu.qml names gnome-control-center itself." \
+         "The Settings launch belongs to services/SettingsLauncher.qml alone —" \
+         "it is the only place that puts env XDG_CURRENT_DESKTOP=GNOME in front" \
+         "of it, and without that prefix the app exits before it draws anything."
+else
+    pass "LogoMenu.qml leaves the Settings launch to the launcher"
+fi
 
 # The updater item is guarded: it is only offered when the file is executable, so
 # the menu never launches something that is not installed.
@@ -2144,9 +2164,9 @@ done
 # Each tile that has a page behind it, and the panel it opens.
 #   file : the gnome-control-center panel id it must open
 aq_detail_tiles=(
-    'components/quicksettings/TileWifi.qml : "gnome-control-center", "wifi"'
-    'components/quicksettings/TileBluetooth.qml : "gnome-control-center", "bluetooth"'
-    'components/quicksettings/TilePowerProfile.qml : "gnome-control-center", "power"'
+    'components/quicksettings/TileWifi.qml : SettingsLauncher.open("wifi")'
+    'components/quicksettings/TileBluetooth.qml : SettingsLauncher.open("bluetooth")'
+    'components/quicksettings/TilePowerProfile.qml : SettingsLauncher.open("power")'
 )
 for aq_row in "${aq_detail_tiles[@]}"; do
     aq_tile="${aq_row%% : *}"
@@ -2156,7 +2176,139 @@ for aq_row in "${aq_detail_tiles[@]}"; do
         pass "$(basename "${aq_tile}") opens its Settings panel"
     else
         fail "${aq_tile} does not set hasDetail:true and open ${aq_panel}." \
-             "Its chevron is meant to open that gnome-control-center panel."
+             "Its chevron is meant to open that gnome-control-center panel," \
+             "through services/SettingsLauncher.qml — see section 34b for why" \
+             "it may not run that program directly."
+    fi
+
+    # A tile that imports services/ is a tile that can reach the singleton. This
+    # is the failure QML reports as "SettingsLauncher is not defined", at the
+    # moment the chevron is clicked and not before.
+    if grep -qE '^\s*import\s+"\.\./\.\./services"' "${aq_tile}"; then
+        pass "$(basename "${aq_tile}") imports services/"
+    else
+        fail "${aq_tile} calls SettingsLauncher without importing services/."
+    fi
+done
+
+# ------------------------------------------------------------------------------
+echo ""
+echo "=== 34b. one place opens Settings, and it fixes XDG_CURRENT_DESKTOP ==="
+# ------------------------------------------------------------------------------
+# THIS SECTION EXISTS BECAUSE OF A BUG THAT MADE FIVE THINGS DO NOTHING AT ALL.
+#
+# Bench, 2026-09-06, Royce: "System Settings still doesn't open. Nor does its
+# icon in the dock. About This PC also doesn't work. Quick settings arrows are
+# there but don't open into settings."
+#
+# One cause behind all of them, and it is not in this repository.
+# gnome-control-center checks which desktop it was started under
+# (shell/cc-application.c, is_supported_desktop()): it reads XDG_CURRENT_DESKTOP,
+# splits it on colons, and unless one of the names is GNOME or Unity it prints
+#
+#     Running gnome-control-center is only supported under GNOME and Unity,
+#     exiting
+#
+# and exits 1. The Aquarius session sets that variable to
+# aquarius-labwc:aquarius:wlroots on purpose — it is how xdg-desktop-portal finds
+# the right portals.conf — so every launch died instantly and silently.
+#
+# The fix is per-launch: `env XDG_CURRENT_DESKTOP=GNOME gnome-control-center`,
+# in ONE file, services/SettingsLauncher.qml. This section checks that the file
+# still says that, and that no component has gone back to launching the program
+# by hand — because a second copy of the launch is a second copy that can be
+# missing the prefix, and that failure shows up as a click that does nothing.
+
+if [ -f services/SettingsLauncher.qml ]; then
+    pass "services/SettingsLauncher.qml"
+else
+    fail "services/SettingsLauncher.qml is missing." \
+         "It is the shell's only door to the Settings app."
+fi
+
+# The prefix itself, in the exact three pieces execDetached is handed. Comments
+# are stripped first: the file explains all of this at length and quotes the
+# error message while doing it.
+aq_launcher_code="$(sed -E 's,//.*,,' services/SettingsLauncher.qml)"
+
+for aq_bit in '"env"' '"XDG_CURRENT_DESKTOP=GNOME"' '"gnome-control-center"'; do
+    if printf '%s' "${aq_launcher_code}" | grep -qF "${aq_bit}"; then
+        pass "SettingsLauncher.qml's launch argv contains ${aq_bit}"
+    else
+        fail "services/SettingsLauncher.qml no longer passes ${aq_bit}." \
+             "The launch must be:  env XDG_CURRENT_DESKTOP=GNOME" \
+             "gnome-control-center [panel]. Without the env prefix the app" \
+             "exits before it draws anything, which is the bug this file exists" \
+             "to fix."
+    fi
+done
+
+if printf '%s' "${aq_launcher_code}" | grep -qF 'argvPrefix'; then
+    pass "SettingsLauncher.qml keeps the prefix as one named property"
+else
+    fail "services/SettingsLauncher.qml no longer has an argvPrefix property." \
+         "The prefix is the one fact this file holds; keep it named."
+fi
+
+if printf '%s' "${aq_launcher_code}" | grep -qF 'Quickshell.execDetached('; then
+    pass "SettingsLauncher.qml launches with execDetached"
+else
+    fail "services/SettingsLauncher.qml no longer uses Quickshell.execDetached." \
+         "A launched application must outlive a shell reload."
+fi
+
+if printf '%s' "${aq_launcher_code}" | grep -qE 'function\s+open\s*\('; then
+    pass "SettingsLauncher.qml offers open(panel)"
+else
+    fail "services/SettingsLauncher.qml no longer offers an open(panel) function." \
+         "Every caller in the shell calls it."
+fi
+
+# THE GUARD THAT MATTERS MOST. No component may name that program. If one does,
+# it is building its own launch, and the odds are it is building the bare one
+# that dies. The session's labwc menu is the single documented exception and it
+# is not under components/ — it is XML, drawn by the compositor, and cannot call
+# into QML at all; section 36 checks that it carries its own copy of the prefix.
+# Comments are stripped first, per file: several components explain this trap at
+# length and have to be able to name the program while doing it. What may not
+# appear is a line of CODE that names it.
+aq_gcc_offenders=""
+while IFS= read -r aq_qml; do
+    if sed -E 's,//.*,,' "${aq_qml}" | grep -qF 'gnome-control-center'; then
+        echo "       ${aq_qml}"
+        aq_gcc_offenders="${aq_gcc_offenders} ${aq_qml}"
+    fi
+done < <(find components -name '*.qml' | sort)
+
+if [ -n "${aq_gcc_offenders}" ]; then
+    fail "a component names gnome-control-center itself." \
+         "Every Settings launch goes through services/SettingsLauncher.qml," \
+         "which is the only place that puts env XDG_CURRENT_DESKTOP=GNOME in" \
+         "front of it. A bare execDetached([\"gnome-control-center\", ...]) is" \
+         "exactly the bug that made five different clicks do nothing on" \
+         "2026-09-06: the program starts, reads the wrong desktop name, and" \
+         "exits before a window exists."
+else
+    pass "no component launches gnome-control-center by hand"
+fi
+
+# The .desktop-entry road to the same program. The dock and the search palette
+# launch applications by running their desktop entry, and Settings' entry runs
+# the very same command — so both ask the launcher first. Losing this is a
+# Settings icon that flashes and does nothing, which is half of the bench report.
+for aq_row in \
+    'components/dock/DockItem.qml : the dock tile' \
+    'components/search/SearchEngine.qml : the search palette'
+do
+    aq_file="${aq_row%% : *}"
+    aq_what="${aq_row#* : }"
+    if grep -qF 'SettingsLauncher.ownsDesktopEntry(' "${aq_file}"; then
+        pass "${aq_what} asks the launcher before running a desktop entry"
+    else
+        fail "${aq_file} runs a .desktop entry without asking the launcher." \
+             "Settings' own entry runs gnome-control-center, so launching it" \
+             "the ordinary way opens nothing at all. Guard execute() with" \
+             "SettingsLauncher.ownsDesktopEntry(entry)."
     fi
 done
 
@@ -2257,11 +2409,19 @@ else
 fi
 
 # The items the menu must offer, by the command each runs.
+#
+# The two Settings lines carry `env XDG_CURRENT_DESKTOP=GNOME` in front of the
+# program, and that prefix is not decoration: gnome-control-center reads that
+# variable and exits immediately unless it names GNOME, which in an Aquarius
+# session it deliberately does not (section 34b has the whole story). This menu
+# is XML drawn by labwc and cannot call into the shell's launcher, so it is the
+# one place that spells the prefix out by hand — which is exactly why it needs
+# checking. Take the prefix off and the item goes back to doing nothing.
 #   description : substring that must be in menu.xml
 aq_menu_items=(
     'Search : qs ipc call search toggle'
-    'System Settings : <command>gnome-control-center</command>'
-    'Change Wallpaper : gnome-control-center background'
+    'System Settings : <command>env XDG_CURRENT_DESKTOP=GNOME gnome-control-center</command>'
+    'Change Wallpaper : env XDG_CURRENT_DESKTOP=GNOME gnome-control-center background'
     'Sleep : systemctl suspend'
     'Restart : systemctl reboot'
     'Power Off : systemctl poweroff'
@@ -2283,6 +2443,20 @@ if grep -q 'name="Exit"' session/labwc/menu.xml; then
     pass "the desktop menu's Log Out uses labwc's own Exit"
 else
     fail "session/labwc/menu.xml no longer offers Log Out via labwc's Exit."
+fi
+
+# This file has a twin in the os-image repo — what an installed machine actually
+# reads is system_files/usr/share/aquarius/labwc/menu.xml — and the two drift
+# apart silently. The file has to SAY so, the same way the autostart file next to
+# it does, because the person editing it is the only one who can keep them equal.
+if grep -qF 'system_files/usr/share/aquarius/labwc/menu.xml' \
+        session/labwc/menu.xml; then
+    pass "menu.xml points at its os-image copy (change one, change both)"
+else
+    fail "session/labwc/menu.xml does not mention its os-image twin at" \
+         "system_files/usr/share/aquarius/labwc/menu.xml. An installed machine" \
+         "reads that copy, not this one, so a fix made here alone never ships." \
+         "Say it in the file, as the autostart file does."
 fi
 
 # rc.xml has to actually bind a right-click to it, and keep labwc's own mouse

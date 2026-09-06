@@ -80,6 +80,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Widgets
 
+import "../../services"
 import "../../theme"
 
 Item {
@@ -148,6 +149,20 @@ Item {
 
     function launch(): void {
         if (root.entry) {
+            // ONE PROGRAM ON THE MACHINE CANNOT BE STARTED THE ORDINARY WAY.
+            // GNOME's Settings app reads XDG_CURRENT_DESKTOP and exits at once
+            // unless it says GNOME, which in an Aquarius session it deliberately
+            // does not — so running its .desktop entry, which is all
+            // `execute()` does, gets a tile that flashes and nothing else. That
+            // is the dock half of the bench report on 2026-09-06 ("Nor does its
+            // icon in the dock"). services/SettingsLauncher.qml holds both the
+            // fact and the fix; the dock only asks whether this is that entry,
+            // so no per-app knowledge lands in here. Every other entry on the
+            // machine takes the ordinary road below.
+            if (SettingsLauncher.ownsDesktopEntry(root.entry)) {
+                SettingsLauncher.open("");
+                return;
+            }
             root.entry.execute();
         } else {
             // No .desktop entry means no command to run. This can only happen

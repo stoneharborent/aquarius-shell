@@ -67,6 +67,8 @@ import QtQuick
 import Quickshell
 import Quickshell.Networking
 
+import "../../services"
+
 QsTile {
     id: root
 
@@ -76,12 +78,18 @@ QsTile {
     // typing its password — and that is a Settings surface, not something a
     // 165px tile can hold (see the note at the foot of this file). So the tile
     // grows a chevron that opens GNOME's Wi-Fi panel, until the shell has its
-    // own Settings. `gnome-control-center wifi` is a stable panel id across
-    // GNOME versions. execDetached so it outlives a shell reload; it is a launch,
-    // not the kind of system-control shell-out tests/test-shell.sh section 22
-    // guards.
+    // own Settings. "wifi" is a stable gnome-control-center panel id across
+    // GNOME versions.
+    //
+    // The launch goes through services/SettingsLauncher.qml rather than being
+    // built here. That is not tidiness: GNOME's Settings app refuses to start
+    // at all unless XDG_CURRENT_DESKTOP names GNOME, which in an Aquarius
+    // session it deliberately does not, and the per-launch fix for that lives in
+    // exactly one file for the whole shell. Building the command line here again
+    // would bring back the chevron that did nothing (bench, 2026-09-06). Read
+    // the launcher's header for the whole story.
     hasDetail: true
-    onDetailRequested: Quickshell.execDetached(["gnome-control-center", "wifi"])
+    onDetailRequested: SettingsLauncher.open("wifi")
 
     // ---- finding the wireless device ----------------------------------------
     // `Networking.devices` is an ObjectModel, and the docs are explicit that a

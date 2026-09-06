@@ -44,6 +44,8 @@ import QtQuick
 import Quickshell
 import Quickshell.Services.UPower
 
+import "../../services"
+
 QsTile {
     id: root
 
@@ -51,12 +53,13 @@ QsTile {
 
     // The tile flips between Performance and the last profile; the fuller story —
     // the three profiles, battery thresholds, automatic power saving — lives in
-    // GNOME's Power panel. The chevron opens it. `power` is a stable
-    // gnome-control-center panel id. See TileWifi.qml for the execDetached /
-    // section-22 note. (On a handheld the fourth tile is Game Mode instead, and
-    // that one has no settings page, so it sets no chevron — see QsPlatform.qml.)
+    // GNOME's Power panel. The chevron opens it. "power" is a stable
+    // gnome-control-center panel id. The launch goes through
+    // services/SettingsLauncher.qml — see TileWifi.qml for why. (On a handheld
+    // the fourth tile is Game Mode instead, and that one has no settings page,
+    // so it sets no chevron — see QsPlatform.qml.)
     hasDetail: true
-    onDetailRequested: Quickshell.execDetached(["gnome-control-center", "power"])
+    onDetailRequested: SettingsLauncher.open("power")
 
     // A machine with no supported CPU scaling driver runs power-profiles-daemon
     // with a placeholder that offers "balanced" and nothing else — a switch with

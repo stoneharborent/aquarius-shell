@@ -9,8 +9,8 @@
 //   opens under it — the desktop's equivalent of the Apple menu:
 //
 //     ┌────────────────────────────┐
-//     │  About This PC             │   -> gnome-control-center system
-//     │  System Settings          │   -> gnome-control-center
+//     │  About This PC             │   -> Settings, on its About page
+//     │  System Settings          │   -> Settings
 //     │  Check for Update         │   -> /usr/libexec/aquarius-updater
 //     ├────────────────────────────┤
 //     │  Log Out                  │   -> loginctl terminate-session
@@ -38,6 +38,16 @@
 //   closes the others and vice versa. services/Overlays.qml holds that rule; read
 //   its header. This menu registers a closer, unregisters when destroyed, and
 //   claims on the way open.
+//
+// THE TWO SETTINGS ITEMS GO THROUGH ONE LAUNCHER, AND WHY
+//   "About This PC" and "System Settings" both open GNOME's Settings app, and
+//   that app refuses to start unless XDG_CURRENT_DESKTOP names GNOME — which in
+//   an Aquarius session it deliberately does not. That is what stopped both of
+//   these items working on the bench on 2026-09-06, and the fix (a per-launch
+//   `env XDG_CURRENT_DESKTOP=GNOME` in front of the command) lives in exactly
+//   one place for the whole shell: services/SettingsLauncher.qml. Read its
+//   header for the full story. This file does not build that command line
+//   itself, and must not start doing so again.
 //
 // WHY IT RUNS COMMANDS THE WAY IT DOES
 //   Every item here either launches a GUI program (Settings, the updater) or
@@ -163,9 +173,9 @@ Scope {
     // the header for why each is what it is.
     function run(id: string): void {
         if (id === "about") {
-            Quickshell.execDetached(["gnome-control-center", "system"]);
+            SettingsLauncher.open("system");
         } else if (id === "settings") {
-            Quickshell.execDetached(["gnome-control-center"]);
+            SettingsLauncher.open("");
         } else if (id === "update") {
             if (root.updaterAvailable)
                 Quickshell.execDetached([root.updaterPath]);

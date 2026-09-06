@@ -56,6 +56,8 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 
+import "../../services"
+
 import "fuzzy.js" as Fuzzy
 import "calc.js" as Calc
 
@@ -389,6 +391,16 @@ QtObject {
         if (result.kind === "app") {
             if (!result.entry)
                 return false;
+            // The one exception on the whole machine: GNOME's Settings app
+            // exits immediately unless XDG_CURRENT_DESKTOP names GNOME, which
+            // in an Aquarius session it deliberately does not, so running its
+            // .desktop entry the ordinary way opens nothing at all. The fact and
+            // the fix live in services/SettingsLauncher.qml; this asks, rather
+            // than knowing anything about that program itself.
+            if (SettingsLauncher.ownsDesktopEntry(result.entry)) {
+                SettingsLauncher.open("");
+                return true;
+            }
             // DesktopEntry.execute() is Quickshell.execDetached() with the
             // entry's own parsed command and working directory — so the app
             // outlives a shell reload, which a launched app must.
