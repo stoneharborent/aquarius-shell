@@ -114,13 +114,25 @@ Scope {
 
         locked: LockState.locked
 
-        onSecureChanged: {
-            if (sessionLock.secure)
-                console.log("aquarius-lock: every screen is covered");
-        }
-
         // One of these per screen. See LockSurface.qml.
         LockSurface {}
+    }
+
+    // ⚠️ MIRRORED INTO A PROPERTY OF OUR OWN RATHER THAN HANDLED DIRECTLY.
+    //
+    // `secure` is a C++ property whose change signal is spelled
+    // `secureStateChanged`, not `secureChanged`. QML's rule for which of those
+    // two names an `on…Changed` handler follows is a detail of the engine, and
+    // a handler written against the wrong one is not an error — it simply never
+    // runs, silently, which is the worst possible way to be wrong about a lock.
+    //
+    // A property declared HERE has a change signal QML generates itself, so
+    // `onCoveredChanged` cannot be misspelled. Costs one line, removes a guess.
+    readonly property bool covered: sessionLock.secure
+
+    onCoveredChanged: {
+        if (root.covered)
+            console.log("aquarius-lock: the compositor confirms every screen is covered");
     }
 
     // ==========================================================================

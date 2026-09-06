@@ -102,10 +102,11 @@ Rectangle {
 
             width: parent.width
 
-            // Quiet while PAM is thinking, and while the wait after three wrong
-            // passwords is counting down. Both are moments when another Enter
-            // would do nothing useful and typing would be a lie.
-            enabled: !LockState.busy && !LockState.waiting
+            // Drawn as unavailable while PAM is thinking, and while the wait
+            // after three wrong passwords counts down. It still holds the
+            // keyboard throughout — read the note beside `quiet` in
+            // LockField.qml for why that matters more than it sounds.
+            quiet: LockState.busy || LockState.waiting
 
             alarmed: LockState.phase === LockState.wrong
 

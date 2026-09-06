@@ -43,9 +43,21 @@ import "../theme"
 Item {
     id: root
 
-    // Everything goes quiet while PAM is thinking, and while the three-misses
-    // wait is counting down.
-    property bool enabled: true
+    // Draw as unavailable — while PAM is thinking, and while the wait after
+    // three wrong passwords counts down.
+    //
+    // ⚠️ THIS IS NOT `enabled`, AND THAT IS DELIBERATE. Setting an Item's
+    // `enabled` to false disables everything inside it, and a disabled item
+    // CANNOT HOLD THE KEYBOARD. The box would lose focus for the ten seconds of
+    // the wait and nothing would give it back, so the first thing typed
+    // afterwards would go nowhere — which looks exactly like a frozen lock
+    // screen.
+    //
+    // So the box stays alive and focused the whole time and only LOOKS quiet.
+    // What actually refuses to act is LockState.submit(), which does nothing
+    // while it is busy or waiting. Typing during the countdown fills the box,
+    // and Enter starts working again the moment the count reaches zero.
+    property bool quiet: false
 
     // Draw the danger ring — the box has just been told no.
     property bool alarmed: false
@@ -96,7 +108,7 @@ Item {
         height: parent.height
 
         radius: Theme.lockFieldRadius
-        color: root.enabled ? Theme.bgSoft : Theme.tileDisabled
+        color: root.quiet ? Theme.tileDisabled : Theme.bgSoft
 
         // Two pixels of danger when the password was wrong, one hairline the
         // rest of the time. The width changes as well as the colour, because a
@@ -120,8 +132,6 @@ Item {
             anchors.leftMargin: Theme.greeterFieldPaddingH
             anchors.rightMargin: Theme.greeterFieldPaddingH
             anchors.verticalCenter: parent.verticalCenter
-
-            enabled: root.enabled
 
             font.family: Theme.fontBody
             font.pixelSize: Theme.fsSubhead
