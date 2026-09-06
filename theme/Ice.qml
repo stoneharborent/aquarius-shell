@@ -104,6 +104,19 @@ Singleton {
     // push the desktop back without turning a light desktop into a dark one.
     readonly property color scrim: "#5916273A"       // ink at 35%
 
+    // The app switcher dims MUCH more gently than everything else, and that is
+    // deliberate rather than an oversight.
+    //
+    // Flow Search asks you to stop looking at the desktop and start typing, so
+    // it pushes the desktop right back. The app switcher asks the opposite: you
+    // are choosing between the windows you can see, and the thing you are
+    // choosing is BEHIND the panel. Dim it to 35% and you are picking between
+    // grey rectangles you can no longer recognise.
+    //
+    // So: 12% here against `scrim`'s 35%. Just enough to say "the panel is in
+    // front"; not enough to take the desktop away. Royce's call, 2026-09-06.
+    readonly property color switcherScrim: "#1F16273A" // ink at 12%
+
     // --- Semantic colours, tuned for a light ground ----------------------------
     readonly property color success: "#1F9E8C"
     readonly property color warn: "#C2792E"
