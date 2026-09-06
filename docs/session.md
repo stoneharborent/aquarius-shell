@@ -609,21 +609,14 @@ start normally anyway.
 > byte-for-byte identical between the two, so a diff between them shows only
 > prose. When you change one, change the other.
 
-**⚠️ `themerc-override` is new and the os-image does not have it yet.**
-`session/labwc/themerc-override` (added 2026-09-06) is what gives the desktop
-right-click menu and every window title bar the Aquarius look. Like `autostart`
-and `menu.xml`, it needs an os-image twin, at
-
-```
-system_files/usr/share/aquarius/labwc/themerc-override
-```
-
-Until that copy exists, an *installed* machine still draws its menu and title
-bars in labwc's own default grey while a machine running the session from a
-clone draws them in Ice. **CHANGE ONE, CHANGE BOTH** applies to it exactly as it
-does to the other two. `session/labwc/rc.xml` needs the same treatment: it now
-carries the `<theme><font>` block those surfaces are drawn in, and a
-`Super+Return` keybind that the os-image copy already had.
+**⚠️ `themerc-override` is no longer one of the hand-kept files.** It used to
+be: a second copy of the Ice palette, typed out by hand, because labwc cannot
+read QML. As of 2026-09-06 it is **generated** — see
+"The window frame follows too" further down this file — and the fifth file to keep in step
+is `session/labwc/generate-theme`, the program that writes it. Both repositories
+carry a copy of the generator, and `check-labwc-drift.sh` in the os-image repo
+runs *both* copies and compares what they produce, which is a stronger check
+than comparing two hand-written files ever was.
 
 ---
 
@@ -773,34 +766,83 @@ used here: drive `gdbus` with its `Process` type. The whole implementation is
 `services/SystemAppearance.qml`, and its header explains the two alternatives
 that were considered and dropped.
 
-### ⚠️ labwc's own surfaces do not follow
+### The window frame follows too, and this is how
 
 The theme swap moves the **shell** — the bar, the dock, the panels, the menus the
-shell draws. It does not move the two things **labwc** draws: the desktop
-right-click menu and window title bars. Those are coloured by
-`session/labwc/themerc-override`, a flat text file labwc reads **once, at
-start-up**, and a compositor has no way of knowing what a QML singleton has just
-decided.
+shell draws — by ordinary QML bindings. It cannot move the things **labwc**
+draws: window title bars, the border around every window, the round window
+buttons, and the desktop right-click menu. labwc is a C program reading flat
+text files. It has no idea what a QML singleton has just decided.
 
-So that file is **Ice only**, and on a dark desktop the menu and title bars stay
-light while everything else goes dark. That seam is deliberate for now rather
-than unnoticed. Closing it needs three things, none of them hard and all of them
-a separate piece of work:
+So a program writes those files for it: **`session/labwc/generate-theme`**.
 
-1. a second file built from `theme/Midnight.qml` the same way, checked by the
-   same test (`tests/test-shell.sh` section 15b);
-2. something that copies the wanted one over `themerc-override` when
-   `services/SystemAppearance.qml` flips;
-3. **`labwc --reconfigure`** immediately afterwards — labwc's own "re-read your
-   files now" command, which is what makes the change appear without a logout.
+#### What it does
 
-Step 2 is the reason it is not done yet: the shell would have to write into the
-session's configuration directory, which is a new kind of thing for it to do and
-wants a conversation first.
+It reads `theme/Ice.qml` or `theme/Midnight.qml` — the same two files the shell
+itself is coloured from, and the only place in this repository a colour is
+allowed to live — does the arithmetic, and writes out:
 
-The same gap applies to size. `AQ_UI_SCALE` grows every number in the shell and
-reaches nothing in labwc, so on a scaled desktop the menu keeps its unscaled
-padding. Whatever writes a Midnight file can write a scaled one.
+| What | Where it goes |
+|---|---|
+| `themerc-override` — every colour and size | `~/.config/aquarius/labwc/` |
+| `rc.xml` — with three settings filled in | `~/.config/aquarius/labwc/` |
+| `menu.xml`, `autostart`, `shutdown`, `environment` | copied there unchanged |
+| the round window buttons, as SVG | `~/.local/share/themes/Aquarius/labwc/` |
+| the Midnight GTK window colour | `~/.config/gtk-4.0/gtk.css` and `gtk-3.0` |
+
+The files in `session/labwc/` are the **template**. `session/aquarius-session`
+runs the generator before starting labwc, and then starts labwc with the
+generated folder rather than the template one. If generating fails, it starts
+labwc with the template folder and says so in the log — a cosmetic step must
+never be able to stop you logging in.
+
+#### Why two output folders, and why not in place
+
+Two folders because that is labwc's rule, not ours: labwc reads its **settings**
+from the folder it was started with (`labwc -C <folder>`) but looks for **button
+pictures** in a *theme* folder, `themes/<name>/labwc/`, which is why `rc.xml`
+says `<theme><name>Aquarius</name>`.
+
+Not in place because on an installed AquariusOS machine the template folder is
+inside `/usr`, which is read-only — and because these files have to be rewritten
+*while the desktop is running*, every time the machine goes light or dark.
+
+#### When it re-runs
+
+1. **At login**, from `session/aquarius-session`, before labwc starts.
+2. **Whenever the machine goes light or dark**, from
+   `services/SystemAppearance.qml`, which runs it again and then runs
+   `labwc --reconfigure` — labwc's own "re-read your files now" command. That is
+   what makes the change appear without logging out.
+3. **When you run `aq keys mac` or `aq keys windows`** on AquariusOS, which is
+   the one switch that moves the window buttons from one side to the other.
+
+#### How to change a colour
+
+Edit `theme/Ice.qml` or `theme/Midnight.qml`. Nowhere else. There is no second
+copy to keep in step any more, because the second copy is made rather than
+typed. Flip the desktop between light and dark and back and you will see it, or
+log out and in.
+
+#### How to change a size
+
+Every number is in the block near the top of `generate-theme` headed "THE
+DESIGN, WRITTEN DOWN ONCE", written at `AQ_UI_SCALE=1`. `AQ_UI_SCALE` now
+reaches the window frames — it did not before — so a 20px button really is 25px
+at 1.25.
+
+#### Two things labwc 0.20 cannot do, written down so they are not surprises
+
+* **There is no "pressed" button.** The design asks for a darker disc while the
+  mouse button is held down. labwc's button states are default, hover, toggled
+  and rounded, and nothing else; a pressed button therefore looks like a hovered
+  one. Nothing fakes it.
+* **There is no title-bar height setting.** The key that used to do it,
+  `titlebar.height`, was removed. labwc works the height out as
+  `max(font height, button height) + 2 x padding`, so the generator sets the
+  button height and solves for the padding. At 1.25 that lands one pixel short
+  of the design's 38 — 47 instead of 48 — because half of an odd number is not a
+  whole number of pixels.
 
 ### If nothing happens
 

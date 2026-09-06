@@ -394,11 +394,70 @@ export QT_QPA_PLATFORM="${QT_QPA_PLATFORM:-wayland}"
 # Deliberately NOT set: GDK_BACKEND. niri's documentation is explicit that
 # setting it globally breaks the screencast portal, and there is no upside.
 
+# -----------------------------------------------------------------------------
+# Build labwc's look out of the shell's palette.
+#
+# WHY THIS STEP EXISTS
+#   The window title bars, the border around every window, the little round
+#   window buttons and the desktop right-click menu are drawn by labwc, not by
+#   the shell — and labwc is a C program reading flat text files, so it cannot
+#   read the QML palette the rest of the desktop is built from. session/labwc/
+#   generate-theme reads that palette and writes labwc's files out for it: one
+#   themerc, one rc.xml, and the button pictures.
+#
+#   Before this existed, somebody kept a second copy of the Ice palette by hand
+#   in a file called themerc-override. That copy could hold ONE theme at ONE
+#   size, so a dark desktop had light title bars and AQ_UI_SCALE grew the shell
+#   while the window frames stayed put. Both are fixed by generating it.
+#
+# WHERE THE FINISHED FILES GO, AND WHY NOT HERE
+#   Into the user's own home, because they have to be REWRITTEN while the
+#   desktop is running — when the machine goes dark, and when somebody runs
+#   `aq keys windows` to move the buttons to the other side. On AquariusOS the
+#   folder next to this script is inside /usr, which is read-only. So the files
+#   next to this script are the TEMPLATE, and labwc is started with the
+#   generated copy.
+#
+# IF IT FAILS, NOTHING IS LOST. labwc is started with the template folder
+# instead — the same desktop, minus the dark theme and the size knob. A desktop
+# that will not start is never an acceptable outcome of a cosmetic step.
+# -----------------------------------------------------------------------------
+AQ_LABWC_DIR="${AQ_SESSION_DIR}/labwc"
+
+# Where generate-theme lives, exported so the SHELL can run it too. When the
+# machine is switched between light and dark, services/SystemAppearance.qml runs
+# this same program again and then tells labwc to re-read its files, so the
+# window frames follow the theme without logging out. The shell must not contain
+# a path of its own, hence a variable.
+AQ_FRAME_GENERATOR="${AQ_SESSION_DIR}/labwc/generate-theme"
+export AQ_FRAME_GENERATOR
+
+if [ "${AQ_COMPOSITOR}" = "labwc" ]; then
+    echo ""
+    echo "=== Building the window frame from the shell's palette ==="
+
+    AQ_LABWC_GENERATED="${XDG_CONFIG_HOME:-${HOME}/.config}/aquarius/labwc"
+
+    if python3 "${AQ_FRAME_GENERATOR}" \
+            --config-out "${AQ_LABWC_GENERATED}"; then
+        AQ_LABWC_DIR="${AQ_LABWC_GENERATED}"
+    else
+        echo ""
+        echo "  ⚠️  The window frame could not be generated, so labwc will be"
+        echo "      started with the files in ${AQ_SESSION_DIR}/labwc instead."
+        echo "      The desktop works. The dark theme and AQ_UI_SCALE do not"
+        echo "      reach the window frames, and the round window buttons will"
+        echo "      be labwc's own. The error is a few lines above this one."
+        echo ""
+    fi
+fi
+
 echo ""
 echo "=== Starting ==="
 echo "  compositor:  ${AQ_COMPOSITOR}"
 echo "  shell:       ${AQ_SHELL_DIR}"
 echo "  session:     ${AQ_SESSION_DIR}"
+echo "  labwc files: ${AQ_LABWC_DIR}"
 echo "  desktop:     ${XDG_CURRENT_DESKTOP}"
 echo ""
 
@@ -425,6 +484,10 @@ case "${AQ_COMPOSITOR}" in
         # whole compositor down the moment the command it started exits. That
         # would turn a crash of the bar into a logout, and a bar falling over
         # should not log you out.
-        exec labwc -C "${AQ_SESSION_DIR}/labwc"
+        #
+        # AQ_LABWC_DIR is normally the GENERATED folder in the user's home (see
+        # the generate-theme step above), and falls back to the folder next to
+        # this script if generating it failed.
+        exec labwc -C "${AQ_LABWC_DIR}"
         ;;
 esac

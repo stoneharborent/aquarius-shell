@@ -150,6 +150,8 @@ for aq_file in \
     assets/logo.svg \
     assets/logo-mono.svg \
     harness/run-nested.sh \
+    session/labwc/generate-theme \
+    session/labwc/rc.xml \
     LICENSE
 do
     if [ -f "${aq_file}" ]; then
@@ -586,7 +588,7 @@ for aq_file in \
     session/niri/config.kdl \
     session/labwc/rc.xml \
     session/labwc/menu.xml \
-    session/labwc/themerc-override \
+    session/labwc/generate-theme \
     session/labwc/autostart \
     session/labwc/shutdown \
     session/labwc/environment \
@@ -751,155 +753,307 @@ echo "=== 15. the colour rule reaches the session files too ==="
 # drift. The compositors' own chrome stays at their own defaults until the shell
 # owns it.
 #
-# ⚠️ ONE FILE IS EXEMPT, AND ONLY ONE: session/labwc/themerc-override.
+# ⚠️ THERE USED TO BE AN EXEMPT FILE HERE AND THERE IS NOT ANY MORE.
 #
-# labwc draws two things the shell cannot — the desktop right-click menu and
-# every window's title bar — and it is a C program reading a flat text file, so
-# it cannot import QML. Until this repo owns window decoration itself, the only
-# way those surfaces can look like Aquarius is for somebody to write the numbers
-# out a second time. That was signed off on 2026-09-06, after the bench note
-# "the right click menu does not have a design yet".
+# session/labwc/themerc-override held a second copy of the Ice palette, typed
+# out by hand, because labwc is a C program reading a flat text file and cannot
+# import QML. It was checked against Ice by the section below, but a second copy
+# of a palette is a second copy however carefully it is watched: it could hold
+# only ONE theme at ONE size, so a dark desktop had light title bars and
+# AQ_UI_SCALE grew the shell while the window frames stayed put.
 #
-# The exemption is not a hole, because section 15b immediately below checks every
-# colour in that file against theme/Ice.qml. It is excluded here so that 15b can
-# be the one that speaks about it, with a message that actually helps.
+# It is gone. session/labwc/generate-theme replaced it on 2026-09-06: it READS
+# Ice.qml or Midnight.qml and writes labwc's file out. There is now exactly one
+# palette in this repository again.
+#
+# ONE FILE IS SKIPPED BELOW, and for a different reason than the old one:
+# generate-theme's ERROR MESSAGES quote an example line of QML, and that example
+# contains a colour. It is a sentence explaining the file format to whoever
+# broke it, not a value anything is drawn in — every colour the generator emits
+# comes out of the QML it just read. Section 15b proves that, on the generator's
+# actual output, which is a far stronger check than reading its source.
 
 if grep -rn -E '#[0-9A-Fa-f]{3,8}\b' \
         session/niri session/labwc session/portals \
-        --exclude=themerc-override > /dev/null 2>&1; then
+        --exclude=generate-theme > /dev/null 2>&1; then
     grep -rn -E '#[0-9A-Fa-f]{3,8}\b' \
         session/niri session/labwc session/portals \
-        --exclude=themerc-override || true
+        --exclude=generate-theme || true
     fail "a session configuration contains what looks like a hex colour." \
          "Colour belongs in theme/Ice.qml and theme/Midnight.qml only." \
-         "The single exception is session/labwc/themerc-override, which exists" \
-         "because labwc cannot read QML — and every value in THAT file has to" \
-         "appear in theme/Ice.qml (section 15b). Leave everything else at the" \
-         "compositor's own defaults."
+         "labwc's own colours are no longer written by hand at all — they are" \
+         "generated from those two files by session/labwc/generate-theme, so" \
+         "there is nowhere left that needs a colour typed into it. Leave" \
+         "everything else at the compositor's own defaults."
 else
     pass "no colours in the compositor or portal configurations"
 fi
 
 # ------------------------------------------------------------------------------
 echo ""
-echo "=== 15b. every colour in labwc's themerc came out of Ice ==="
+echo "=== 15b. the generated labwc theme, checked by running the generator ==="
 # ------------------------------------------------------------------------------
-# THE ONE SANCTIONED COPY OF THE PALETTE, AND THE CHECK THAT KEEPS IT HONEST.
+# THIS IS THE CHECK THAT REPLACED "IS EVERY COLOUR IN THE HAND-WRITTEN FILE ALSO
+# IN ICE". It asks a bigger question, because there is now a program to ask it
+# of: build the theme for BOTH palettes at TWO sizes and read the results back.
 #
-# session/labwc/themerc-override gives labwc's own menu and title bars the
-# Aquarius look. It is the only file outside theme/ allowed to hold a colour,
-# because labwc reads a flat text file and cannot import QML.
+# What it proves, in order:
 #
-# A second copy of a palette is a palette that drifts. Somebody adjusts Ice's
-# surface colour, nobody remembers this file, and six months later the desktop
-# menu is a slightly different white from every other card on screen — the exact
-# failure the "colour lives in theme/ only" rule was written to prevent.
+#   1. the generator runs at all, for Ice and for Midnight, at 1x and at 1.25x
+#      (1.25 is the size Royce approved on the bench, 2026-09-03);
+#   2. every colour it wrote came out of the matching QML palette — the same
+#      guarantee the old check gave, now covering Midnight too;
+#   3. the settings the design sheet of 2026-09-06 names are actually there,
+#      with the values it names;
+#   4. the sizes really do follow AQ_UI_SCALE, which the hand-written file could
+#      not do at all;
+#   5. there is a button picture for every button, in every state, in both
+#      themes and at both sizes;
+#   6. the file it produces is one labwc can read: `key: value` per line, no
+#      end-of-line comments, every colour well formed.
 #
-# So: pull every #rrggbb out of that file and require each one to appear, byte
-# for byte, in theme/Ice.qml. Comparison is case-insensitive because a themerc is
-# conventionally lower case and Ice writes its values upper case; the DIGITS are
-# what must match.
-#
-# Translucent values are written labwc's way, #rrggbbaa, with the opacity last;
-# QML writes the same colour #aarrggbb, with the opacity first. Only the six
-# colour digits are compared, which is why each such line in that file names the
-# Ice token and the percentage in a comment beside it — the alpha byte is checked
-# by a person, not by this.
+# Point 6 is worth a sentence on its own. labwc's themerc has NO end-of-line
+# comment syntax: process_line() returns early only when the FIRST character is
+# '#', and parse_config_line() takes everything after the first colon as the
+# value. So `menu.width.min: 240   # why` sets the width to that whole string,
+# which is not a number, and labwc discards it in silence. It is the single most
+# likely way to break the generated file, and it would break it invisibly.
 
-aq_themerc="session/labwc/themerc-override"
+aq_gen="session/labwc/generate-theme"
 
-if [ -f "${aq_themerc}" ]; then
-    pass "${aq_themerc}"
+if [ ! -x "${aq_gen}" ]; then
+    fail "${aq_gen} is missing or not executable." \
+         "It is what gives labwc's menu, title bars and window buttons the" \
+         "Aquarius look. Without it the desktop falls back to labwc's own" \
+         "default Openbox grey — the bench note of 2026-09-06, 'the right" \
+         "click menu does not have a design yet'."
+elif ! command -v python3 > /dev/null 2>&1; then
+    echo "  note   python3 is not on this machine, so the generator cannot be run here."
+    echo "         CI runs this section; see the shell_tests job."
+else
+    aq_gen_root="$(mktemp -d)"
+    trap 'rm -rf "${aq_gen_root}"' EXIT
 
-    # SETTING lines only — anything whose first character is '#' is a comment
-    # and labwc never reads it. That matters for more than tidiness: the
-    # comments in that file quote the QML spelling of each colour (#aarrggbb,
-    # opacity first), and the first six digits of THOSE are the opacity plus
-    # four colour digits — a string that means nothing and would be compared
-    # against Ice as though it did. Check what labwc actually reads.
-    aq_themerc_colours="$(grep -v '^[[:space:]]*#' "${aq_themerc}" \
-        | grep -oE '#[0-9A-Fa-f]{6}' | sort -u)"
+    # The four combinations that matter. Ice and Midnight because a role in one
+    # palette and not the other breaks the desktop the moment somebody flips the
+    # theme; 1 and 1.25 because the size knob is the other thing the old
+    # hand-written file could not do.
+    for aq_case in "ice 1" "ice 1.25" "midnight 1" "midnight 1.25"; do
+        # shellcheck disable=SC2086
+        set -- ${aq_case}
+        aq_scheme="$1"
+        aq_scale="$2"
+        aq_out="${aq_gen_root}/${aq_scheme}-${aq_scale}"
 
-    if [ -z "${aq_themerc_colours}" ]; then
-        fail "${aq_themerc} contains no colours at all." \
-             "It exists to give labwc's menu and title bars the Ice palette." \
-             "An empty one means the desktop menu is back to labwc's grey."
-    else
-        aq_themerc_drift=0
-        while IFS= read -r aq_colour; do
-            # Quoted, so a value can only match a WHOLE token in Ice. Without
-            # the quotes, "#16273A" would also be found inside Ice's
-            # "#1A16273A" — and a six-digit slice of an eight-digit value is
-            # not the same colour, it is a coincidence.
-            if grep -qiE "\"${aq_colour}\"" theme/Ice.qml; then
-                pass "themerc ${aq_colour} is an Ice value"
-            else
-                fail "${aq_themerc} uses ${aq_colour}, which is not in" \
-                     "theme/Ice.qml." \
-                     "Every colour in that file is a COPY of an Ice token — not" \
-                     "a new colour, not a nudged one, not one somebody" \
-                     "eyeballed. If Ice needs a value it does not have, that is" \
-                     "a design decision and it goes into theme/Ice.qml first." \
-                     "(Translucent values are written #rrggbbaa there and" \
-                     "#aarrggbb in QML; only the six colour digits are compared," \
-                     "so this is complaining about the colour, not the opacity.)"
-                aq_themerc_drift=1
-            fi
-        done <<< "${aq_themerc_colours}"
-
-        if [ "${aq_themerc_drift}" -eq 0 ]; then
-            pass "the themerc holds no colour Ice does not"
-        fi
-    fi
-
-    # The file has to SAY that it is the exception and that a test watches it,
-    # because the person who opens it is the only one who can keep it in step.
-    for aq_needle in 'theme/Ice.qml' 'system_files/usr/share/aquarius/labwc/themerc-override'; do
-        if grep -qF "${aq_needle}" "${aq_themerc}"; then
-            pass "the themerc mentions ${aq_needle}"
+        if python3 "${aq_gen}" --quiet \
+                --scheme "${aq_scheme}" --scale "${aq_scale}" --buttons mac \
+                --config-out "${aq_out}/config" \
+                --theme-out "${aq_out}/theme" \
+                --gtk-out "${aq_out}/gtk" 2> "${aq_out}.err"; then
+            pass "generated the ${aq_scheme} theme at ${aq_scale}x"
         else
-            fail "${aq_themerc} does not mention ${aq_needle}." \
-                 "It must say where its colours come from, and that an" \
-                 "installed machine reads the os-image copy rather than this" \
-                 "one — the same change-one-change-both note menu.xml and" \
-                 "autostart next to it already carry."
+            fail "the generator failed for ${aq_scheme} at ${aq_scale}x:" \
+                 "$(cat "${aq_out}.err" 2> /dev/null || true)"
+            continue
+        fi
+
+        aq_themerc="${aq_out}/config/themerc-override"
+
+        # --- 6. can labwc read it at all? -------------------------------------
+        if grep -nE '^[^#].*:.*#' "${aq_themerc}" \
+                | grep -vE ':[[:space:]]*#[0-9A-Fa-f]{6,8}[[:space:]]*$' \
+                > /dev/null 2>&1; then
+            fail "the generated ${aq_scheme} themerc has what looks like an" \
+                 "end-of-line comment. labwc has none: it takes everything" \
+                 "after the first colon as the value, so the setting is" \
+                 "silently ignored and labwc's default stands."
+        fi
+
+        # Every setting line has to be `key: value` with a value labwc can use.
+        if python3 - "${aq_themerc}" <<'PYTHON'
+import re
+import sys
+
+problems = []
+for number, line in enumerate(open(sys.argv[1], encoding="utf-8"), 1):
+    line = line.strip()
+    if not line or line.startswith("#"):
+        continue
+    if ":" not in line:
+        problems.append("%d: not 'key: value' — %s" % (number, line))
+        continue
+    key, value = line.split(":", 1)
+    value = value.strip()
+    if "#" in value and not re.fullmatch(r"#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?", value):
+        problems.append("%d: not a colour labwc can read — %s" % (number, line))
+    if not key.strip():
+        problems.append("%d: no key at all — %s" % (number, line))
+
+for problem in problems:
+    print("       " + problem)
+sys.exit(1 if problems else 0)
+PYTHON
+        then
+            pass "every ${aq_scheme} ${aq_scale}x setting is one labwc can read"
+        else
+            fail "the generated ${aq_scheme} themerc at ${aq_scale}x has lines" \
+                 "labwc would throw away in silence (listed above)."
+        fi
+
+        # --- 2. every colour came out of the palette --------------------------
+        # Only the SIX colour digits are compared. The generator writes labwc's
+        # spelling, #rrggbbaa with the opacity last; the QML writes #aarrggbb
+        # with the opacity first. And four of the button washes are the palette
+        # ink at a percentage the palette has no token for — the design sheet
+        # asks for ink at 10, 12, 16 and 18 per cent — so the opacity is
+        # arithmetic and the COLOUR is what has to have come from the file.
+        aq_palette="theme/$(printf '%s' "${aq_scheme}" | awk '{print toupper(substr($0,1,1)) substr($0,2)}').qml"
+        aq_drift=0
+        while IFS= read -r aq_colour; do
+            [ -n "${aq_colour}" ] || continue
+            if ! grep -qiE "\"#([0-9A-Fa-f]{2})?${aq_colour#\#}\"" "${aq_palette}"; then
+                fail "the generated ${aq_scheme} themerc uses ${aq_colour}," \
+                     "which is not in ${aq_palette}." \
+                     "Every colour the generator writes is READ out of that" \
+                     "file. A colour that is not in it means the generator" \
+                     "invented one, which is a bug in the generator and never" \
+                     "a new design decision."
+                aq_drift=1
+            fi
+        done <<< "$(grep -v '^[[:space:]]*#' "${aq_themerc}" \
+            | grep -oE '#[0-9A-Fa-f]{6}' | sort -u)"
+        if [ "${aq_drift}" -eq 0 ]; then
+            pass "every ${aq_scheme} colour came out of ${aq_palette}"
+        fi
+
+        # --- 5. the buttons ---------------------------------------------------
+        # labwc looks these up by exact name, in a THEME folder rather than
+        # beside its settings. A missing one is not an error anywhere: labwc
+        # falls back to a bare built-in glyph with no disc behind it, and one
+        # button quietly stops matching the other two.
+        aq_missing_buttons=""
+        for aq_button in close iconify max max_toggled; do
+            for aq_state in "" "_hover"; do
+                for aq_focus in active inactive; do
+                    aq_svg="${aq_out}/theme/${aq_button}${aq_state}-${aq_focus}.svg"
+                    [ -s "${aq_svg}" ] || aq_missing_buttons="${aq_missing_buttons} $(basename "${aq_svg}")"
+                done
+            done
+        done
+        if [ -z "${aq_missing_buttons}" ]; then
+            pass "all 16 ${aq_scheme} ${aq_scale}x button pictures were drawn"
+        else
+            fail "these ${aq_scheme} button pictures were not drawn:${aq_missing_buttons}"
         fi
     done
 
-    # Only Ice for now. The follow-up — a Midnight file plus a reconfigure — has
-    # to be written down in the file, not remembered.
-    if grep -qF 'labwc --reconfigure' "${aq_themerc}"; then
-        pass "the themerc records the Midnight follow-up"
+    # --- 3. the design sheet's own values, read back ---------------------------
+    # Ice at 1x is the design exactly as drawn, so this is where the numbers can
+    # be checked against the sheet without any arithmetic in the way.
+    aq_ice="${aq_gen_root}/ice-1/config/themerc-override"
+
+    aq_expect() {
+        # $1 = the setting, $2 = what it must be, $3 = what it is for
+        if grep -qxF "$1: $2" "${aq_ice}"; then
+            pass "$1 is $2 — $3"
+        else
+            fail "$1 should be '$2' ($3) and is: $(grep -E "^$1:" "${aq_ice}" || echo '(missing)')"
+        fi
+    }
+
+    # Section 3 of the design sheet — the frame.
+    aq_expect "window.active.title.bg.color"    "#F0F6FC" "the focused title bar is Ice panel"
+    aq_expect "window.inactive.title.bg.color"  "#E4EDF6" "an unfocused one steps down to surfaceAlt"
+    aq_expect "window.active.label.text.color"  "#16273A" "the focused title is Ice ink"
+    aq_expect "window.inactive.label.text.color" "#7C90A4" "an unfocused title is inkMute"
+    aq_expect "window.active.border.color"      "#16273A2E" "the focused border is lineStrong (ink at 18%)"
+    aq_expect "window.inactive.border.color"    "#16273A1A" "an unfocused border is line (ink at 10%)"
+    aq_expect "border.width"                    "1" "one pixel, like every other rule on screen"
+    aq_expect "window.label.text.justify"       "Center" "the title is centred"
+
+    # Section 4 — the buttons. The title bar's HEIGHT is not a setting in labwc
+    # 0.20 (titlebar.height was removed); it is the button height plus twice the
+    # padding, which is why those two are what get checked.
+    aq_expect "window.button.width"             "20" "a button disc is 20 across"
+    aq_expect "window.button.height"            "20" "and 20 tall"
+    aq_expect "window.button.spacing"           "8" "with 8 between two discs"
+    aq_expect "window.titlebar.padding.width"   "12" "and 12 from the window's edge"
+    aq_expect "window.titlebar.padding.height"  "9" "which makes the title bar 20 + 9 + 9 = 38 tall"
+
+    # Section 5 — the desktop menu. These are the values the hand-written file
+    # shipped with, kept unchanged on purpose: the sheet says "keep the shipped
+    # Ice values".
+    aq_expect "menu.width.min"                  "240" "the menu is one fixed width"
+    aq_expect "menu.width.max"                  "240" "min and max together is how labwc fixes it"
+    aq_expect "menu.items.bg.color"             "#F7FBFE" "the menu card is Ice surface"
+    aq_expect "menu.items.text.color"           "#16273A" "its text is Ice ink"
+    aq_expect "menu.items.active.bg.color"      "#2C8FC429" "the row under the pointer is accentWash"
+    aq_expect "menu.items.padding.x"            "16" "the shipped row padding, left and right"
+    aq_expect "menu.items.padding.y"            "9" "and top and bottom"
+
+    # The Midnight column of the same tables.
+    aq_mid="${aq_gen_root}/midnight-1/config/themerc-override"
+    for aq_pair in \
+        "window.active.title.bg.color #152033" \
+        "window.inactive.title.bg.color #1B2940" \
+        "window.active.label.text.color #DCE9F4" \
+        "window.inactive.label.text.color #5C6E82" \
+        "window.active.border.color #DCF3FF29" \
+        "window.inactive.border.color #DCF3FF14" \
+        "menu.items.bg.color #121C2E" \
+        "menu.items.text.color #DCE9F4" \
+        "menu.items.active.bg.color #00BFFF1F" \
+        "menu.title.bg.color #1B2940" \
+        "menu.title.text.color #93A7BC"
+    do
+        # shellcheck disable=SC2086
+        set -- ${aq_pair}
+        if grep -qxF "$1: $2" "${aq_mid}"; then
+            pass "Midnight $1 is $2"
+        else
+            fail "Midnight $1 should be '$2' and is: $(grep -E "^$1:" "${aq_mid}" || echo '(missing)')"
+        fi
+    done
+
+    # --- 4. the sizes really do grow ------------------------------------------
+    # The whole reason the hand-written file had to go. 20 at 1x is 25 at 1.25x.
+    aq_ice_big="${aq_gen_root}/ice-1.25/config/themerc-override"
+    if grep -qxF "window.button.width: 25" "${aq_ice_big}"; then
+        pass "AQ_UI_SCALE reaches the window frames (a 20px button is 25px at 1.25x)"
     else
-        fail "${aq_themerc} does not record how a dark theme would work." \
-             "It is Ice only, so on a dark desktop the menu and title bars stay" \
-             "light. That needs a second file built from theme/Midnight.qml," \
-             "something to swap them when SystemAppearance flips, and" \
-             "'labwc --reconfigure' afterwards. Say so in the file."
+        fail "AQ_UI_SCALE does not reach the window frames." \
+             "window.button.width at 1.25x should be 25 and is:" \
+             "$(grep -E '^window.button.width:' "${aq_ice_big}" || echo '(missing)')"
     fi
 
-    # labwc's themerc has no end-of-line comments: process_line() returns early
-    # on a leading '#', and parse_config_line() takes everything after the first
-    # colon as the value. So `key: value   # why` sets the value to
-    # "value   # why", which parses as a colour of nothing and silently keeps
-    # labwc's default. This is the single most likely way to break that file.
-    if grep -nE '^[^#].*:.*#' "${aq_themerc}" \
-            | grep -vE ':[[:space:]]*#[0-9A-Fa-f]{6,8}[[:space:]]*$' \
-            > /dev/null 2>&1; then
-        grep -nE '^[^#].*:.*#' "${aq_themerc}" \
-            | grep -vE ':[[:space:]]*#[0-9A-Fa-f]{6,8}[[:space:]]*$' || true
-        fail "${aq_themerc} has what looks like an end-of-line comment." \
-             "labwc has none: it takes everything after the first colon as the" \
-             "value, so the setting is silently ignored and the default stands." \
-             "Put the comment on its own line, starting with #."
+    # --- the Midnight GTK exception -------------------------------------------
+    # Two properties, dark only. The file must appear for Midnight and must NOT
+    # appear for Ice — a navy window on the Ice light desktop is the same
+    # mistake in the other direction.
+    if [ -s "${aq_gen_root}/midnight-1/gtk/gtk-4.0/gtk.css" ]; then
+        pass "Midnight writes the two-property GTK colour file"
+        if grep -q "#0B1220" "${aq_gen_root}/midnight-1/gtk/gtk-4.0/gtk.css" \
+                && grep -q "#152033" "${aq_gen_root}/midnight-1/gtk/gtk-4.0/gtk.css"; then
+            pass "and it carries the Midnight window and header-bar colours"
+        else
+            fail "the Midnight GTK file does not carry Midnight's bg (#0B1220)" \
+                 "and panel (#152033) colours."
+        fi
     else
-        pass "the themerc has no end-of-line comments"
+        fail "Midnight did not write the GTK colour file, so a Files window on" \
+             "a dark Aquarius desktop stays libadwaita's neutral near-black" \
+             "against navy."
     fi
-else
-    fail "${aq_themerc} is missing." \
-         "Without it labwc draws the desktop right-click menu and every window" \
-         "title bar in its own default grey — the bench note of 2026-09-06," \
-         "'the right click menu does not have a design yet'."
+    if [ -e "${aq_gen_root}/ice-1/gtk/gtk-4.0/gtk.css" ]; then
+        fail "the Ice theme wrote a GTK colour file. It must not: those two" \
+             "properties are Midnight's, and on a light desktop they would" \
+             "paint every GTK window navy."
+    else
+        pass "Ice writes no GTK colour file, which is correct"
+    fi
+
+    rm -rf "${aq_gen_root}"
+    trap - EXIT
 fi
 
 # ------------------------------------------------------------------------------
@@ -2804,7 +2958,7 @@ else
 fi
 
 # THE MENU'S FONT IS IN rc.xml, NOT IN THE THEMERC. labwc splits one look across
-# two files: colours come from themerc-override, fonts come from rc.xml's
+# two files: colours come from the generated themerc-override, fonts come from rc.xml's
 # <theme> section. Lose these and the desktop menu is drawn in "sans" while the
 # shell menu two inches above it is drawn in Inter — the same menu in two
 # typefaces, which is worse than either on its own.
@@ -2834,7 +2988,7 @@ then
 else
     fail "session/labwc/rc.xml does not set Inter for all four <theme><font>" \
          "places (MenuItem, MenuHeader, ActiveWindow, InactiveWindow)." \
-         "labwc takes colours from themerc-override and FONTS from here, so" \
+         "labwc takes colours from a themerc and FONTS from here, so" \
          "without these the desktop menu is drawn in whatever 'sans' resolves" \
          "to while the shell's own menu is drawn in Inter."
 fi

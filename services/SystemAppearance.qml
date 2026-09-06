@@ -158,9 +158,89 @@ Singleton {
     }
 
     function acceptScheme(value, source) {
+        const changed = root.colorScheme !== value || !root.available;
+
         root.colorScheme = value;
         root.available = true;
         root.status = "following the system (" + source + ")";
+
+        // The shell repaints itself from the new palette on its own — every
+        // component is bound to Theme, and Theme is bound to this. The WINDOW
+        // FRAMES are the part that does not, and that is what the line below is
+        // for. See the long note beside frameProc.
+        if (changed)
+            root.rebuildWindowFrames();
+    }
+
+    // =========================================================================
+    // THE WINDOW FRAMES, WHICH THE SHELL DOES NOT DRAW
+    // =========================================================================
+    // Four things on an Aquarius screen belong to labwc and not to us: the
+    // title bar of every window, the border around it, the round buttons in
+    // that title bar, and the menu that opens on a right-click of the
+    // wallpaper. labwc is a C program reading flat text files and cannot follow
+    // a QML binding, so when this file decides the machine has gone dark, those
+    // four surfaces would stay light. On the bench that reads as the shell
+    // turning navy while every window title bar stays ice white.
+    //
+    // The fix is two steps and they have to happen in this order:
+    //
+    //   1. session/labwc/generate-theme reads theme/Midnight.qml (or Ice.qml)
+    //      and writes labwc's files out again — the colours, the sizes and the
+    //      button pictures.
+    //   2. `labwc --reconfigure`, which is labwc's own "re-read your files now"
+    //      command. generate-theme runs it itself, at the end, which is why
+    //      --reconfigure is passed below rather than run as a second process
+    //      from here: one program owning both halves means they cannot get out
+    //      of order.
+    //
+    // --quiet because this is the second and later runs; the noisy first run
+    // happens at login, from the session launcher, where somebody reading
+    // session.log wants to see it.
+    //
+    // IF IT FAILS, THE DESKTOP IS FINE. The window frames simply keep the theme
+    // they had until the next login. A cosmetic step must never be able to take
+    // the desktop down, so this is a fire-and-forget process with its failure
+    // written to the log and nothing else.
+    // The full path to generate-theme, handed to us by whichever launcher
+    // started the session. It is a variable rather than a path written here for
+    // the same reason no other path is written in this repository: the file
+    // lives in a different place on an installed AquariusOS machine than it
+    // does in a clone of this repository, and the shell should not have to know
+    // which one it is running on.
+    //
+    // Unset means "not an Aquarius session" — the nested harness, or somebody
+    // running the shell on their own desktop — where there are no Aquarius
+    // window frames to rebuild and this whole section does nothing.
+    readonly property string frameGenerator: Quickshell.env("AQ_FRAME_GENERATOR") || ""
+
+    function rebuildWindowFrames() {
+        if (root.frameGenerator === "")
+            return;
+
+        frameProc.running = false;
+        frameProc.running = true;
+    }
+
+    Process {
+        id: frameProc
+        running: false
+        command: ["python3", root.frameGenerator, "--quiet", "--reconfigure"]
+
+        stderr: StdioCollector {
+            onStreamFinished: {
+                if (this.text.trim() !== "")
+                    console.log("aquarius-shell: window frames — "
+                                + this.text.trim());
+            }
+        }
+
+        onExited: function (exitCode) {
+            if (exitCode !== 0)
+                console.log("aquarius-shell: window frames — could not rebuild "
+                            + "them (exit " + exitCode + "). The title bars keep "
+                            + "the theme they had until the next login.");
+        }
     }
 
     function giveUp(reason) {
