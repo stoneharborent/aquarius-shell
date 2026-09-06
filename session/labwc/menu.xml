@@ -25,19 +25,20 @@
 
   THE ONE RULE THIS FILE OBEYS THAT MIGHT SURPRISE YOU
     NO COLOURS IN THIS FILE. This file is the menu's CONTENTS — what the items
-    say and what they run. What the menu LOOKS like is `themerc-override`, next
-    to this one: the card colour, the hairline, the text inks, the accent-tinted
-    row under the pointer, the padding and the width, all copied out of
-    theme/Ice.qml and checked against it by tests/test-shell.sh section 15b. Its
-    font is in rc.xml's <theme> section, because labwc splits colours and fonts
-    across two files.
+    say and what they run. What the menu LOOKS like is written by a program:
+    generate-theme, next to this one. It reads theme/Ice.qml or
+    theme/Midnight.qml and writes out the card colour, the hairline, the text
+    inks, the accent-tinted row under the pointer, the padding and the width,
+    for whichever theme and whatever AQ_UI_SCALE are in force. The font is in
+    rc.xml's <theme> section, because labwc splits colours and fonts across two
+    files.
 
-    That themerc is the ONLY file outside theme/Ice.qml and theme/Midnight.qml
-    allowed to hold a colour value, and it is an exception only because labwc
-    cannot read QML. Do not add a second one, and do not tint anything here.
-    (Before 2026-09-06 there was no exception and labwc drew this menu in its own
-    default grey, which is the bench note "the right click menu does not have a
-    design yet".)
+    There is no second copy of the palette anywhere, and there is no file to
+    keep in step by hand. Before 2026-09-06 there was no design here at all and
+    labwc drew this menu in its own default grey — the bench note "the right
+    click menu does not have a design yet". The first fix that day was a
+    hand-written themerc-override; the fix that replaced it, the same day, is
+    the program. Do not tint anything here.
 
   Format reference: labwc-menu(5).
   =============================================================================
