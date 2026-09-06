@@ -88,6 +88,7 @@ these. Full explanation and troubleshooting: **[`harness/README.md`](harness/REA
 | `components/notifications/` | The notification daemon, toasts, and the panel off the clock. `docs/notifications.md`. |
 | `components/search/` | The Flow Search palette — apps, math, session actions. `docs/flow-search.md`. |
 | `greeter/` | **The login screen** — this repo's second entry point (`qs -p greeter/greeter.qml`). The Ice wallpaper, the Aquarius mark, a password box, and the conversation with greetd that starts your desktop. `docs/greeter.md`. |
+| `lock/` | **The lock screen** — Super+L, the Aquarius menu's Lock Screen row, or ten minutes of nobody touching the machine. Part of the desktop shell rather than a program of its own, so that locking is instant; `lock/lock.qml` is a way to look at it in the harness. The password is checked by PAM and never by this shell. `docs/lock-screen.md`. |
 | `services/` | Shared single-instance state: Focus (do-not-disturb), the system light/dark preference, the one-overlay-at-a-time rule, and the shell's single door to the Settings app. |
 | `session/` | The experimental Aquarius Session: login entry, launcher, niri + labwc configs, portals. `labwc/themerc-override` is the one file outside `theme/` allowed to hold a colour — it is how labwc's own desktop menu and window title bars get the Aquarius look, and a test checks every value in it against `theme/Ice.qml`. `docs/session.md`. |
 | `assets/` | The Aquarius logo, copied from `os-image/branding/`. |

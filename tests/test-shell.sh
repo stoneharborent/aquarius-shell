@@ -25,6 +25,10 @@
 #     catches a module that IS installed and spells a name differently)
 #   * every size in the theme goes through the one size knob (section 30), and
 #     the dock stays deliberately larger than the rest of it (section 31)
+#   * the lock screen never checks a password itself, cannot be unlocked over
+#     IPC, cannot see a notification's contents, and does not photograph the
+#     desktop (section 38 — the one whose failures would be a security bug
+#     rather than a drawing one)
 #
 # WHAT THIS CAN ACTUALLY RUN (added with the Flow Search palette)
 #   Section 12 is different in kind from everything above it. The search
@@ -147,6 +151,17 @@ for aq_file in \
     greeter/GreeterDesktopPill.qml \
     greeter/aquarius-greeter-info \
     docs/greeter.md \
+    lock/lock.qml \
+    lock/qmldir \
+    lock/LockState.qml \
+    lock/LockLayer.qml \
+    lock/LockSurface.qml \
+    lock/LockCard.qml \
+    lock/LockField.qml \
+    lock/LockVeil.qml \
+    lock/LockBlur.qml \
+    lock/LockIdle.qml \
+    docs/lock-screen.md \
     assets/logo.svg \
     assets/logo-mono.svg \
     harness/run-nested.sh \
@@ -275,8 +290,8 @@ echo "=== 4. colour lives in theme/ and nowhere else ==="
 # We look for hex colours outside theme/. "transparent" is allowed — it is the
 # absence of a colour, not a choice of one.
 
-if grep -rn --include='*.qml' -E '"#[0-9A-Fa-f]{3,8}"' components/ services/ greeter/ shell.qml > /dev/null 2>&1; then
-    grep -rn --include='*.qml' -E '"#[0-9A-Fa-f]{3,8}"' components/ services/ greeter/ shell.qml || true
+if grep -rn --include='*.qml' -E '"#[0-9A-Fa-f]{3,8}"' components/ services/ greeter/ lock/ shell.qml > /dev/null 2>&1; then
+    grep -rn --include='*.qml' -E '"#[0-9A-Fa-f]{3,8}"' components/ services/ greeter/ lock/ shell.qml || true
     fail "a component contains a raw colour value." \
          "Colour belongs in theme/Ice.qml and theme/Midnight.qml only." \
          "Add a role there, then use Theme.<role> here."
@@ -414,6 +429,7 @@ singletons = {
     'FocusState': declared('services/FocusState.qml'),
     'Overlays': declared('services/Overlays.qml'),
     'GreeterState': declared('greeter/GreeterState.qml'),
+    'LockState': declared('lock/LockState.qml'),
 }
 
 bad = 0
@@ -1616,11 +1632,11 @@ echo "=== 28. every enum namespace is one the shipped build actually has ==="
 # `import "x.js" as Name`, so they are our own code and cannot be missing from a
 # Quickshell build.
 aq_ns_ours="Theme FocusState Overlays SettingsLauncher SystemAppearance Fuzzy
-Calc Progress GreeterState"
+Calc Progress GreeterState LockState"
 
 # Names Qt itself provides — globals, value types and attached types.
-aq_ns_qt="Qt Math JSON Date Object Locale Accessible Component Keys Easing Font
-Text TextInput Image Flickable Loader Layout Shape ShapePath"
+aq_ns_qt="Qt Math JSON Date Object Array Locale Accessible Component Keys Easing
+Font Text TextInput Image Flickable Loader Layout Shape ShapePath"
 
 # Quickshell's own. EVERY ONE OF THESE WAS PROBED under 0.2.1 git on 2026-09-02
 # and answered "object". Do not add to this list from the documentation.
@@ -1628,7 +1644,16 @@ aq_ns_quickshell="Quickshell Networking DeviceType Edges DesktopEntries
 SystemClock SystemTray Pipewire UPower UPowerDeviceState PowerProfiles
 PowerProfile PerformanceDegradationReason Bluetooth BluetoothAdapterState
 NotificationUrgency ExclusionMode WlrKeyboardFocus WlrLayershell
-ToplevelManager Greetd GreetdState"
+ToplevelManager Greetd GreetdState PamResult PamError"
+
+# ⚠️ PamResult and PamError were not probed either, and the reason is the same
+# shape as Greetd's below. They belong to the lock screen, and a lock screen
+# cannot be probed on a Mac: there is no PAM, no /etc/pam.d/aquarius-lock, and
+# no session to be locked. What stands in for the probe is the same thing: the
+# image build compiles Quickshell itself and FAILS THE BUILD if SERVICE_PAM is
+# not ON in the finished program (os-image, build_files/stage-quickshell.sh).
+# A build cache that says ON plus a build that finished is proof the module is
+# compiled in.
 
 # ⚠️ Greetd and GreetdState were NOT probed the way the rest of that list was,
 # and here is the honest reason. They belong to the login screen, and the login
@@ -1685,7 +1710,7 @@ def strip(text):
 member = re.compile(r'(?:^|[^A-Za-z0-9_.$])([A-Z][A-Za-z0-9_]*)\s*\.\s*[A-Za-z_]')
 bad = 0
 
-for root in ('components', 'services', 'theme', 'greeter'):
+for root in ('components', 'services', 'theme', 'greeter', 'lock'):
     paths = sorted(pathlib.Path(root).rglob('*.qml'))
     for path in paths + ([pathlib.Path('shell.qml')] if root == 'components' else []):
         code = strip(path.read_text(encoding='utf-8'))
@@ -1860,7 +1885,23 @@ text = pathlib.Path('theme/Theme.qml').read_text(encoding='utf-8')
 #   dockHoverScale  already a multiplier.
 # dockDotOpacity/dockDotOpacityActive were here until 2026-09-04, when the dock
 # dot stopped being a translucent accent and became two solid colour roles.
-exempt = {'durFast', 'durMed', 'uiScaleMin', 'uiScaleMax', 'dockHoverScale'}
+#
+# The lock screen adds three groups of them, and they are grouped in Theme.qml
+# under headings that say so. None of them is a size and none may be multiplied:
+#   the seconds     lockIdle*Seconds, lockWaitSeconds, lockCalmBackSeconds.
+#                   A BIGGER DESIGN MUST NOT WAIT LONGER BEFORE LOCKING THE
+#                   MACHINE. That is the whole reason this list exists.
+#   the millis      lockVeilFadeMs, lockShakeMs. Same rule as durFast/durMed
+#                   above: a taller card must not animate more slowly.
+#   the fractions   lockClockTopFraction (a share of the screen's height),
+#                   lockVeilWash / lockCardOpacity / lockDimWash (opacities).
+#                   Already multipliers, like dockHoverScale.
+exempt = {'durFast', 'durMed', 'uiScaleMin', 'uiScaleMax', 'dockHoverScale',
+          'lockIdleDimSeconds', 'lockIdleLockSeconds', 'lockIdleOffSeconds',
+          'lockWaitSeconds', 'lockCalmBackSeconds',
+          'lockVeilFadeMs', 'lockShakeMs',
+          'lockClockTopFraction', 'lockVeilWash', 'lockCardOpacity',
+          'lockDimWash'}
 
 bad = 0
 scaled = 0
@@ -3054,6 +3095,317 @@ if printf '%s' "${aq_dock_config_code}" \
          "was a gesture that changed something."
 else
     pass "DockConfig.qml never writes unless asked"
+fi
+
+# ==============================================================================
+# THE LOCK SCREEN (lock/) — check 38
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+echo ""
+echo "=== 38. the lock screen holds together ==="
+# ------------------------------------------------------------------------------
+# The lock screen changes what a bug costs, the same way the login screen does,
+# and in one respect it is worse.
+#
+# A session lock is a promise the compositor makes: nothing except this
+# program's surfaces gets drawn or gets input, until this program says
+# otherwise. That is what makes killing a locker useless as a way past it. It
+# also means that if this shell dies while the lock is on, the screens stay
+# covered in a flat colour and NOTHING LEFT RUNNING CAN LIFT THEM. The way out
+# is a text console and a command typed from memory.
+#
+# So the checks below are about exactly two things: the ways this could stop
+# being a lock, and the ways it could stop being able to let you back in.
+
+# --- it must not import a compositor's own module -----------------------------
+# Section 3 already covers the whole repo. Said again here for the same reason
+# it is said again in the login screen's section: this is a tempting place to
+# reach for "just use the compositor's IPC", and doing it would mean the machine
+# stops locking the day the compositor underneath changes.
+if grep -rn --include='*.qml' -E '^\s*import\s+Quickshell\.(Hyprland|I3)' lock/ > /dev/null 2>&1; then
+    fail "the lock screen imports a compositor-specific module."
+else
+    pass "the lock screen speaks only standard protocols"
+fi
+
+# --- the singleton has to be declared, twice ----------------------------------
+if grep -q '^singleton LockState .*LockState\.qml$' lock/qmldir; then
+    pass "lock/qmldir declares LockState"
+else
+    fail "lock/qmldir does not declare LockState." \
+         "Add:  singleton LockState 1.0 LockState.qml"
+fi
+if grep -q '^pragma Singleton' lock/LockState.qml; then
+    pass "lock/LockState.qml says 'pragma Singleton'"
+else
+    fail "lock/LockState.qml is listed as a singleton but does not say" \
+         "'pragma Singleton' at the top. Both are required."
+fi
+
+# --- ⚠️ THE PASSWORD IS NEVER CHECKED IN QML ----------------------------------
+# THIS IS THE CHECK THIS SECTION EXISTS FOR.
+#
+# A program that could check a password by itself could also be argued into
+# saying yes — by a bug, by a clever input, by somebody with a debugger. So the
+# lock screen holds a conversation with PAM and does as it is told, and nothing
+# in lock/ ever sees a hash or compares anything.
+#
+# What that looks like as a check: `Quickshell.Services.Pam` must be imported
+# and used, and none of the words a comparison would need may appear. The
+# patterns below are deliberately broad — a false alarm here costs somebody a
+# rewrite of one line, and a miss costs the whole point of the screen.
+if grep -q '^import Quickshell.Services.Pam' lock/LockState.qml; then
+    pass "the lock screen asks PAM"
+else
+    fail "lock/LockState.qml no longer imports Quickshell.Services.Pam." \
+         "PAM is the ONLY thing allowed to decide whether a password is right." \
+         "See docs/lock-screen.md, 'How the password is actually checked'."
+fi
+
+for aq_step in 'PamContext' 'pam.start()' 'pam.respond(' 'onCompleted' 'PamResult.Success'; do
+    if grep -qF "${aq_step}" lock/LockState.qml; then
+        pass "the conversation uses ${aq_step}"
+    else
+        fail "lock/LockState.qml no longer uses ${aq_step}." \
+             "PAM's conversation is start -> answer the question -> read the" \
+             "result, and a lock screen missing one of those steps does not" \
+             "produce an error. It produces a screen that swallows Enter."
+    fi
+done
+
+# The rules file the operating system installs. Two repositories have to agree
+# on this one name; if they drift, PamContext refuses to start and nobody can
+# get back in.
+if grep -q 'config: "aquarius-lock"' lock/LockState.qml; then
+    pass "the lock screen asks for the aquarius-lock rules"
+else
+    fail "lock/LockState.qml no longer names the PAM configuration" \
+         "\"aquarius-lock\". The AquariusOS image installs the rules at" \
+         "/etc/pam.d/aquarius-lock and nothing else will be found."
+fi
+
+# And now the words that must NOT be there.
+aq_lock_compare_ok=1
+while IFS= read -r aq_qml; do
+    # Comments are blanked first. These files EXPLAIN at length that they do
+    # not check passwords, and a check that failed on its own explanation would
+    # teach people to delete the explanation. Same treatment as section 25.
+    if sed -E 's,//.*,,' "${aq_qml}" \
+            | grep -nE '(crypt|getspnam|/etc/shadow|passwd\(|hash|sha512|md5|bcrypt)' > /dev/null 2>&1; then
+        sed -E 's,//.*,,' "${aq_qml}" \
+            | grep -nE '(crypt|getspnam|/etc/shadow|passwd\(|hash|sha512|md5|bcrypt)' \
+            | sed "s,^,       ${aq_qml}:," || true
+        aq_lock_compare_ok=0
+    fi
+done < <(find lock -name '*.qml')
+
+if [ "${aq_lock_compare_ok}" -eq 1 ]; then
+    pass "nothing in lock/ reads a password file or hashes anything"
+else
+    fail "something in lock/ looks like it is checking a password itself." \
+         "It must not. The whole design is that PAM decides and this shell" \
+         "does as it is told — see docs/lock-screen.md. If this is a false" \
+         "alarm, rename the thing; the check is deliberately broad."
+fi
+
+# --- there is no way out except the password ----------------------------------
+# The IPC door may lock the machine and may answer "are you locked". An
+# unlock() would be a way past the password for every program running as you,
+# because `qs ipc` is reachable by all of them.
+if grep -qE 'function unlock\(\)' lock/LockLayer.qml; then
+    fail "lock/LockLayer.qml exposes unlock() over IPC." \
+         "Anything that can ask this shell to unlock without a password IS a" \
+         "way past the password, and every program running as you can call" \
+         "\`qs ipc\`. The only road out of the lock screen is PAM saying yes."
+else
+    pass "the IPC door cannot unlock the machine"
+fi
+
+# --- the password box must never keep what was typed --------------------------
+if grep -q 'root.answer = ""' lock/LockState.qml; then
+    pass "the typed password is dropped as soon as it is handed over"
+else
+    fail "lock/LockState.qml no longer empties LockState.answer." \
+         "A password left in a box is a password on a screen anybody can walk" \
+         "up to. It is emptied on submit, on Escape, and on unlock."
+fi
+
+# --- the veil is the wallpaper, not the desktop -------------------------------
+# ScreencopyView would give a live picture of the actual desktop, which several
+# other lock screens show and which is a mistake: a blur is not redaction, and
+# a heading survives one nearly intact.
+# Comments are blanked first: LockVeil.qml's header NAMES ScreencopyView while
+# explaining why it does not use it, and a check that failed on its own
+# explanation would teach people to delete the explanation. Same treatment as
+# section 25's GlobalShortcut check.
+aq_lock_capture_ok=1
+while IFS= read -r aq_qml; do
+    if sed -E 's,//.*,,' "${aq_qml}" | grep -n 'ScreencopyView' > /dev/null 2>&1; then
+        sed -E 's,//.*,,' "${aq_qml}" | grep -n 'ScreencopyView' \
+            | sed "s,^,       ${aq_qml}:," || true
+        aq_lock_capture_ok=0
+    fi
+done < <(find lock -name '*.qml')
+
+if [ "${aq_lock_capture_ok}" -eq 0 ]; then
+    fail "the lock screen captures the screen." \
+         "The veil is a picture of the WALLPAPER, read from disk. A blurred" \
+         "screenshot of your desktop still tells somebody standing behind you" \
+         "who is on the call and roughly what the document says — and a" \
+         "rendering bug can hand back the sharp frame."
+else
+    pass "the veil is the wallpaper, never a picture of the desktop"
+fi
+
+# --- the blur is quarantined --------------------------------------------------
+# QtQuick.Effects may be missing on a machine that is not AquariusOS, and an
+# import that fails takes its WHOLE FILE with it. On a lock screen that means a
+# screen the compositor covers and never lets go of. So it lives alone, behind
+# a Loader.
+aq_effects_files="$(grep -rl --include='*.qml' 'import QtQuick.Effects' lock/ | sed 's|^\./||' | sort -u | tr '\n' ' ')"
+if [ "${aq_effects_files}" = "lock/LockBlur.qml " ]; then
+    pass "QtQuick.Effects is imported in lock/LockBlur.qml and nowhere else"
+else
+    fail "QtQuick.Effects is imported outside lock/LockBlur.qml: ${aq_effects_files}" \
+         "An import that fails does not fail quietly — it stops the whole file" \
+         "loading. On a lock screen that is a computer nobody can get back" \
+         "into. Keep it in LockBlur.qml, behind LockVeil.qml's Loader."
+fi
+if grep -q 'source: "LockBlur.qml"' lock/LockVeil.qml; then
+    pass "the blur is loaded through a Loader, so it can fail without taking the screen down"
+else
+    fail "lock/LockVeil.qml no longer loads LockBlur.qml through a Loader." \
+         "That Loader is the whole point of splitting the file out."
+fi
+
+# --- the notification pill is a COUNT and nothing else -------------------------
+# The single most common way a lock screen leaks something is by growing a
+# preview. LockState is handed a number and nothing else; if it ever gains a
+# summary, a body or an app name, this fails.
+if grep -qE 'property (int|alias) notificationCount' lock/LockState.qml; then
+    pass "the lock screen is handed a count"
+else
+    fail "lock/LockState.qml no longer has notificationCount."
+fi
+# COMMENTS AND STRINGS are both blanked first, and only whole words are looked
+# for. All three matter here:
+#   comments   these files are full of the word "nobody", which contains "body",
+#              and of prose explaining what is deliberately not shown.
+#   strings    the pill on screen genuinely says "3 notifications waiting". That
+#              is the label, not a reach into anything.
+#   whole word "notificationCount" is fine and is the whole design.
+# What is left after that blanking is code, and code that names a notification's
+# parts is the fault this is looking for.
+aq_lock_leak_ok=1
+while IFS= read -r aq_qml; do
+    aq_lock_code="$(sed -E -e 's,//.*,,' -e 's,"[^"]*",,g' "${aq_qml}")"
+    if printf '%s\n' "${aq_lock_code}" \
+            | grep -nwE '(summary|body|appName|urgency|notifications)' > /dev/null 2>&1; then
+        printf '%s\n' "${aq_lock_code}" \
+            | grep -nwE '(summary|body|appName|urgency|notifications)' \
+            | sed "s,^,       ${aq_qml}:," || true
+        aq_lock_leak_ok=0
+    fi
+done < <(find lock -name '*.qml')
+
+if [ "${aq_lock_leak_ok}" -eq 0 ]; then
+    fail "something in lock/ reaches into a notification." \
+         "The lock screen gets a COUNT. Never a title, a sender, an app name" \
+         "or a body — see 'What is never shown' in docs/lock-screen.md."
+else
+    pass "nothing in lock/ can see a notification's contents"
+fi
+
+# --- the summoning contract, written down in four places -----------------------
+# A layer-shell client cannot bind a global key; the compositor does, and it
+# reaches the shell through Quickshell's IPC. Both copies of rc.xml, the
+# component and the documentation have to spell it identically, or somebody
+# binds a key to a line that does nothing and spends an afternoon finding out.
+aq_lock_ipc_call='qs ipc call lock lock'
+
+if grep -q 'target: "lock"' lock/LockLayer.qml; then
+    pass "the IPC handler's target is 'lock'"
+else
+    fail "lock/LockLayer.qml no longer registers target \"lock\"." \
+         "The Super+L key binding calls that name."
+fi
+
+if grep -qE 'function lock\(\):' lock/LockLayer.qml; then
+    pass "the IPC handler exposes lock()"
+else
+    fail "lock/LockLayer.qml no longer exposes lock()." \
+         "Quickshell only registers handler functions whose argument and" \
+         "return types are written out, so check the signature too."
+fi
+
+for aq_doc in lock/LockLayer.qml session/labwc/rc.xml docs/lock-screen.md; do
+    if grep -qF "${aq_lock_ipc_call}" "${aq_doc}"; then
+        pass "${aq_doc} spells the locking command the same way"
+    else
+        fail "${aq_doc} does not contain the exact locking command:" \
+             "  ${aq_lock_ipc_call}"
+    fi
+done
+
+# --- Super+L is really bound, in the copy this repo owns ------------------------
+# The OTHER copy — the AquariusOS image's own
+# system_files/usr/share/aquarius/labwc/rc.xml — is checked by that repository's
+# build_files/check-labwc-drift.sh, which compares the two files element by
+# element. This half is what makes that comparison meaningful.
+if python3 - <<'PYTHON'
+import sys
+import xml.etree.ElementTree as ET
+
+root = ET.parse('session/labwc/rc.xml').getroot()
+for keybind in root.iter('keybind'):
+    if keybind.get('key') != 'W-l':
+        continue
+    for action in keybind:
+        if action.get('name') == 'Execute' \
+                and action.get('command') == 'qs ipc call lock lock':
+            print("  OK   session/labwc/rc.xml binds W-l to the locking command")
+            sys.exit(0)
+    print("  FAIL W-l is bound, but not to `qs ipc call lock lock`")
+    sys.exit(1)
+print("  FAIL session/labwc/rc.xml has no W-l keybind at all")
+sys.exit(1)
+PYTHON
+then
+    :
+else
+    fail "Super+L does not lock the screen in session/labwc/rc.xml." \
+         "It should be an Execute action running: ${aq_lock_ipc_call}" \
+         "Keep the AquariusOS image's copy of rc.xml identical."
+fi
+
+# --- the Aquarius menu can lock the screen --------------------------------------
+if grep -q 'id: "lock"' components/bar/LogoMenu.qml \
+        && grep -q 'LockState.lock()' components/bar/LogoMenu.qml; then
+    pass "the Aquarius menu has a Lock Screen row that locks the screen"
+else
+    fail "components/bar/LogoMenu.qml no longer has a working Lock Screen row." \
+         "It needs both the item (id \"lock\") and the action (LockState.lock())."
+fi
+
+# --- the idle timings honour the apps that ask to be left alone ------------------
+# A lock screen that ignores "I am recording" is a lock screen that ruins a
+# take. respectInhibitors:true is the default, but a default is not a promise —
+# this is.
+# Comments blanked: the file's header explains the setting at length and names
+# it while doing so.
+aq_lock_idle_code="$(sed -E 's,//.*,,' lock/LockIdle.qml)"
+aq_lock_inhibit_count="$(printf '%s\n' "${aq_lock_idle_code}" | grep -c 'respectInhibitors: true' || true)"
+aq_lock_monitor_count="$(printf '%s\n' "${aq_lock_idle_code}" | grep -c 'IdleMonitor {' || true)"
+if [ "${aq_lock_inhibit_count}" -eq "${aq_lock_monitor_count}" ] \
+        && [ "${aq_lock_monitor_count}" -eq 3 ]; then
+    pass "all three idle watchers honour idle-inhibit"
+else
+    fail "lock/LockIdle.qml has ${aq_lock_monitor_count} idle watcher(s) and" \
+         "${aq_lock_inhibit_count} of them say respectInhibitors: true." \
+         "There should be three of each — dim, lock and screen-off — because a" \
+         "screen that locks during a two-hour Resolve export is worse than no" \
+         "lock screen at all."
 fi
 
 # ------------------------------------------------------------------------------
