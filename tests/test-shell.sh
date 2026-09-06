@@ -92,7 +92,9 @@ for aq_file in \
     components/bar/StatusCluster.qml \
     components/bar/TrayItem.qml \
     services/qmldir \
+    services/AppIdentity.qml \
     services/FocusState.qml \
+    services/KeyProfile.qml \
     services/Overlays.qml \
     services/SettingsLauncher.qml \
     components/quicksettings/QuickSettingsPanel.qml \
@@ -121,6 +123,11 @@ for aq_file in \
     components/search/fuzzy.js \
     components/search/calc.js \
     docs/flow-search.md \
+    components/switcher/AppSwitcher.qml \
+    components/switcher/SwitcherModel.qml \
+    components/switcher/SwitcherTile.qml \
+    components/switcher/SwitcherRow.qml \
+    docs/app-switcher.md \
     tests/search-js-tests.mjs \
     components/notifications/NotificationLayer.qml \
     components/notifications/NotificationStore.qml \
@@ -411,7 +418,9 @@ def strip_comments(text):
 
 singletons = {
     'Theme': declared('theme/Theme.qml'),
+    'AppIdentity': declared('services/AppIdentity.qml'),
     'FocusState': declared('services/FocusState.qml'),
+    'KeyProfile': declared('services/KeyProfile.qml'),
     'Overlays': declared('services/Overlays.qml'),
     'GreeterState': declared('greeter/GreeterState.qml'),
 }
@@ -1503,7 +1512,8 @@ components/quicksettings/QuickSettingsPopup.qml
 components/notifications/NotificationLayer.qml
 components/bar/LogoMenu.qml
 components/dock/DockItem.qml
-components/dock/DockDrive.qml"
+components/dock/DockDrive.qml
+components/switcher/AppSwitcher.qml"
 
 while IFS= read -r aq_overlay; do
     aq_code="$(sed -E 's,//.*,,' "${aq_overlay}")"
@@ -1616,7 +1626,7 @@ echo "=== 28. every enum namespace is one the shipped build actually has ==="
 # `import "x.js" as Name`, so they are our own code and cannot be missing from a
 # Quickshell build.
 aq_ns_ours="Theme FocusState Overlays SettingsLauncher SystemAppearance Fuzzy
-Calc Progress GreeterState"
+Calc Progress GreeterState AppIdentity KeyProfile"
 
 # Names Qt itself provides — globals, value types and attached types.
 aq_ns_qt="Qt Math JSON Date Object Locale Accessible Component Keys Easing Font
@@ -1858,9 +1868,13 @@ text = pathlib.Path('theme/Theme.qml').read_text(encoding='utf-8')
 #   durFast/durMed  milliseconds. A taller bar must not animate more slowly.
 #   uiScaleMin/Max  the clamp on the knob itself.
 #   dockHoverScale  already a multiplier.
+#   switcherOpenScale  the same: the fraction of its final size the app
+#                   switcher's panel grows from. Scaling a scale would make the
+#                   animation start from a different place on a bigger screen.
 # dockDotOpacity/dockDotOpacityActive were here until 2026-09-04, when the dock
 # dot stopped being a translucent accent and became two solid colour roles.
-exempt = {'durFast', 'durMed', 'uiScaleMin', 'uiScaleMax', 'dockHoverScale'}
+exempt = {'durFast', 'durMed', 'uiScaleMin', 'uiScaleMax', 'dockHoverScale',
+          'switcherOpenScale'}
 
 bad = 0
 scaled = 0
@@ -3054,6 +3068,231 @@ if printf '%s' "${aq_dock_config_code}" \
          "was a gesture that changed something."
 else
     pass "DockConfig.qml never writes unless asked"
+fi
+
+# ------------------------------------------------------------------------------
+echo ""
+echo "=== 38. the app switcher is wired up end to end ==="
+# ------------------------------------------------------------------------------
+# The app switcher is the first feature in this shell whose behaviour depends on
+# something OUTSIDE the shell being right: the five keybinds in labwc's rc.xml,
+# and the fact that labwc's own switcher is switched off. Neither of those is
+# QML, neither is checked by any other section, and both exist TWICE — once here
+# and once in the os-image repository, which has its own copy of every labwc
+# file. Getting one of the two wrong is the exact fault that cost two bench
+# sessions on 6 September 2026.
+#
+# So this section checks the whole chain, in the order a keystroke travels it:
+#
+#   the key   -> rc.xml binds it, and to the right IPC line
+#   the door  -> AppSwitcher.qml declares that IPC function
+#   the panel -> it asks for the keyboard, which is how it sees the key COME UP
+#   the list  -> it comes from the shared window protocol, not a private one
+#   the docs  -> the release mechanism is written down, because it is the one
+#                part of this nobody will guess from the code
+
+aq_switcher="components/switcher/AppSwitcher.qml"
+aq_switcher_model="components/switcher/SwitcherModel.qml"
+aq_switcher_rc="session/labwc/rc.xml"
+
+if [ ! -f "${aq_switcher}" ] || [ ! -f "${aq_switcher_rc}" ]; then
+    fail "the app switcher's files are missing; skipping the rest of section 38."
+else
+    aq_switcher_code="$(sed -E 's,//.*,,' "${aq_switcher}")"
+
+    # -- the IPC door ----------------------------------------------------------
+    # Every function a keybind or a person can call. If one of these is renamed
+    # without rc.xml being changed, the key silently does nothing — Quickshell
+    # does not complain about a call to a function that is not there.
+    for aq_fn in next prev down up go cancel cycle isOpen; do
+        if printf '%s' "${aq_switcher_code}" | grep -qE "function ${aq_fn}\(\)"; then
+            pass "AppSwitcher.qml answers 'switcher ${aq_fn}'"
+        else
+            fail "${aq_switcher} has no IpcHandler function ${aq_fn}()." \
+                 "docs/app-switcher.md tells people to run" \
+                 "'qs ipc call switcher ${aq_fn}', and rc.xml may bind it."
+        fi
+    done
+
+    if printf '%s' "${aq_switcher_code}" | grep -qE 'target:\s*"switcher"'; then
+        pass "AppSwitcher.qml's IpcHandler is called 'switcher'"
+    else
+        fail "${aq_switcher} does not declare 'target: \"switcher\"'." \
+             "That name is the 'switcher' in 'qs ipc call switcher next', and" \
+             "rc.xml has it written down five times."
+    fi
+
+    # -- the keyboard, which is the whole mechanism ----------------------------
+    # This is not decoration. Exclusive keyboard interactivity is what makes
+    # labwc hand this surface the keyboard, and holding the keyboard is the ONLY
+    # reason the release of Command ever reaches the shell. Read the top of
+    # AppSwitcher.qml, or docs/app-switcher.md, before touching either line.
+    if printf '%s' "${aq_switcher_code}" | grep -q 'WlrKeyboardFocus.Exclusive'; then
+        pass "AppSwitcher.qml asks for the keyboard exclusively"
+    else
+        fail "${aq_switcher} no longer asks for WlrKeyboardFocus.Exclusive." \
+             "Without the keyboard it cannot see the modifier being released," \
+             "and the panel would never commit — it would just sit there."
+    fi
+
+    if printf '%s' "${aq_switcher_code}" | grep -q 'Keys.onReleased'; then
+        pass "AppSwitcher.qml watches for the modifier coming up"
+    else
+        fail "${aq_switcher} has no Keys.onReleased handler." \
+             "That handler IS the feature: it is what 'let go of Command to go" \
+             "to the app you picked' is made of."
+    fi
+
+    # Both profiles' modifiers, by every name Qt might report them under.
+    for aq_key in Qt.Key_Meta Qt.Key_Super_L Qt.Key_Super_R Qt.Key_Alt; do
+        if printf '%s' "${aq_switcher_code}" | grep -qF "${aq_key}"; then
+            pass "AppSwitcher.qml commits on ${aq_key}"
+        else
+            fail "${aq_switcher} does not handle ${aq_key} being released." \
+                 "Which name Qt reports depends on the keymap, and Alt is the" \
+                 "Windows profile's modifier, so all four are listed on purpose."
+        fi
+    done
+
+    # -- what it lists ---------------------------------------------------------
+    if grep -q 'ToplevelManager' "${aq_switcher_model}"; then
+        pass "SwitcherModel.qml lists windows from ToplevelManager"
+    else
+        fail "${aq_switcher_model} does not use ToplevelManager." \
+             "The switcher and the dock must agree about what is running, and" \
+             "the standardised wlr-foreign-toplevel protocol is how they do."
+    fi
+
+    # The dock, the switcher and the top bar must agree about which application
+    # a window belongs to, and there is one file that decides. A second copy of
+    # that logic is how a window ends up on one tile in the dock and a different
+    # tile in the switcher.
+    if grep -q 'AppIdentity' "${aq_switcher_model}"; then
+        pass "SwitcherModel.qml identifies apps through AppIdentity"
+    else
+        fail "${aq_switcher_model} does not use services/AppIdentity.qml." \
+             "Matching a window to an application is answered in one place." \
+             "Read the header of that file before adding a second answer."
+    fi
+
+    if grep -qE 'heuristicLookup' "${aq_switcher_model}" \
+            || grep -qE 'heuristicLookup' "${aq_switcher}"; then
+        fail "the switcher looks applications up itself." \
+             "services/AppIdentity.qml is the one place that does that, for the" \
+             "dock and the top bar as well. Call it instead."
+    else
+        pass "the switcher does not carry its own copy of the app lookup"
+    fi
+
+    # -- the profile -----------------------------------------------------------
+    # One question, asked once at first login. A second setting just for the
+    # switcher would be a second thing to keep in step with the first.
+    if printf '%s' "${aq_switcher_code}" | grep -q 'KeyProfile'; then
+        pass "AppSwitcher.qml takes Mac-or-Windows from KeyProfile"
+    else
+        fail "${aq_switcher} does not read services/KeyProfile.qml." \
+             "Mac style groups windows into applications and Windows style does" \
+             "not. That answer belongs to 'aq keys', not to a second setting."
+    fi
+
+    # KeyProfile READS the file. `aq keys` WRITES it. Two writers of one settings
+    # file is two programs that can disagree about what the setting is — the
+    # os-image build already refuses that for the welcome screen, and the same
+    # rule applies here.
+    if grep -qE '(setText|writeAdapter|execDetached)' services/KeyProfile.qml; then
+        fail "services/KeyProfile.qml writes something." \
+             "'aq keys' owns ~/.config/aquarius/keys.conf, start to finish." \
+             "The shell reads it and never writes it."
+    else
+        pass "KeyProfile.qml only ever reads keys.conf"
+    fi
+
+    if grep -q 'watchChanges' services/KeyProfile.qml; then
+        pass "KeyProfile.qml notices 'aq keys' without a restart"
+    else
+        fail "services/KeyProfile.qml does not watch the file for changes." \
+             "Running 'aq keys windows' has to change what the switcher lists" \
+             "immediately; asking somebody to log out is not the deal."
+    fi
+
+    # -- the keybinds ----------------------------------------------------------
+    # Five keys, and each one has to reach the right function. Checked as whole
+    # command strings, because 'next' and 'prev' pointing at each other's
+    # functions is a bug nobody would find by reading.
+    aq_switcher_binds="W-Tab:next
+W-S-Tab:prev
+W-grave:cycle
+A-Tab:next
+A-S-Tab:prev"
+
+    while IFS=: read -r aq_key aq_fn; do
+        [ -n "${aq_key}" ] || continue
+        if grep -qF "key=\"${aq_key}\"" "${aq_switcher_rc}"; then
+            pass "rc.xml binds ${aq_key}"
+        else
+            fail "${aq_switcher_rc} does not bind ${aq_key}." \
+                 "Both keyboard profiles are bound all the time, so that no key" \
+                 "has to be rebound when somebody runs 'aq keys'."
+        fi
+        if grep -qF "qs ipc call switcher ${aq_fn}" "${aq_switcher_rc}"; then
+            pass "rc.xml calls 'switcher ${aq_fn}'"
+        else
+            fail "${aq_switcher_rc} never calls 'qs ipc call switcher ${aq_fn}'." \
+                 "That is the command ${aq_key} is supposed to run."
+        fi
+    done <<< "${aq_switcher_binds}"
+
+    # labwc's own switcher, off. If it ever came back, two switchers would draw
+    # at once and a screenshot would be very confusing to read.
+    if python3 - "${aq_switcher_rc}" <<'PYTHON'
+import sys
+import xml.etree.ElementTree as ET
+
+root = ET.parse(sys.argv[1]).getroot()
+osd = root.find('./windowSwitcher/osd')
+if osd is None:
+    print("       no <windowSwitcher><osd /> element at all")
+    sys.exit(1)
+if (osd.get('show') or '').lower() not in ('no', 'false'):
+    print('       <osd show="%s"> — expected "no"' % osd.get('show'))
+    sys.exit(1)
+sys.exit(0)
+PYTHON
+    then
+        pass "rc.xml switches labwc's own window switcher off"
+    else
+        fail "${aq_switcher_rc} does not switch labwc's own switcher off." \
+             "It wants <windowSwitcher><osd show=\"no\" /></windowSwitcher>." \
+             "Without it, a stray NextWindow binding would put a second" \
+             "switcher on screen beside ours."
+    fi
+
+    # The one binding that must NEVER exist. Binding a modifier on its own makes
+    # labwc swallow its press, and a swallowed press means a swallowed release —
+    # which is the single event this whole feature is built on.
+    if grep -qE 'key="(Super_L|Super_R|Alt_L|Alt_R)"' "${aq_switcher_rc}"; then
+        fail "${aq_switcher_rc} binds a modifier key on its own." \
+             "labwc does not forward the release of a key whose press it" \
+             "swallowed, so this would stop the switcher ever committing." \
+             "See docs/app-switcher.md."
+    else
+        pass "rc.xml leaves the bare modifier keys unbound, as it must"
+    fi
+
+    # -- the write-up ----------------------------------------------------------
+    # The release mechanism is the one part of this that nobody will work out
+    # from the code, and the spec asked for the two rejected approaches to be
+    # written down as well as the chosen one.
+    for aq_word in onRelease xremap Exclusive; do
+        if grep -q "${aq_word}" docs/app-switcher.md; then
+            pass "docs/app-switcher.md explains ${aq_word}"
+        else
+            fail "docs/app-switcher.md does not mention ${aq_word}." \
+                 "All three approaches to seeing the modifier released — the" \
+                 "two rejected and the one built — are meant to be written" \
+                 "down, with what was checked to decide each."
+        fi
+    done
 fi
 
 # ------------------------------------------------------------------------------
