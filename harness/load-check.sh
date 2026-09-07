@@ -398,11 +398,19 @@ libinput
 IGNORE
 }
 
-# The phrases that mean "the QML did not load". These are checked whatever
-# severity Qt happened to print them at, because a type failing to resolve inside
-# a lazily-built piece comes through as a warning, not an error, and is still
-# fatal to the thing it was supposed to build.
-aq_fatal_patterns=(
+# ⚠️ TWO LISTS, AND THE DIFFERENCE BETWEEN THEM IS THE WHOLE POINT.
+#
+# HARD — these are never ignored, whatever else is on the line. Every one of them
+# is a sentence a QML engine only ever says about our code. "is not a type" is
+# not something a machine with no Wi-Fi says. Filtering these through the list
+# above would be a hole big enough to drive the original bug through: the ignore
+# list contains the word "Bluetooth", and a real failure in TileBluetooth.qml has
+# that word in its file path.
+#
+# They are checked at ANY severity, because a type failing to resolve inside a
+# piece the shell builds later comes through as a warning rather than an error —
+# and is still fatal to the thing it was supposed to build.
+aq_hard_patterns=(
     'Failed to load configuration'
     'is not a type'
     'is not installed'
@@ -410,7 +418,6 @@ aq_fatal_patterns=(
     'Type .* unavailable'
     'Cannot assign'
     'Unable to assign'
-    'Cannot override FINAL property'
     'Non-existent attached object'
     'Invalid property assignment'
     'Invalid attached property'
@@ -420,14 +427,18 @@ aq_fatal_patterns=(
     'Expected token'
     'Unexpected token'
     'Syntax error'
+    'Could not open config file'
+)
+
+# SOFT — real problems in our JavaScript, but also the shape of complaint a
+# machine with no battery and no Wi-Fi genuinely produces when a reading it
+# expected is not there. These ARE filtered through the ignore list.
+aq_soft_patterns=(
     'ReferenceError'
     'TypeError'
     'is not defined'
     'is not a function'
     'Cannot read property'
-    'Cannot open: '
-    'Binding loop detected'
-    'Could not open config file'
 )
 
 aq_scan_log() {
@@ -441,10 +452,19 @@ aq_scan_log() {
     fi
 
     local pattern hits
-    for pattern in "${aq_fatal_patterns[@]}"; do
+    for pattern in "${aq_hard_patterns[@]}"; do
+        hits="$(grep -E -- "${pattern}" "${log}" || true)"
+        if [ -n "${hits}" ]; then
+            bad "${label}: the QML did not load —"
+            echo "${hits}" | head -20 | sed 's/^/         /'
+            problems=1
+        fi
+    done
+
+    for pattern in "${aq_soft_patterns[@]}"; do
         hits="$(grep -E -- "${pattern}" "${log}" | grep -v -F -f "${aq_ignore_file}" || true)"
         if [ -n "${hits}" ]; then
-            bad "${label}: the QML did not load cleanly —"
+            bad "${label}: something in the shell's JavaScript went wrong —"
             echo "${hits}" | head -20 | sed 's/^/         /'
             problems=1
         fi
