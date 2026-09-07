@@ -194,8 +194,9 @@ jobs:
   # starts a real window manager with no screen attached, starts the shell inside
   # it, waits twenty seconds, and fails if the shell died or complained.
   #
-  # It takes about five minutes on a warm cache and about a quarter of an hour on
-  # a cold one, because of the Quickshell build below.
+  # About a minute and a half once the Quickshell below is cached, and about
+  # four and a half the first time (or after Fedora ships a new Qt). Actually
+  # starting the three shells is 25 seconds of that.
   # ---------------------------------------------------------------------------
   load:
     name: The shell actually loads (Fedora, headless)

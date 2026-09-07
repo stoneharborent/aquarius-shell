@@ -471,13 +471,26 @@ on it *at all*. The version it builds is pinned in
 `os-image` repository — **change one, change both**, or this check is proving
 something about a Quickshell nobody has.
 
-The build takes several minutes, so it is cached, keyed on both the Quickshell
-commit **and** the exact Qt that is installed. That second half matters: a
-Quickshell is permanently married to the Qt it was compiled against, and a stale
-cached copy would die with `undefined symbol` — the same ABI trap written up in
-`os-image/build_files/stage-quickshell.sh`.
+That build takes about three minutes, so it is cached, keyed on both the
+Quickshell commit **and** the exact Qt that is installed. That second half
+matters: a Quickshell is permanently married to the Qt it was compiled against,
+and a stale cached copy would die with `undefined symbol` — the same ABI trap
+written up in `os-image/build_files/stage-quickshell.sh`.
 
-Cold cache: about fifteen minutes. Warm: about five.
+**How long the whole job takes**, measured on 7 September 2026:
+
+| | Time |
+|---|---|
+| First run, or after Fedora ships a new Qt (builds Quickshell) | **~4½ minutes** |
+| Every run after that (cache hit) | **~1½ minutes** |
+| Of which, actually starting the three shells | 25 seconds |
+
+The cache is saved by a step of its own that runs `if: always()`. That is not
+tidiness: the all-in-one `actions/cache` writes only in a post step, and that
+post step is **skipped when the job fails** — and this job exists in order to
+fail sometimes. Without the split, every red build threw away the Quickshell it
+had just compiled, so exactly while somebody was iterating on a fix, each attempt
+cost an extra three minutes.
 
 ---
 
