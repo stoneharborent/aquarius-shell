@@ -492,12 +492,24 @@
          section only has to describe what is different about Aquarius. -->
     <default />
 
-    <!-- Right-click the empty desktop -> the Aquarius menu (menu.xml). Left
-         click on the root is deliberately left unbound, so a clean desktop with
-         no icons does nothing on a left click. -->
+    <!-- Right-click the empty desktop -> the Aquarius menu (menu.xml). -->
     <context name="Root">
       <mousebind button="Right" action="Press">
         <action name="ShowMenu" menu="root-menu" />
+      </mousebind>
+
+      <!-- ⚠️ LEFT-CLICK ON THE WALLPAPER DOES NOTHING, AND THIS LINE IS WHAT
+           MAKES THAT TRUE. The comment above used to say left-click was "left
+           unbound" — but `<default />` above loads labwc's own bindings, and
+           those bind Left (and Middle) on the desktop to open the menu too
+           (include/config/default-bindings.h). On the bench, 2026-09-07, that
+           showed up as a left click behaving like a right click. `None` is
+           labwc's documented way to cancel ONE inherited binding (rcxml.c:
+           "cancel a default binding by using the None action"), leaving the
+           window and titlebar defaults alone. Middle-click is left as labwc
+           set it; nobody has asked otherwise. -->
+      <mousebind button="Left" action="Press">
+        <action name="None" />
       </mousebind>
     </context>
 
