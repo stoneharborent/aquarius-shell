@@ -239,6 +239,29 @@ notifications grouped by application. While the private bus is on, the system
 tray is empty — the host's applications are on the host's bus. The light/dark
 setting still works.
 
+### What the harness can and cannot show you
+
+The nested window is the shell, drawn on top of whatever the machine it runs on
+provides. Three things in it are **not** the shell's, and each looks like a
+missing feature when it is really a missing ingredient:
+
+| You see | It comes from | What it needs |
+|---|---|---|
+| **The wallpaper** | `swaybg`, started by the harness (on AquariusOS, by the session's autostart — never by the shell, so the picture survives the shell crashing) | The file `/usr/share/backgrounds/aquarius/the-pour-ice-3840x2160.png`. It is in the AquariusOS image; on any other machine the desktop is plain black. |
+| **The app icons** in the dock, search and switcher | The icon theme the HOST desktop has selected. The shell asks the system for "the icon for this app" and draws what it gets. | The `Aquarius-Ice` theme, installed and selected. Both are done by the AquariusOS image (since 2026-09-06). On an older image, or any other machine, you get Adwaita's icons or two grey letters. |
+| **The window frame** — round buttons, corner radius, title font | `session/labwc/generate-theme`, which the harness runs into a folder of its own (since 2026-09-06) | Nothing else. If the buttons are labwc's own squares, the harness printed a warning at start and the reason is in the log it names. |
+
+So on the bench, "no wallpaper and Adwaita icons" means the machine is booted
+into an image older than the artwork, not that the shell lost them. Check with:
+
+```bash
+rpm-ostree status | head -8
+ls /usr/share/backgrounds/aquarius /usr/share/icons | head
+```
+
+If the second line lists no `aquarius` folder and no `Aquarius-Ice`, rebase to
+the newest image and reboot; the shell will pick both up without a change.
+
 ## Step 4 — the working loop
 
 **Leave the window open.** Edit any `.qml` file in this repo, save it, and the

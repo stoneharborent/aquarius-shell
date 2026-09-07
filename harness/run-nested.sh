@@ -278,7 +278,21 @@ case "${AQ_COMPOSITOR}" in
                 --theme-out  "${aq_labwc_dir}/share/themes/Aquarius/labwc" \
                 --gtk-out    "${aq_labwc_dir}/gtk" \
                 > "${aq_labwc_dir}/generate-theme.log" 2>&1; then
-            : > "${aq_labwc_dir}/config/autostart"
+            # The wallpaper is NOT the shell's job — on AquariusOS the labwc
+            # autostart starts swaybg, so the picture survives the shell
+            # crashing. The copied autostart is replaced (see above), so the
+            # harness draws the same picture itself, if this machine has both
+            # swaybg and the wallpaper file. On a machine that is not
+            # AquariusOS it has neither, and the nested desktop is plain black:
+            # that is the harness missing a picture, not the shell.
+            cat > "${aq_labwc_dir}/config/autostart" <<'AQ_AUTOSTART'
+if command -v swaybg > /dev/null 2>&1 \
+   && [ -r /usr/share/backgrounds/aquarius/the-pour-ice-3840x2160.png ]; then
+    swaybg -c '#06070C' \
+        -i /usr/share/backgrounds/aquarius/the-pour-ice-3840x2160.png \
+        -m fill > /dev/null 2>&1 &
+fi
+AQ_AUTOSTART
             : > "${aq_labwc_dir}/config/shutdown"
             export XDG_DATA_DIRS="${aq_labwc_dir}/share:${XDG_DATA_DIRS:-/usr/local/share:/usr/share}"
             echo "  labwc:      ${aq_labwc_dir}/config (rc.xml generated from session/labwc/)"

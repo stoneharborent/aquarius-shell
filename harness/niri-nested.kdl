@@ -17,6 +17,14 @@
 //   appears is ours, or it is a bug.
 // =============================================================================
 
+// The wallpaper, if this machine has it. On AquariusOS the session starts
+// swaybg for exactly this picture (it is not the shell's job — the picture
+// should survive the shell crashing), so the harness does the same. On a
+// machine that is not AquariusOS the file does not exist, the command does
+// nothing, and the nested desktop is plain black: that is a missing picture,
+// not a bug in the shell.
+spawn-sh-at-startup "if command -v swaybg > /dev/null 2>&1 && [ -r /usr/share/backgrounds/aquarius/the-pour-ice-3840x2160.png ]; then swaybg -c '#06070C' -i /usr/share/backgrounds/aquarius/the-pour-ice-3840x2160.png -m fill > /dev/null 2>&1; fi"
+
 // Don't cover the shell with the hotkey card on every start.
 hotkey-overlay {
     skip-at-startup
