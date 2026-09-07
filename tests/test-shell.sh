@@ -171,6 +171,8 @@ for aq_file in \
     docs/lock-screen.md \
     assets/logo.svg \
     assets/logo-mono.svg \
+    assets/logo-ice.svg \
+    assets/logo-midnight.svg \
     harness/run-nested.sh \
     harness/load-check.sh \
     session/labwc/generate-theme \

@@ -18,7 +18,11 @@
 //
 //   The SVG files are still in assets/ and are still the source of truth — for
 //   this file, for the About screen later, and for anything that ships a real
-//   image file.
+//   image file. They are copies of os-image's branding/logo*.svg, where Royce
+//   draws the mark; when the mark changes there, copy the four files here and
+//   let the test send you back to the path below. (2026-09-06: the redrawn
+//   mark with the clean apex sat in the OS repo for nine hours while the bar
+//   kept drawing the old one — that is the gap this note is about.)
 //
 // THE ONE INTENTIONAL DIFFERENCE FROM THE FILE
 //   logo-mono.svg strokes at width 5. The V2 shell artboard strokes the bar
@@ -58,7 +62,10 @@ Item {
             strokeWidth: 6
             capStyle: ShapePath.RoundCap
             joinStyle: ShapePath.RoundJoin
-            PathSvg { path: "M14 54 30 12q1.4-3.6 4 0L50 54" }
+            // The A: up the left leg to one clean point at 32,12, down the
+            // right leg. Redrawn by Royce on 2026-09-06 — the old apex was a
+            // small curve (q1.4-3.6 4 0) that read as a wobble at bar size.
+            PathSvg { path: "M14 54L32 12L50 54" }
         }
 
         // The wave through the middle of the "A".
