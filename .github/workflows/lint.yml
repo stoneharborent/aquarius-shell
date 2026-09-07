@@ -13,29 +13,40 @@
 # every file in this repo.
 #
 # ---------------------------------------------------------------------------
-# THIS WORKFLOW IS DORMANT
+# THIS WORKFLOW IS LIVE (since 2026-09-05, when this repo got a remote)
 # ---------------------------------------------------------------------------
-# aquarius-shell is a LOCAL git repository. It has no GitHub remote and has been
-# pushed nowhere. GitHub Actions therefore never runs any of this today.
+# It was written before it could run — the repository had no remote — and the
+# note that used to be here said so. It runs now, on every push to every branch.
 #
-# It is written now, before it can run, for one reason: the day this repo does
-# get a remote, the checks should already exist. A repo that arrives on GitHub
-# with CI is a repo where the first pull request is checked. A repo that arrives
-# without it usually stays without it.
+# There are three jobs, and they are three different depths of the same
+# question:
 #
-# Until then, run the Mac-side checks by hand:
+#   structure   reads the files with about forty repo-specific rules
+#               (tests/test-shell.sh). No Qt needed. Seconds.
+#   qmllint     hands every file to Qt's own QML checker. Catches real QML
+#               mistakes. Minutes.
+#   load        STARTS THE SHELL in a QML engine, under a window manager with no
+#               screen, and checks it is still alive. This is the only one that
+#               can catch a shell that will not load. See harness/load-check.sh
+#               for why the first two cannot.
+#
+# You can still run the first one on your own machine, on a Mac, with:
 #
 #     ./tests/test-shell.sh
-#
-# Nothing here needs the network from macOS, an account, or a secret. It becomes
-# live the moment a remote exists, with no edits.
 # ---------------------------------------------------------------------------
 
 name: Lint
 
+# ⚠️ EVERY BRANCH, NOT JUST MAIN, and that matters more than it looks.
+#
+# This used to say `branches: [main]`. Everything real happens on a branch —
+# work is pushed to `restart/…` or a feature branch, looked at, and only then
+# merged. With main-only triggers, NONE of that was ever checked: the checks ran
+# for the first time on the commit that had already landed. The two failures on
+# 6 September 2026 both reached the bench through branches nothing had looked at.
 on:
   push:
-    branches: [main]
+    branches: ['**']
   pull_request:
   workflow_dispatch:
 
@@ -166,3 +177,188 @@ jobs:
       # information rather than about our code. If that turns out to be noisy,
       # the honest fix is a `.qmllint.ini` in the repo listing exactly which
       # warnings are disabled and why — NOT quietly dropping the step.
+
+  # ---------------------------------------------------------------------------
+  # THE REAL GATE: start the shell and see whether it is still alive.
+  # ---------------------------------------------------------------------------
+  # The two jobs above READ the files. This one RUNS them.
+  #
+  # On 6 September 2026 the desktop refused to start on the bench machine twice
+  # in one day — "LockLayer is not a type", then "GreeterAvatar is not a type" —
+  # and both times every check in this file was green first. Nothing that reads
+  # QML can find that class of mistake. Only a QML engine being asked to load the
+  # shell can, and until this job existed that had only ever happened on Royce's
+  # desk.
+  #
+  # harness/load-check.sh is the whole story, in plain language. In short: it
+  # starts a real window manager with no screen attached, starts the shell inside
+  # it, waits twenty seconds, and fails if the shell died or complained.
+  #
+  # About a minute and a half once the Quickshell below is cached, and about
+  # four and a half the first time (or after Fedora ships a new Qt). Actually
+  # starting the three shells is 25 seconds of that.
+  # ---------------------------------------------------------------------------
+  load:
+    name: The shell actually loads (Fedora, headless)
+    runs-on: ubuntu-latest
+
+    container:
+      image: fedora:44
+
+    steps:
+      # actions/checkout does a real `git clone` when git is present and falls
+      # back to downloading a zip when it is not. We want the clone, so git goes
+      # on first.
+      - name: Install git, so the checkout is a real clone
+        run: dnf install -y --setopt=install_weak_deps=False git
+
+      - name: Get the code
+        uses: actions/checkout@v4
+
+      - name: Read which Quickshell this shell is tested against
+        id: pin
+        run: |
+          set -euo pipefail
+          # shellcheck source=harness/quickshell-pin.env
+          . ./harness/quickshell-pin.env
+          echo "version=${QUICKSHELL_VERSION}" >> "${GITHUB_OUTPUT}"
+          echo "commit=${QUICKSHELL_COMMIT}" >> "${GITHUB_OUTPUT}"
+          echo "Quickshell ${QUICKSHELL_VERSION} (${QUICKSHELL_COMMIT})"
+
+      # ----------------------------------------------------------------------
+      # Everything the shell needs in order to RUN
+      # ----------------------------------------------------------------------
+      # Grouped so that a future failure is readable rather than a wall of
+      # package names.
+      - name: Install what the shell needs to run
+        run: |
+          set -euxo pipefail
+          dnf install -y --setopt=install_weak_deps=False \
+            qt6-qtbase qt6-qtbase-gui qt6-qtdeclarative qt6-qtwayland qt6-qtsvg \
+            mesa-dri-drivers mesa-libEGL mesa-libgbm libglvnd-egl libglvnd-gles \
+            pipewire-libs pam polkit-libs jemalloc glib2 \
+            libxkbcommon xkeyboard-config \
+            dbus-daemon dbus-tools \
+            fontconfig dejavu-sans-fonts \
+            findutils procps-ng tar gzip
+          # The window managers. labwc is the one AquariusOS ships and the one
+          # the check prefers; sway and cage are installed so that the check has
+          # somewhere to fall back to if labwc's headless mode ever breaks,
+          # rather than quietly skipping itself.
+          dnf install -y --setopt=install_weak_deps=False labwc sway cage
+          labwc --version || true
+          sway --version || true
+
+      # ⚠️ The Quickshell we build is compiled against THIS Qt and cannot be
+      # used with another one — that is the ABI trap written up in
+      # os-image/build_files/stage-quickshell.sh, which cost an evening on the
+      # bench. So the exact Qt goes into the cache key: when Fedora ships a new
+      # Qt, the cache misses and Quickshell is rebuilt, instead of a stale binary
+      # dying with "undefined symbol".
+      - name: Note exactly which Qt is installed
+        id: qt
+        run: |
+          set -euo pipefail
+          NEVRA="$(rpm -q --queryformat '%{VERSION}-%{RELEASE}' qt6-qtbase)"
+          echo "nevra=${NEVRA}" >> "${GITHUB_OUTPUT}"
+          echo "Qt ${NEVRA}"
+
+      # ⚠️ RESTORE AND SAVE ARE SEPARATE STEPS ON PURPOSE, and it is not tidiness.
+      #
+      # The all-in-one `actions/cache` only writes the cache in its post step,
+      # and that post step is SKIPPED when the job fails. This job's entire
+      # purpose is to fail sometimes. With the all-in-one version, every red
+      # build would throw away the Quickshell it had just spent ten minutes
+      # compiling, and the next run would compile it again — so exactly when
+      # somebody is iterating on a fix, every attempt costs a quarter of an hour.
+      # (Seen on the first two runs of this job, 7 September 2026.)
+      #
+      # Splitting them means the save below runs `if: always()`, and a Quickshell
+      # that built is kept whether or not the shell then loaded.
+      - name: Reuse the Quickshell built by an earlier run, if it still fits
+        id: qs-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: /opt/quickshell-stage
+          key: quickshell-${{ steps.pin.outputs.commit }}-qt-${{ steps.qt.outputs.nevra }}-v1
+
+      # ----------------------------------------------------------------------
+      # Building Quickshell — only when the cache missed
+      # ----------------------------------------------------------------------
+      # WHY THIS IS NOT `dnf install quickshell`. Fedora packages Quickshell at a
+      # snapshot of 0.2.1. Two of the shell's imports — Quickshell.Networking and
+      # Quickshell.Bluetooth — do not exist in it, so on Fedora's package the
+      # shell fails to load every time, and this job would report a failure that
+      # is about Fedora rather than about our code.
+      #
+      # The switches below are a deliberate copy of
+      # os-image/build_files/stage-quickshell.sh. The point of this job is to run
+      # the shell on the Quickshell that AquariusOS actually ships; a differently
+      # configured build would be testing something nobody runs.
+      - name: Build Quickshell (only when the cache missed — several minutes)
+        if: steps.qs-cache.outputs.cache-hit != 'true'
+        run: |
+          set -euxo pipefail
+          dnf install -y --setopt=install_weak_deps=False \
+            cmake ninja-build gcc-c++ pkgconf-pkg-config spirv-tools \
+            qt6-qtbase-devel qt6-qtbase-private-devel qt6-qtdeclarative-devel \
+            qt6-qtwayland-devel qt6-qtshadertools-devel qt6-qtsvg-devel \
+            wayland-devel wayland-protocols-devel libdrm-devel \
+            mesa-libgbm-devel vulkan-headers pipewire-devel pam-devel \
+            polkit-devel glib2-devel cli11-devel jemalloc-devel
+
+          git clone --depth 1 --branch "${{ steps.pin.outputs.version }}" \
+            https://github.com/quickshell-mirror/quickshell.git /src
+          cd /src
+          GOT="$(git rev-parse HEAD)"
+          if [ "${GOT}" != "${{ steps.pin.outputs.commit }}" ]; then
+            echo "::error::Quickshell ${{ steps.pin.outputs.version }} points at ${GOT}, but harness/quickshell-pin.env expects ${{ steps.pin.outputs.commit }}."
+            exit 1
+          fi
+
+          cmake -GNinja -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX=/usr \
+            -DCMAKE_INSTALL_LIBDIR=lib64 \
+            -DDISTRIBUTOR="AquariusOS CI" \
+            -DDISTRIBUTOR_DEBUGINFO_AVAILABLE=OFF \
+            -DCRASH_HANDLER=OFF \
+            -DHYPRLAND=OFF -DHYPRLAND_IPC=OFF -DHYPRLAND_GLOBAL_SHORTCUTS=OFF \
+            -DHYPRLAND_FOCUS_GRAB=OFF -DHYPRLAND_SURFACE_EXTENSIONS=OFF \
+            -DSCREENCOPY_HYPRLAND_TOPLEVEL=OFF \
+            -DI3=OFF -DI3_IPC=OFF \
+            -DX11=OFF \
+            -DBUILD_TESTING=OFF
+          cmake --build build
+          rm -rf /opt/quickshell-stage
+          DESTDIR=/opt/quickshell-stage cmake --install build
+
+      # Keep it even if the load check below goes red — see the note above.
+      - name: Keep the Quickshell we just built, for the next run
+        if: always() && steps.qs-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: /opt/quickshell-stage
+          key: quickshell-${{ steps.pin.outputs.commit }}-qt-${{ steps.qt.outputs.nevra }}-v1
+
+      - name: Put Quickshell on this machine
+        run: |
+          set -euxo pipefail
+          cp -a /opt/quickshell-stage/. /
+          qs --version
+          # Read the module names out of the program itself. If Networking or
+          # Bluetooth are missing from this list, the shell will fail to load and
+          # the reason will be here rather than a mystery further down.
+          grep -ao 'Quickshell\.[A-Za-z.]*' "$(command -v quickshell)" | sort -u | sed 's/^/  /'
+
+      # ----------------------------------------------------------------------
+      # And the actual question.
+      # ----------------------------------------------------------------------
+      - name: Load the shell, the login screen and the lock screen
+        # Print the shell's whole start-up log even when it passes. It is the
+        # only place anybody can see what the shell says on a machine that is not
+        # the bench, and reading a passing log is how you notice the complaint
+        # that has not become a failure yet.
+        env:
+          AQ_LOAD_SHOW_LOG: "1"
+        run: ./harness/load-check.sh

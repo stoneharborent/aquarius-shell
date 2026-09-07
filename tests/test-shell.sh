@@ -172,6 +172,7 @@ for aq_file in \
     assets/logo.svg \
     assets/logo-mono.svg \
     harness/run-nested.sh \
+    harness/load-check.sh \
     session/labwc/generate-theme \
     session/labwc/rc.xml \
     LICENSE
@@ -559,7 +560,7 @@ echo ""
 echo "=== 11. the shell scripts hold up ==="
 # ------------------------------------------------------------------------------
 
-for aq_sh in harness/run-nested.sh tests/test-shell.sh; do
+for aq_sh in harness/run-nested.sh harness/load-check.sh tests/test-shell.sh; do
     if bash -n "${aq_sh}" 2>/dev/null; then
         pass "${aq_sh} parses"
     else
@@ -574,7 +575,7 @@ for aq_sh in harness/run-nested.sh tests/test-shell.sh; do
 done
 
 if command -v shellcheck > /dev/null 2>&1; then
-    if shellcheck harness/run-nested.sh tests/test-shell.sh; then
+    if shellcheck harness/run-nested.sh harness/load-check.sh tests/test-shell.sh; then
         pass "shellcheck is happy"
     else
         fail "shellcheck found problems (listed above)."
