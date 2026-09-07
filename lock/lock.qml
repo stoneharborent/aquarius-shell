@@ -32,6 +32,7 @@
 // in, which on a machine that is not AquariusOS it will not. The card will say
 // so plainly rather than swallowing your Enter key.
 // =============================================================================
+import QtQuick   // for Component.onCompleted — see the note in LockLayer.qml
 import Quickshell
 
 import "."

@@ -3801,24 +3801,6 @@ PYTHON
     done
 fi
 
-# ------------------------------------------------------------------------------
-echo ""
-if [ "${aq_failures}" -ne 0 ]; then
-    echo "::error::${aq_failures} check(s) failed."
-    exit 1
-fi
-echo "All checks passed."
-echo ""
-echo "Remember what that does and does not mean. These checks read the files;"
-echo "they do not run them. Every failure found on 2026-09-01 — the day this"
-echo "shell first ran on real hardware — passed every check on this page first:"
-echo "a missing import, a property named after a signal, a property the local"
-echo "Qt does not have, an anchor a Row will not accept. A QML engine found all"
-echo "four in about a minute."
-echo ""
-echo "So this is the cheap gate, not the real one. The real one is"
-echo "./harness/run-nested.sh on a Linux machine, with the log in front of you."
-
 # -----------------------------------------------------------------------------
 # 39. A folder with a qmldir shows the rest of the shell only what it names
 # -----------------------------------------------------------------------------
@@ -3828,7 +3810,8 @@ echo "./harness/run-nested.sh on a Linux machine, with the log in front of you."
 # in greeter/qmldir). qmllint did not catch either. This sweep reads every
 # .qml file, and for every folder it imports that carries a qmldir, checks that
 # each type it uses from that folder is named there.
-echo "39. every cross-folder type is named in its folder's qmldir"
+echo ""
+echo "=== 39. every cross-folder type is named in its folder's qmldir ==="
 if python3 - "$AQ_REPO_ROOT" <<'PY'
 import re, glob, os, sys
 root = sys.argv[1]; missing = []
@@ -3846,3 +3829,50 @@ if missing: print("\n".join(missing)); sys.exit(1)
 PY
 then pass "every cross-folder type is named in its qmldir"; else fail "a qmldir hides a type another folder uses — the desktop would not load"; fi
 
+# -----------------------------------------------------------------------------
+# 40. Every file that uses `Component.on…` imports the module it comes from
+# -----------------------------------------------------------------------------
+# `Component.onCompleted` looks like a language keyword. It is not. `Component`
+# is an ATTACHED type that arrives with QtQuick (QtQml), and a file that draws
+# nothing has no other reason to import QtQuick — so the import looks stray
+# and gets left out. Quickshell 0.2.1 then refuses the whole file with
+# "Non-existent attached object", a message that never mentions imports, and
+# whatever loads that file reports "Type X unavailable". On 6 September 2026
+# that file was lock/LockLayer.qml and the whole desktop failed to start.
+# NotificationLayer.qml carries the same warning from 1 September. This check
+# is the one that would have caught both before they reached the bench.
+echo ""
+echo "=== 40. every Component.on… handler has QtQuick or QtQml imported ==="
+aq_missing_import=0
+while IFS= read -r aq_file; do
+    if grep -qE '^import (QtQuick|QtQml)\b' "${aq_file}"; then
+        continue
+    fi
+    fail "${aq_file} uses Component.on… without importing QtQuick or QtQml." \
+         "Quickshell 0.2.1 rejects the file with \"Non-existent attached" \
+         "object\" and the thing that loads it says \"Type … unavailable\"." \
+         "Add \`import QtQuick\` (with the note explaining why — see" \
+         "components/notifications/NotificationLayer.qml)."
+    aq_missing_import=1
+done < <(grep -rlE '^\s*Component\.on[A-Z]' --include='*.qml' . | sort)
+if [ "${aq_missing_import}" -eq 0 ]; then
+    pass "every file with a Component.on… handler imports QtQuick or QtQml"
+fi
+
+# ------------------------------------------------------------------------------
+echo ""
+if [ "${aq_failures}" -ne 0 ]; then
+    echo "::error::${aq_failures} check(s) failed."
+    exit 1
+fi
+echo "All checks passed."
+echo ""
+echo "Remember what that does and does not mean. These checks read the files;"
+echo "they do not run them. Every failure found on 2026-09-01 — the day this"
+echo "shell first ran on real hardware — passed every check on this page first:"
+echo "a missing import, a property named after a signal, a property the local"
+echo "Qt does not have, an anchor a Row will not accept. A QML engine found all"
+echo "four in about a minute."
+echo ""
+echo "So this is the cheap gate, not the real one. The real one is"
+echo "./harness/run-nested.sh on a Linux machine, with the log in front of you."

@@ -79,6 +79,15 @@
 // lock screen in the nested harness without locking your real machine. It is a
 // development tool, not how it ships.
 // =============================================================================
+// ⚠️ QtQuick IS IMPORTED FOR `Component.onCompleted`, NOT FOR ANYTHING VISUAL
+//   This file draws nothing, so QtQuick looks like a stray import. It is not.
+//   `Component.onCompleted` is an ATTACHED type that comes with QtQuick
+//   (QtQml). Without the import, Quickshell 0.2.1 refuses the whole file with
+//   "Non-existent attached object" — and shell.qml then reports "Type
+//   LockLayer unavailable", so the entire desktop fails to load. That is what
+//   happened on the bench on 6 September 2026. Same wire as
+//   components/notifications/NotificationLayer.qml; test 40 now trips on it.
+import QtQuick
 import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland

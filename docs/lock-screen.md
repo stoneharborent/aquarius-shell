@@ -348,6 +348,26 @@ its own source:
 
 ---
 
+## What broke on the bench, 6 September 2026
+
+The first time a real machine loaded `lock/`, the desktop failed to start twice.
+Both were one-line fixes, both passed every check in `tests/test-shell.sh`
+first, and both now have a check of their own.
+
+1. **`Type LockLayer unavailable`** — `lock/qmldir` names `LockState` as a
+   singleton, and a folder with a qmldir shows the outside world *only* what the
+   qmldir names. `shell.qml` could not see `LockLayer` until it was listed too.
+   Test 39 sweeps every folder for this.
+2. **`LockLayer.qml[101:5]: Non-existent attached object`** — the line is
+   `Component.onCompleted`. `Component` is not part of the language; it is an
+   attached type that arrives with QtQuick, and LockLayer.qml draws nothing so
+   it never imported QtQuick. The message does not mention imports. Test 40
+   now checks every file that writes `Component.on…` for the import. The same
+   wire had already been tripped over on 1 September in the notification
+   layer, and the warning written there was not enough on its own.
+
+---
+
 ## Deviations from the approved spec
 
 Written down rather than quietly done.
