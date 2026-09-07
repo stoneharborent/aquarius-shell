@@ -147,7 +147,7 @@ for aq_file in \
     components/notifications/IconChip.qml \
     components/notifications/ActionButtons.qml \
     components/notifications/InlineReply.qml \
-    greeter/greeter.qml \
+    greeter.qml \
     greeter/qmldir \
     greeter/GreeterState.qml \
     greeter/GreeterWindow.qml \

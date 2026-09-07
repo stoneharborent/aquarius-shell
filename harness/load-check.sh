@@ -650,7 +650,7 @@ aq_check_entry() {
 # ⚠️ IF ONE OF THESE STARTS PASSING, THE BUILD FAILS. That is on purpose. A
 # known-broken list that nobody ever takes anything off is how a project ends up
 # with checks that mean nothing.
-aq_known_broken="greeter lock"
+aq_known_broken="lock"
 
 aq_is_known_broken() {
     case " ${aq_known_broken} " in
@@ -671,7 +671,7 @@ for aq_entry in ${aq_wanted}; do
 
     case "${aq_entry}" in
         shell)   aq_check_entry shell   "${AQ_SHELL_DIR}" ;;
-        greeter) aq_check_entry greeter "${AQ_SHELL_DIR}/greeter/greeter.qml" ;;
+        greeter) aq_check_entry greeter "${AQ_SHELL_DIR}/greeter.qml" ;;
         lock)    aq_check_entry lock    "${AQ_SHELL_DIR}/lock/lock.qml" ;;
         *)
             echo "Unknown entry point '${aq_entry}'."

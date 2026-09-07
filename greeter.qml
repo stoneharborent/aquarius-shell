@@ -8,7 +8,19 @@
 // screen, and the only thing the two have in common is that they are the same
 // design — they share theme/, the Aquarius mark, and nothing else.
 //
-//     qs -p greeter/greeter.qml
+//     qs -p greeter.qml
+//
+// ⚠️ THIS FILE LIVES AT THE REPO ROOT, BESIDE shell.qml, AND THAT IS THE FIX
+//   FOR THE LOGIN SCREEN NOT DRAWING (bench, 2026-09-06/07). Quickshell treats
+//   the folder of the file it is given as the config folder and throws away any
+//   import that points outside it ("blackhole any import resolution outside of
+//   the config folder", src/core/qsintercept.cpp). When the entry was
+//   greeter/greeter.qml, the config folder was greeter/, so GreeterCard.qml's
+//   `import "../components/bar"` (the Aquarius mark) and `import "../theme"`
+//   resolved to nothing and the whole login screen failed with "LogoMark is
+//   not a type" — a black screen nobody could log in through. With the entry
+//   here, the config folder is the whole shell, and every import resolves. The
+//   greeter's own pieces still live in greeter/ and are pulled in below.
 //
 // On AquariusOS it is started by greetd, through a tiny compositor, and the
 // whole chain is written out in the os-image repository at
@@ -21,7 +33,7 @@
 // =============================================================================
 import Quickshell
 
-import "."
+import "greeter"
 
 ShellRoot {
     // One full screen of login screen per monitor. Every one shows the
