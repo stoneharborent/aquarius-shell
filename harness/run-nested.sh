@@ -229,8 +229,14 @@ aq_icon_source=""
 if [ -n "${QS_ICON_THEME:-}" ]; then
     aq_icon_source="set by you"
 elif [ -d /run/host/usr/share ]; then
+    # ⚠️ This script runs with `set -e` and `pipefail`: a command that fails
+    #   inside `$(...)` on an assignment line ENDS THE SCRIPT, silently, before
+    #   the window ever opens (bench, 2026-09-06 — the first version of this
+    #   line did exactly that). distrobox-host-exec can fail, and on a fresh
+    #   container it can also STOP AND ASK whether to download its helper —
+    #   hence `< /dev/null`, the five-second limit, and `|| true`.
     if command -v distrobox-host-exec > /dev/null 2>&1; then
-        QS_ICON_THEME="$(distrobox-host-exec gsettings get org.gnome.desktop.interface icon-theme 2> /dev/null | tr -d "'")"
+        QS_ICON_THEME="$( { timeout 5 distrobox-host-exec gsettings get org.gnome.desktop.interface icon-theme < /dev/null 2> /dev/null || true; } | tr -d "'" )"
         aq_icon_source="the machine's icon-theme setting, asked through distrobox-host-exec"
     fi
     if [ -z "${QS_ICON_THEME:-}" ] && [ -d /run/host/usr/share/icons/Aquarius-Ice ]; then
@@ -238,7 +244,7 @@ elif [ -d /run/host/usr/share ]; then
         aq_icon_source="the Aquarius theme the machine has installed (seen through /run/host)"
     fi
 elif command -v gsettings > /dev/null 2>&1; then
-    QS_ICON_THEME="$(gsettings get org.gnome.desktop.interface icon-theme 2> /dev/null | tr -d "'")"
+    QS_ICON_THEME="$( { gsettings get org.gnome.desktop.interface icon-theme 2> /dev/null || true; } | tr -d "'" )"
     aq_icon_source="the desktop's icon-theme setting"
 fi
 if [ -z "${QS_ICON_THEME:-}" ] && [ -d /usr/share/icons/Aquarius-Ice ]; then
