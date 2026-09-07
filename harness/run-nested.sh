@@ -349,6 +349,10 @@ AQ_AUTOSTART
             # get a window in here — but rc.xml runs `ptyxis`, which a plain
             # container does not have, and labwc then does nothing at all. So
             # the harness's copy tries every terminal it might find.
+            # The `$t` below is for the sh that labwc runs, not for this
+            # script, so it must reach the file unexpanded — hence the single
+            # quotes, and hence telling shellcheck so.
+            # shellcheck disable=SC2016
             sed -i 's|<command>ptyxis</command>|<command>sh -c "for t in ptyxis foot alacritty kitty xterm; do command -v $t \&gt; /dev/null \&amp;\&amp; exec $t; done"</command>|' \
                 "${aq_labwc_dir}/config/rc.xml"
             export XDG_DATA_DIRS="${aq_labwc_dir}/share:${XDG_DATA_DIRS:-/usr/local/share:/usr/share}"
