@@ -341,6 +341,16 @@ if command -v swaybg > /dev/null 2>&1 \
 fi
 AQ_AUTOSTART
             : > "${aq_labwc_dir}/config/shutdown"
+            # The window frame, the buttons and the right-click menu can only
+            # be SEEN on a window that lives inside the nested session. Apps
+            # started from the dock mostly open on your real desktop instead
+            # (Files, Settings and their kind hand the request to an instance
+            # already running out there). Super+Return is the reliable way to
+            # get a window in here — but rc.xml runs `ptyxis`, which a plain
+            # container does not have, and labwc then does nothing at all. So
+            # the harness's copy tries every terminal it might find.
+            sed -i 's|<command>ptyxis</command>|<command>sh -c "for t in ptyxis foot alacritty kitty xterm; do command -v $t \&gt; /dev/null \&amp;\&amp; exec $t; done"</command>|' \
+                "${aq_labwc_dir}/config/rc.xml"
             export XDG_DATA_DIRS="${aq_labwc_dir}/share:${XDG_DATA_DIRS:-/usr/local/share:/usr/share}"
             echo "  labwc:      ${aq_labwc_dir}/config (rc.xml generated from session/labwc/)"
             echo "  keys:       Super+Space search · Super+L lock · Alt+Tab switcher"

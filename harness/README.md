@@ -184,14 +184,39 @@ qs -p . ipc call dock openAppGrid
 qs -p . ipc call lock lock           # the lock screen (there is no unlock call)
 ```
 
-**Super+L, Super+Space and Alt+Tab work inside the nested window** — the
-harness starts labwc with a folder generated from `session/labwc/` (as the real
-session does) and niri with `harness/niri-nested.kdl`, and both carry the
-shell's bindings. One catch: the desktop you are sitting in sees the key first.
-GNOME takes Super+L for its own lock, so pressing it may lock *your* screen and
-never reach the nested one. The `ipc call lock lock` line above is the same
-message the binding sends, and it always reaches the nested shell. Locking the
-nested session only covers the nested window; your real desktop is untouched.
+**The shell's bindings are loaded in the nested window** — the harness starts
+labwc with a folder generated from `session/labwc/` (as the real session does)
+and niri with `harness/niri-nested.kdl`. **But the desktop you are sitting in
+sees every key first**, and GNOME keeps the ones that matter most: Super+L
+(its lock), Alt+Tab and Super+Tab (its own switcher), Super+` (its window
+cycler). Press them and GNOME acts on *your* desktop; the nested one never
+hears it. That is not a bug in the shell and there is no setting for it.
+Super+Space and Super+Return do get through.
+
+So drive those pieces by hand from another terminal, in the shell's folder.
+The messages are exactly what the key bindings send:
+
+```bash
+qs -p . ipc call lock lock         # the lock screen (nested window only)
+qs -p . ipc call switcher next     # open the app switcher, or step forward
+qs -p . ipc call switcher prev     # step back
+qs -p . ipc call switcher down     # into the selected app's windows
+qs -p . ipc call switcher go       # go to what is selected, and close
+qs -p . ipc call switcher cancel   # close, changing nothing
+```
+
+**To see the window frame, the round buttons and the right-click menu you
+need a window INSIDE the nested session.** Right-click the nested desktop for
+the menu. For a window, press **Super+Return** with the nested window focused:
+it opens a terminal in there, with the Aquarius frame around it. (Apps clicked
+in the dock mostly open on your real desktop instead — Files, Settings and
+their kind hand the request to the copy already running out there.) In a
+distrobox the container needs a terminal to open; the harness tries `ptyxis`,
+`foot`, `alacritty`, `kitty` and `xterm` in that order, so install one:
+
+```bash
+sudo dnf install foot
+```
 
 `qs` only talks to an instance started on the same display, so run these with
 `WAYLAND_DISPLAY` set to the NESTED session's socket (`wayland-1`, usually), not
