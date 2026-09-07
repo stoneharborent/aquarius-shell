@@ -215,6 +215,22 @@ would suit every other Wayland shell that wants an alt-tab.
 **This is the thing to watch for on the bench.** It is a known limit, not a bug
 to hunt.
 
+### The second edge — the arrows, and Aquarius Keys (found on the bench, 2026-09-07)
+
+⌘↓ under ⌘Tab went to the app instead of opening its windows. Aquarius Keys
+turns ⌘↓ into Ctrl+End and ⌘↑ into Ctrl+Home everywhere — the Mac "end of
+document" habit — and to send that chord it lets go of ⌘ for a few
+milliseconds and then presses it again. The panel saw the release and did what
+a release means.
+
+The panel now waits sixty milliseconds after the modifier comes up before it
+commits, and calls that off if the modifier comes back down or any key arrives
+in between. It also reads Ctrl+End and Ctrl+Home as ↓ and ↑, so what the remap
+delivers still does what you pressed. The cost is sixty milliseconds on every
+switch, below what a hand notices; the alternative was taking ⌘↓ away from
+every document, which is the wrong trade. Windows mode is not affected —
+Alt+↓ is not remapped.
+
 ---
 
 ## What it lists, and in what order

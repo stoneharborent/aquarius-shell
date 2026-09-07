@@ -102,6 +102,14 @@
 //   handle_compositor_keybindings() and it would suit every other Wayland shell
 //   that wants an alt-tab too.
 //
+//   THE SECOND EDGE, FOUND ON THE BENCH 2026-09-07: Aquarius Keys turns
+//   Command+Down into Ctrl+End (and Up into Ctrl+Home), and to do that it lets
+//   go of Command for a few milliseconds. The panel took that for a real
+//   let-go. The commit now waits sixty milliseconds after the modifier comes
+//   up, and is called off if the modifier comes back or any key arrives —
+//   see releaseGrace beside the key handlers, which also reads Ctrl+End and
+//   Ctrl+Home as Down and Up.
+//
 // =============================================================================
 // TWO PROFILES, ONE PANEL
 // =============================================================================
@@ -531,18 +539,41 @@ Scope {
             //   press and never forwards it. Tab reaches this panel as an IPC
             //   call instead — `switcher next` — which is the whole design.
             //   The keys handled below are the ones labwc does NOT bind.
+            // ⚠️ A KEY ARRIVING CANCELS A PENDING COMMIT. See releaseGrace
+            //   below: Aquarius Keys lets go of Command for an instant to send
+            //   a remapped chord, and the key of that chord lands here right
+            //   after the release. A key press means the person is still
+            //   driving the panel, whatever the modifier said a moment ago.
             Keys.onPressed: event => {
+                releaseGrace.stop();
                 switch (event.key) {
                 case Qt.Key_Escape:
                     root.cancel();
                     event.accepted = true;
                     break;
                 case Qt.Key_Down:
+                // Ctrl+End is what Aquarius Keys' Mac set turns Command+Down
+                // into (the "end of document" habit). Under Command-Tab that is
+                // the person pressing Down, so it is Down here — see the note
+                // beside releaseGrace. Plain End is accepted for the same
+                // reason; nothing else in this panel wants it.
+                case Qt.Key_End:
                     root.stepDown();
                     event.accepted = true;
                     break;
                 case Qt.Key_Up:
+                case Qt.Key_Home:   // Command+Up becomes Ctrl+Home, likewise
                     root.stepUp();
+                    event.accepted = true;
+                    break;
+                // The modifier coming back down while a commit is pending:
+                // Aquarius Keys "resurrecting" Command after its chord. Not a
+                // new press by the person, so nothing to do — the stop() above
+                // already kept the panel open.
+                case Qt.Key_Meta:
+                case Qt.Key_Super_L:
+                case Qt.Key_Super_R:
+                case Qt.Key_Alt:
                     event.accepted = true;
                     break;
                 case Qt.Key_Return:
@@ -575,12 +606,44 @@ Scope {
                 case Qt.Key_Super_L:
                 case Qt.Key_Super_R:
                 case Qt.Key_Alt:
-                    root.commit();
+                    releaseGrace.restart();
                     event.accepted = true;
                     break;
                 default:
                     break;
                 }
+            }
+
+            // ⚠️ WHY THE COMMIT WAITS A MOMENT AFTER THE MODIFIER COMES UP
+            //   Found on the bench, 2026-09-07: Command-Tab, then Down to open
+            //   an app's windows — and the panel went to the app instead.
+            //
+            //   Aquarius Keys (xremap) turns Command+Down into Ctrl+End, the
+            //   Mac "end of document" habit, in every ordinary app. To send
+            //   that chord it has to RELEASE Command, press Ctrl+End, and then
+            //   press Command again (xremap's send_key_press_and_release:
+            //   release the extra modifiers, tap the key, "resurrect" them).
+            //   The whole thing takes a few milliseconds. This panel saw the
+            //   release and did what a release means: it committed.
+            //
+            //   So a release now starts this timer instead of committing, and
+            //   two things stop it: the modifier being pressed again (the
+            //   resurrection), or any key arriving (the chord). A real
+            //   let-go has neither, and the commit lands when the timer fires.
+            //
+            //   The interval is the cost. xremap's sequence completes in well
+            //   under ten milliseconds by default; sixty leaves room for a slow
+            //   machine and is still below what a hand can notice on release.
+            //   It must stay short: this is latency on EVERY switch.
+            //
+            //   The alternative — removing Command+Down/Up from the keys map —
+            //   would cost a Mac habit to fix a switcher, which is backwards.
+            //   Windows mode is untouched: Alt+Down is not remapped.
+            Timer {
+                id: releaseGrace
+                interval: 60
+                repeat: false
+                onTriggered: root.commit()
             }
 
             // ---- the panel -----------------------------------------------------

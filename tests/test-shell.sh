@@ -3713,6 +3713,30 @@ else
     done
 
     # -- what it lists ---------------------------------------------------------
+    # The release must not commit on the spot. Aquarius Keys lets go of Command
+    # for a few milliseconds to send Ctrl+End for Command+Down; a panel that
+    # commits on the raw release goes to the app instead of opening its windows
+    # (bench, 2026-09-07). So: a grace timer, cancelled by any key press, and
+    # Ctrl+End / Ctrl+Home read as Down / Up.
+    if printf '%s' "${aq_switcher_code}" | grep -q 'id: releaseGrace' \
+       && printf '%s' "${aq_switcher_code}" | grep -q 'releaseGrace.restart()' \
+       && printf '%s' "${aq_switcher_code}" | grep -q 'releaseGrace.stop()'; then
+        pass "AppSwitcher.qml waits a moment after the modifier comes up, and a key press calls it off"
+    else
+        fail "${aq_switcher} commits on the raw modifier release." \
+             "Aquarius Keys lets go of Command for an instant to send a remapped" \
+             "chord (Command+Down -> Ctrl+End); the panel must wait and be" \
+             "called off by a key press, or Down goes to the app."
+    fi
+    for aq_key in Qt.Key_End Qt.Key_Home; do
+        if printf '%s' "${aq_switcher_code}" | grep -qF "${aq_key}"; then
+            pass "AppSwitcher.qml reads ${aq_key} (what the Mac keys map makes of the arrows)"
+        else
+            fail "${aq_switcher} does not handle ${aq_key}." \
+                 "Under Command-Tab, Aquarius Keys delivers Command+Down as Ctrl+End."
+        fi
+    done
+
     if grep -q 'ToplevelManager' "${aq_switcher_model}"; then
         pass "SwitcherModel.qml lists windows from ToplevelManager"
     else
