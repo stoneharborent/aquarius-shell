@@ -131,6 +131,21 @@ Item {
     // One entry from DockModel.items. See that file for the shape.
     required property var modelData
 
+    // Our position in the dock, filled in by the Repeater. For a PINNED tile
+    // this is also its place in the pinned list (pinned tiles come first in
+    // DockModel.items), which is what drag-to-reorder below counts from.
+    required property int index
+
+    // Drag-to-reorder state (Royce, 2026-09-07: "add ability to rearrange apps
+    // on the dock"). `dragging` is true while a pinned tile is being carried;
+    // `dragX` is how far it has been carried from its slot, in pixels. Only
+    // pinned tiles move — a running, unpinned app has no slot to save.
+    property bool dragging: false
+    property real dragX: 0
+
+    // A carried tile floats above its neighbours rather than sliding under them.
+    z: root.dragging ? 10 : 0
+
     // The dock's DockConfig, handed down by Dock.qml. It is passed rather than
     // reached for because it is not a singleton: there is exactly ONE of it for
     // the whole shell (Dock.qml's header says why — two docks reading the same
@@ -306,7 +321,21 @@ Item {
         }
 
         transform: Translate {
+            // x carries the tile while it is being dragged to a new place; y is
+            // the hover lift. While dragging, x must follow the pointer with no
+            // animation; on release, the Behavior animates the snap into the
+            // final slot. y is unaffected either way.
+            x: root.dragX
             y: tile.lifted ? -Theme.dockLift : 0
+
+            Behavior on x {
+                enabled: !root.dragging
+                NumberAnimation {
+                    duration: Theme.durFast
+                    easing.type: Easing.Bezier
+                    easing.bezierCurve: Theme.easeOut
+                }
+            }
 
             Behavior on y {
                 NumberAnimation {
@@ -421,9 +450,75 @@ Item {
 
         hoverEnabled: true
         acceptedButtons: Qt.LeftButton | Qt.MiddleButton | Qt.RightButton
-        cursorShape: Qt.PointingHandCursor
+        cursorShape: root.dragging ? Qt.ClosedHandCursor : Qt.PointingHandCursor
+
+        // ---- drag-to-reorder ----------------------------------------------
+        // A pinned tile can be picked up and carried to a new place; the pinned
+        // list is rewritten as it crosses each neighbour, so the change is saved
+        // the moment it happens and survives a restart. Running, unpinned apps
+        // are not draggable — they have no saved slot to move.
+        //
+        // HOW THE SLOT IS WORKED OUT, AND WHY IT IS SELF-RELATIVE. `dragX` is
+        // how far the tile has been carried from where the Row put it. One slot
+        // is a tile plus the gap between tiles. Carry the tile more than half a
+        // slot and it has changed places with the neighbour it is over, so we
+        // move it that many slots in the pinned list. We count from THIS tile's
+        // own index rather than from an absolute position on screen, so it does
+        // not matter where the dock sits or what is drawn to the left of it:
+        // after each move the Row re-lays the tile into its new slot, dragX is
+        // recomputed from the pointer, and the count settles back to zero. No
+        // running tile can be a drop target because movePinnedBy clamps to the
+        // pinned list's own length.
+        property real pressX: 0
+        property bool draggedThisPress: false
+
+        onPressed: function (mouse) {
+            pointer.pressX = mouse.x;
+            pointer.draggedThisPress = false;
+        }
+
+        onPositionChanged: function (mouse) {
+            if (!(pointer.pressedButtons & Qt.LeftButton))
+                return;
+            if (!root.pinned || !root.canPin || !root.config)
+                return;
+
+            // A small threshold so an ordinary click is never read as a drag.
+            if (!root.dragging
+                    && Math.abs(mouse.x - pointer.pressX) < Theme.dockTileSize * 0.35)
+                return;
+
+            root.dragging = true;
+            pointer.draggedThisPress = true;
+
+            // Centre the carried tile under the pointer.
+            root.dragX = mouse.x - root.width / 2;
+
+            // How many whole slots it has crossed, and which pinned place that
+            // would put it in. movePinnedBy does nothing when the delta is zero
+            // or would leave the list unchanged.
+            const step = root.width + Theme.dockGap;
+            const slots = Math.round(root.dragX / step);
+            if (slots !== 0)
+                root.config.movePinnedBy(root.pinId, slots);
+        }
+
+        onReleased: function (mouse) {
+            root.dragging = false;
+            root.dragX = 0;   // the Behavior on x snaps it into its slot
+        }
+
+        onCanceled: function () {
+            root.dragging = false;
+            root.dragX = 0;
+        }
 
         onClicked: function (mouse) {
+            // A press that turned into a drag is not a click.
+            if (pointer.draggedThisPress) {
+                pointer.draggedThisPress = false;
+                return;
+            }
             if (mouse.button === Qt.RightButton)
                 root.toggleMenu();
             else if (mouse.button === Qt.MiddleButton)

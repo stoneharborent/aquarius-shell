@@ -241,6 +241,51 @@ Scope {
         root.save();
     }
 
+    // Move a pinned app by `delta` places in the list, and save. Used by
+    // drag-to-reorder in DockItem (Royce, 2026-09-07). Delta is signed: -1 is
+    // one place toward the front of the dock, +1 one place toward the back.
+    //
+    // The from-position is found by NORMALISED name, so a hand-edited file with
+    // "steam" while the tile knows it as "steam.desktop" still matches — the
+    // same care pin()/unpin() take. The to-position is clamped into the list, so
+    // dragging past either end just parks the tile at that end rather than
+    // dropping it. A move that would change nothing writes nothing, so a drag
+    // that ends where it began does not churn the file.
+    function movePinnedBy(id: string, delta: int): void {
+        const wanted = root.normaliseId(id);
+        if (wanted === "" || delta === 0)
+            return;
+
+        const list = [];
+        const source = root.pinned;
+        for (let i = 0; i < source.length; i++)
+            list.push(String(source[i]));
+
+        let from = -1;
+        for (let i = 0; i < list.length; i++) {
+            if (root.normaliseId(list[i]) === wanted) {
+                from = i;
+                break;
+            }
+        }
+        if (from < 0)
+            return;
+
+        let to = from + delta;
+        if (to < 0)
+            to = 0;
+        if (to > list.length - 1)
+            to = list.length - 1;
+        if (to === from)
+            return;
+
+        const moved = list.splice(from, 1)[0];
+        list.splice(to, 0, moved);
+
+        adapter.pinned = list;
+        root.save();
+    }
+
     // ---- getting it onto disk ------------------------------------------------
     // Whether the folder above the file has already been created this session.
     // See the header: the first failure creates it and retries, and a second

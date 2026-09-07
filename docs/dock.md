@@ -638,6 +638,23 @@ An id, incidentally, never carries the `.desktop` ending: quickshell builds it
 from the file's base name. That is why `DockModel.pinnedEntry()` strips it before
 falling back to `byId()`.
 
+### Rearranging the dock — drag a pinned app
+
+Press a pinned app and carry it left or right; the other pinned apps step aside,
+and the new order is written to `dock.json` the moment the tile crosses a
+neighbour, so it survives a restart. Let go and the tile settles into its slot.
+
+The mechanism is deliberately plain. `DockItem.qml` floats the carried tile with
+the pointer (the `x` on the tile's lift `Translate`) and counts how many whole
+slots — a tile plus the gap — it has moved from where the Row put it. It counts
+from the tile's OWN index, not an absolute position on screen, so it does not
+matter where the dock sits: after each swap the Row re-lays the tile into its new
+slot, the offset is recomputed, and the count settles to zero. Each swap calls
+`DockConfig.movePinnedBy()`, which rewrites the pinned list by normalised name
+and clamps to the list, so a running (unpinned) app is never a drop target and
+dragging past the end just parks the tile there. A press that turns into a drag
+is not treated as a click, so carrying an app never also launches it.
+
 ### Icons, and the two-letter fallback
 
 `Quickshell.iconPath(name, true)` resolves an icon name against the icon theme Qt
