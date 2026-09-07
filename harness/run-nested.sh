@@ -211,6 +211,19 @@ echo ""
 # you mean. Both nested window managers below pass it on to what they start.
 export QS_CONFIG_PATH="${AQ_SHELL_DIR}"
 
+# Which icon theme the nested shell draws from. Qt reports one only when it
+# recognises the desktop (GNOME, KDE); anywhere else the name is empty and only
+# hicolor is searched, so the Aquarius icons never load. The real session sets
+# QS_ICON_THEME from the GNOME setting — the harness does the same, so the
+# nested dock shows the same icons as the machine's own Files and app grid.
+if [ -z "${QS_ICON_THEME:-}" ] && command -v gsettings > /dev/null 2>&1; then
+    QS_ICON_THEME="$(gsettings get org.gnome.desktop.interface icon-theme 2> /dev/null | tr -d "'")"
+fi
+if [ -n "${QS_ICON_THEME:-}" ]; then
+    export QS_ICON_THEME
+    echo "  icons:      ${QS_ICON_THEME} (from the desktop's icon-theme setting)"
+fi
+
 case "${AQ_COMPOSITOR}" in
     niri)
         # Running `niri` from inside an existing Wayland session opens it as a

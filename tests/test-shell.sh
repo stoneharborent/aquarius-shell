@@ -2273,6 +2273,19 @@ for aq_lock_bind in \
     fi
 done
 
+# The shell can only draw the Aquarius icons if something names the icon theme:
+# Qt reports none for a desktop it does not recognise. Both the session and the
+# harness have to set QS_ICON_THEME (bench, 2026-09-06: two grey letters per app).
+for aq_icon_file in session/aquarius-session harness/run-nested.sh; do
+    if grep -qE 'export QS_ICON_THEME' "${aq_icon_file}"; then
+        pass "${aq_icon_file} tells the shell which icon theme to draw from (QS_ICON_THEME)"
+    else
+        fail "${aq_icon_file} never sets QS_ICON_THEME." \
+             "Qt gives the shell an empty icon theme on a desktop it does not know," \
+             "so only hicolor is searched and every Aquarius app icon is two grey letters."
+    fi
+done
+
 # The harness has to hand labwc a config folder, or none of rc.xml's bindings
 # exist in the nested window — which is how the bench found the lock screen
 # "not working" on 2026-09-06 when the shell was fine.
