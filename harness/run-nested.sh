@@ -216,12 +216,40 @@ export QS_CONFIG_PATH="${AQ_SHELL_DIR}"
 # hicolor is searched, so the Aquarius icons never load. The real session sets
 # QS_ICON_THEME from the GNOME setting — the harness does the same, so the
 # nested dock shows the same icons as the machine's own Files and app grid.
-if [ -z "${QS_ICON_THEME:-}" ] && command -v gsettings > /dev/null 2>&1; then
+#
+# ⚠️ INSIDE A DISTROBOX, `gsettings` ANSWERS FOR THE CONTAINER, NOT THE MACHINE.
+#   The container has its own settings database with nothing in it, so it says
+#   "Adwaita" — and Adwaita has no application icons at all, so the dock shows
+#   two letters for everything (bench, 2026-09-06, after the first version of
+#   this block trusted it). Ask the machine instead: distrobox ships
+#   distrobox-host-exec, which runs a command on the host. When even that is
+#   missing, the Aquarius theme being visible through /run/host is answer
+#   enough: an AquariusOS machine selects it by default.
+aq_icon_source=""
+if [ -n "${QS_ICON_THEME:-}" ]; then
+    aq_icon_source="set by you"
+elif [ -d /run/host/usr/share ]; then
+    if command -v distrobox-host-exec > /dev/null 2>&1; then
+        QS_ICON_THEME="$(distrobox-host-exec gsettings get org.gnome.desktop.interface icon-theme 2> /dev/null | tr -d "'")"
+        aq_icon_source="the machine's icon-theme setting, asked through distrobox-host-exec"
+    fi
+    if [ -z "${QS_ICON_THEME:-}" ] && [ -d /run/host/usr/share/icons/Aquarius-Ice ]; then
+        QS_ICON_THEME="Aquarius-Ice"
+        aq_icon_source="the Aquarius theme the machine has installed (seen through /run/host)"
+    fi
+elif command -v gsettings > /dev/null 2>&1; then
     QS_ICON_THEME="$(gsettings get org.gnome.desktop.interface icon-theme 2> /dev/null | tr -d "'")"
+    aq_icon_source="the desktop's icon-theme setting"
+fi
+if [ -z "${QS_ICON_THEME:-}" ] && [ -d /usr/share/icons/Aquarius-Ice ]; then
+    QS_ICON_THEME="Aquarius-Ice"
+    aq_icon_source="the Aquarius theme this machine has installed"
 fi
 if [ -n "${QS_ICON_THEME:-}" ]; then
     export QS_ICON_THEME
-    echo "  icons:      ${QS_ICON_THEME} (from the desktop's icon-theme setting)"
+    echo "  icons:      ${QS_ICON_THEME} (${aq_icon_source})"
+else
+    echo "  icons:      whatever Qt picks — no icon-theme setting or Aquarius theme was found"
 fi
 
 case "${AQ_COMPOSITOR}" in
