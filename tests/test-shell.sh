@@ -2262,6 +2262,7 @@ fi
 # lock screen landed on 2026-09-06 with only the first, and niri is the default
 # compositor — so on a stock AquariusOS Super+L would have done nothing.
 for aq_lock_bind in \
+    "session/labwc/rc.xml:C-W-q" \
     "session/labwc/rc.xml:W-l" \
     "session/niri/config.kdl:Mod+L" \
     "harness/niri-nested.kdl:Mod+L"; do

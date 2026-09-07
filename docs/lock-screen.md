@@ -7,7 +7,7 @@
 
 ## What it is
 
-The screen you get when you press **Super+L**, pick **Lock Screen** from the
+The screen you get when you press **Ctrl+⌘Q** (Mac keys) or **Win+L** (Windows keys), pick **Lock Screen** from the
 Aquarius menu, or walk away from the machine for ten minutes.
 
 ```
@@ -273,7 +273,7 @@ qs -p . ipc call lock lock
 
 Only the nested window locks. Your real desktop is untouched.
 
-**On a real AquariusOS machine**, it is already there — press Super+L. That key
+**On a real AquariusOS machine**, it is already there — press Ctrl+⌘Q (Mac keys) or Win+L (Windows keys). That key
 binding runs exactly one line, which you can also type yourself:
 
 ```bash
