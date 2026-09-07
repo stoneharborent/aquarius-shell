@@ -296,6 +296,191 @@ from.
 
 ---
 
+## The load check, and why CI runs it
+
+`run-nested.sh`, above, is for **you**. It opens a window you can look at.
+
+`load-check.sh`, next to it, is for **a build machine** — a computer with no
+screen, no graphics card and nobody sitting in front of it. It answers one
+question and no others:
+
+> **Does the shell start at all?**
+
+Run it the same way:
+
+```bash
+./harness/load-check.sh              # the desktop, the login screen, the lock screen
+./harness/load-check.sh shell        # just the desktop
+./harness/load-check.sh greeter lock # pick and choose
+```
+
+### Why it had to exist
+
+Everything else that checks this repository **reads** the files. `qmllint` reads
+them very cleverly. `tests/test-shell.sh` reads them with about forty
+repo-specific rules. Neither runs a single line.
+
+That gap has a name and a date. On **6 September 2026** the desktop refused to
+start on the bench machine, twice in one day:
+
+```
+Failed to load configuration
+  caused by @shell.qml[103:5]: LockLayer is not a type
+```
+
+and then, once that was fixed, the same thing again with `GreeterAvatar`. Both
+were one mistake: **a folder with a `qmldir` file shows the outside world only
+what the `qmldir` names**, and neither type was named. Both passed `qmllint`.
+Both passed `tests/test-shell.sh`. The only thing on earth that finds that is a
+QML engine being asked to load the shell — which, until this script, had never
+happened anywhere except on Royce's desk.
+
+It found a third one about a minute after it first ran, on 7 September: the whole
+desktop would not load, because `lock/LockLayer.qml` used `Component.onCompleted`
+without importing QtQml. Same story — every reading check was green.
+
+So these failures used to be found by a person, in front of a machine, at the end
+of a day. Now they are found by a build, in about five minutes, before anybody
+drives anywhere.
+
+### How it works, in plain language
+
+A bar has to ask a window manager for permission to be a bar. With no window
+manager to ask, Quickshell never gets as far as reading our QML, so "just run
+`qs`" would prove nothing.
+
+So the script starts a **real window manager with no monitor attached**. wlroots
+— the toolkit labwc, sway and cage are all built on — has a mode for exactly
+this. Four instructions do it:
+
+| Setting | What it means |
+|---|---|
+| `WLR_BACKENDS=headless` | Do not look for a screen. There isn't one. |
+| `WLR_HEADLESS_OUTPUTS=1` | Invent one pretend monitor, because a bar needs a screen to sit on. |
+| `WLR_RENDERER=pixman` | Paint with the processor. There is no graphics card. |
+| `WLR_LIBINPUT_NO_DEVICES=1` | Do not refuse to start over a missing keyboard and mouse. |
+
+And two more, in Qt's language, for the shell itself: `QT_QPA_PLATFORM=wayland`
+(the shell is a Wayland program and nothing else — the same line the real session
+sets) and `QT_QUICK_BACKEND=software` (draw with the processor).
+
+Then it starts `qs` inside that, waits **twenty seconds**, and judges it on two
+things:
+
+1. **Is it still running?** Quickshell exits when the file it was asked to load
+   will not load, so a dead process *is* the answer. This is what all three
+   faults above looked like.
+2. **What did it say?** A piece the shell builds later — a panel that only
+   appears on a click — can fail on its own without taking the whole shell down.
+   That only ever shows up as a line in the log, so the log is read too.
+
+**It prefers labwc**, because labwc is the real one — it is what AquariusOS ships
+and what the shell runs on in front of a person. sway and cage are understudies,
+in case a package is missing or labwc's headless mode ever breaks. A check that
+quietly switches itself off is worse than no check, because it still looks green.
+
+### ⚠️ Two of the three entry points do not load today
+
+The **login screen** and the **standalone lock screen** are on a known-broken
+list in the script. They are still run, and everything they say is still printed
+— they just do not turn the build red, because what is wrong with them is not
+something the load check arrived with.
+
+What is wrong is one sentence long. **Quickshell throws away every import that
+points outside the config folder**, and the config folder is simply the folder of
+the file it was given. The image starts the login screen as
+
+```
+qs -p /usr/share/aquarius/shell/greeter/greeter.qml
+```
+
+so its config folder is `greeter/`, and `import "../components/bar"` in
+`GreeterCard.qml` resolves to nothing at all:
+
+```
+Failed to load configuration
+  caused by @GreeterCard.qml[65:13]: LogoMark is not a type
+```
+
+**No `qmldir` fixes this** — the import is discarded before any `qmldir` is read,
+which is what makes it different in kind from the two faults on 6 September.
+`qs -p lock/lock.qml` fails the same way, through `LockSurface.qml`.
+
+On a real machine a login screen that will not load is **a black screen with no
+way in** — the failure `/usr/libexec/aquarius-greeter-watchdog` exists in the OS
+image to catch. It is worth checking whether it is the same one.
+
+There are two ways out, and both need this repository and `os-image` to move
+together, which is why the check reports them rather than guessing:
+
+1. **Move the entry file to the top of the repo** — `greeter.qml` beside
+   `shell.qml`, keeping `greeter/` for its pieces. Then the config folder is the
+   whole shell and every import resolves. It costs one path in the image's
+   `aquarius-greeter-shell`.
+2. **Stop importing across** — give the login screen its own copy of the mark.
+   Cheaper, and a second copy of a logo to keep in step forever.
+
+If either one starts passing, **the build fails on purpose** and asks for the
+list to be shortened. A known-broken list nobody ever takes anything off is how a
+project ends up with checks that mean nothing.
+
+### What it deliberately ignores
+
+A build machine has no Wi-Fi, no battery, no Bluetooth, no sound card, no login
+manager and almost no fonts, and the shell asks about every one of those on the
+way up. Each answer is "there isn't one here", which is **true and not a fault**.
+If those counted, this check would be red forever and everybody would learn to
+ignore it — the one way a check can do actual harm.
+
+So `load-check.sh` carries a list of the complaints an empty machine is expected
+to make, and treats anything *not* on that list as a real problem. **Adding to
+that list is a decision, not housekeeping.** Read the log line first, and be sure
+it is about the empty machine and not about our code.
+
+The list is only ever applied to the *soft* signals — a `TypeError` really is
+what a missing battery reading looks like. It is never applied to "is not a
+type", "Failed to load configuration" and their kin, because the list contains
+the word "Bluetooth", and a genuine failure in `TileBluetooth.qml` would
+otherwise be thrown away by its own file path.
+
+### What it still cannot tell you
+
+- **Whether anything looks right.** Nobody looks at the picture. This says "it
+  loads", never "the bar is in the right place" or "that is the right blue".
+- **Anything that only goes wrong when a person touches it** — a click handler
+  with a typo, a keyboard shortcut wired to nothing, a panel that opens in the
+  wrong corner.
+- **Anything that breaks after the first twenty seconds** — a timer, a leak, a
+  reload.
+
+Those are still the bench's job. See
+[`../docs/RESUME-ON-BENCH.md`](../docs/RESUME-ON-BENCH.md).
+
+### Where CI runs it
+
+`.github/workflows/lint.yml`, the job called **"The shell actually loads"**. It
+runs on Fedora, in a container, on **every push to every branch** and on every
+pull request. (That workflow used to run on `main` only, which meant branch work
+— where everything actually happens — was never checked at all.)
+
+It builds Quickshell from source rather than installing Fedora's, and that is not
+fussiness: Fedora packages a snapshot of **0.2.1**, which has no
+`Quickshell.Networking` and no `Quickshell.Bluetooth`, so the shell does not load
+on it *at all*. The version it builds is pinned in
+[`quickshell-pin.env`](quickshell-pin.env), which is a copy of the pin in the
+`os-image` repository — **change one, change both**, or this check is proving
+something about a Quickshell nobody has.
+
+The build takes several minutes, so it is cached, keyed on both the Quickshell
+commit **and** the exact Qt that is installed. That second half matters: a
+Quickshell is permanently married to the Qt it was compiled against, and a stale
+cached copy would die with `undefined symbol` — the same ABI trap written up in
+`os-image/build_files/stage-quickshell.sh`.
+
+Cold cache: about fifteen minutes. Warm: about five.
+
+---
+
 ## What this harness is *not*
 
 It is **not** the AquariusOS desktop. It is a window with a small desktop in it,

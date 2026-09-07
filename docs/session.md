@@ -375,6 +375,25 @@ it. Edit a `.qml` file, save it, and the running shell reloads by itself. The
 catch is the obvious one: move or delete the folder and the session stops
 working.
 
+**Before you log out to try a change, check that the shell still starts.** A
+session that will not load looks the same as a broken computer: you log in, the
+screen is empty, and there is no bar to tell you why. One command answers it
+without logging out of anything —
+
+```bash
+./harness/load-check.sh
+```
+
+— because it starts the desktop, the login screen and the lock screen inside a
+window manager with no screen attached, and says which of them died. CI runs the
+same command on every push (`.github/workflows/lint.yml`, the job called "The
+shell actually loads"), so a desktop that will not start now fails a build rather
+than a login. ⚠️ The **login screen** does not load today for a reason that has
+nothing to do with your change; it is on a known-broken list, and the check
+prints it rather than failing on it. Both are explained in
+[`../harness/README.md`](../harness/README.md), *"The load check, and why CI runs
+it"*.
+
 ---
 
 ## Step 3 — log in
