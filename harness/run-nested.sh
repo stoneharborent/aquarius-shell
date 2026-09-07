@@ -335,7 +335,7 @@ case "${AQ_COMPOSITOR}" in
             cat > "${aq_labwc_dir}/config/autostart" <<'AQ_AUTOSTART'
 if command -v swaybg > /dev/null 2>&1 \
    && [ -r /usr/share/backgrounds/aquarius/the-pour-ice-3840x2160.png ]; then
-    swaybg -c '#06070C' \
+    swaybg -c '#0B1220' \
         -i /usr/share/backgrounds/aquarius/the-pour-ice-3840x2160.png \
         -m fill > /dev/null 2>&1 &
 fi
