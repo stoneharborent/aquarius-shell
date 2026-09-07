@@ -26,3 +26,22 @@
 # =============================================================================
 
 singleton LockState 1.0 LockState.qml
+
+# -----------------------------------------------------------------------------
+# THE PIECES THE DESKTOP REACHES INTO THIS FOLDER FOR (added 2026-09-06)
+# -----------------------------------------------------------------------------
+# A folder that has a qmldir file shows the OUTSIDE world only what the qmldir
+# names. shell.qml says `import "lock"` and then writes `LockLayer { }`, so
+# LockLayer has to be listed here or the whole desktop fails to load with
+# "LockLayer is not a type" — which is exactly what happened on the bench on
+# 6 September 2026, the first time this folder was loaded by a real machine.
+# (Files in this folder can still see each other without being listed; the
+# rule only bites from outside.) The rest are listed so nobody trips over the
+# same wire later.
+LockLayer   1.0 LockLayer.qml
+LockSurface 1.0 LockSurface.qml
+LockVeil    1.0 LockVeil.qml
+LockBlur    1.0 LockBlur.qml
+LockCard    1.0 LockCard.qml
+LockField   1.0 LockField.qml
+LockIdle    1.0 LockIdle.qml
