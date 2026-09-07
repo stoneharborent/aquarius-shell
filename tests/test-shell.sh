@@ -3818,3 +3818,31 @@ echo "four in about a minute."
 echo ""
 echo "So this is the cheap gate, not the real one. The real one is"
 echo "./harness/run-nested.sh on a Linux machine, with the log in front of you."
+
+# -----------------------------------------------------------------------------
+# 39. A folder with a qmldir shows the rest of the shell only what it names
+# -----------------------------------------------------------------------------
+# `import "folder"` sees only the types the folder's qmldir lists. Twice on
+# 6 September 2026 the desktop failed to load on the bench because a type used
+# across folders was not listed (LockLayer in lock/qmldir, then GreeterAvatar
+# in greeter/qmldir). qmllint did not catch either. This sweep reads every
+# .qml file, and for every folder it imports that carries a qmldir, checks that
+# each type it uses from that folder is named there.
+echo "39. every cross-folder type is named in its folder's qmldir"
+if python3 - "$ROOT" <<'PY'
+import re, glob, os, sys
+root = sys.argv[1]; missing = []
+for f in sorted(glob.glob(os.path.join(root, '**', '*.qml'), recursive=True)):
+    src = open(f).read()
+    used = set(re.findall(r'(?m)^\s*([A-Z]\w+)\s*\{', src)) | set(re.findall(r'\b([A-Z]\w+)\.[a-z]\w*', src))
+    for imp in re.findall(r'(?m)^import\s+"([^"]+)"', src):
+        d = os.path.normpath(os.path.join(os.path.dirname(f), imp)); q = os.path.join(d, 'qmldir')
+        if not os.path.isfile(q) or d == os.path.dirname(f): continue
+        listed = set((l.split()[1] if l.startswith('singleton') else l.split()[0]) for l in open(q) if l.strip() and not l.startswith('#'))
+        for t in used:
+            if os.path.isfile(os.path.join(d, t + '.qml')) and t not in listed:
+                missing.append(f"{os.path.relpath(q, root)} does not name {t}, which {os.path.relpath(f, root)} uses")
+if missing: print("\n".join(missing)); sys.exit(1)
+PY
+then pass "every cross-folder type is named in its qmldir"; else fail "a qmldir hides a type another folder uses — the desktop would not load"; fi
+

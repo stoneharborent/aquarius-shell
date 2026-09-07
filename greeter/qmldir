@@ -17,3 +17,19 @@
 # =============================================================================
 
 singleton GreeterState 1.0 GreeterState.qml
+
+# -----------------------------------------------------------------------------
+# THE PIECES OTHER FOLDERS REACH INTO THIS ONE FOR (added 2026-09-06)
+# -----------------------------------------------------------------------------
+# A folder with a qmldir shows the outside world only what the qmldir names.
+# The lock screen's card says `import "../greeter"` and draws a GreeterAvatar,
+# so the avatar (and the rest, so nobody trips over this wire again) must be
+# listed here. Missing it, the whole desktop failed to load on the bench on
+# 6 September 2026 with "GreeterAvatar is not a type". Files inside this
+# folder never needed the list; the rule only bites from outside.
+GreeterAvatar      1.0 GreeterAvatar.qml
+GreeterCard        1.0 GreeterCard.qml
+GreeterDesktopPill 1.0 GreeterDesktopPill.qml
+GreeterField       1.0 GreeterField.qml
+GreeterStepArrow   1.0 GreeterStepArrow.qml
+GreeterWindow      1.0 GreeterWindow.qml
