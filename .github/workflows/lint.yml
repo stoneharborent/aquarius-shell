@@ -262,9 +262,21 @@ jobs:
           echo "nevra=${NEVRA}" >> "${GITHUB_OUTPUT}"
           echo "Qt ${NEVRA}"
 
+      # ⚠️ RESTORE AND SAVE ARE SEPARATE STEPS ON PURPOSE, and it is not tidiness.
+      #
+      # The all-in-one `actions/cache` only writes the cache in its post step,
+      # and that post step is SKIPPED when the job fails. This job's entire
+      # purpose is to fail sometimes. With the all-in-one version, every red
+      # build would throw away the Quickshell it had just spent ten minutes
+      # compiling, and the next run would compile it again — so exactly when
+      # somebody is iterating on a fix, every attempt costs a quarter of an hour.
+      # (Seen on the first two runs of this job, 7 September 2026.)
+      #
+      # Splitting them means the save below runs `if: always()`, and a Quickshell
+      # that built is kept whether or not the shell then loaded.
       - name: Reuse the Quickshell built by an earlier run, if it still fits
         id: qs-cache
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
           path: /opt/quickshell-stage
           key: quickshell-${{ steps.pin.outputs.commit }}-qt-${{ steps.qt.outputs.nevra }}-v1
@@ -319,6 +331,14 @@ jobs:
           cmake --build build
           rm -rf /opt/quickshell-stage
           DESTDIR=/opt/quickshell-stage cmake --install build
+
+      # Keep it even if the load check below goes red — see the note above.
+      - name: Keep the Quickshell we just built, for the next run
+        if: always() && steps.qs-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: /opt/quickshell-stage
+          key: quickshell-${{ steps.pin.outputs.commit }}-qt-${{ steps.qt.outputs.nevra }}-v1
 
       - name: Put Quickshell on this machine
         run: |
