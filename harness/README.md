@@ -337,7 +337,9 @@ happened anywhere except on Royce's desk.
 
 It found a third one about a minute after it first ran, on 7 September: the whole
 desktop would not load, because `lock/LockLayer.qml` used `Component.onCompleted`
-without importing QtQml. Same story — every reading check was green.
+without importing QtQuick. (That one was being fixed on `main` at the same hour,
+from the bench — which is the point. The bench found it by somebody driving to
+it; this found it in twenty-five seconds, on a machine nobody was sitting at.)
 
 So these failures used to be found by a person, in front of a machine, at the end
 of a day. Now they are found by a build, in about five minutes, before anybody
