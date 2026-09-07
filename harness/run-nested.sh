@@ -204,6 +204,13 @@ echo ""
 #   qs -p <folder>   run the shell configuration in that folder
 #                    (-p/--path is for configs outside ~/.config/quickshell)
 # ---------------------------------------------------------------------------
+# `qs ipc call …` — which is what every key binding in rc.xml and config.kdl
+# runs — picks the shell instance whose config is named by QS_CONFIG_PATH. The
+# real session exports it (session/aquarius-session); the harness has to as
+# well, or Super+Space and Super+L reach a `qs` that cannot tell which shell
+# you mean. Both nested window managers below pass it on to what they start.
+export QS_CONFIG_PATH="${AQ_SHELL_DIR}"
+
 case "${AQ_COMPOSITOR}" in
     niri)
         # Running `niri` from inside an existing Wayland session opens it as a
@@ -243,10 +250,53 @@ case "${AQ_COMPOSITOR}" in
         exec niri -c "${AQ_SHELL_DIR}/harness/niri-nested.kdl" -- qs -p "${AQ_SHELL_DIR}"
         ;;
     labwc)
-        # labwc's -s/--startup takes a command to run once it is up. (There is
-        # also -S/--session, which additionally shuts labwc down when that
-        # command exits — not what we want, since closing the window should be
-        # what ends the run.)
+        # labwc reads its key bindings from rc.xml in the folder it is started
+        # with (-C). Until 2026-09-06 the harness started it with NO folder, so
+        # it read ~/.config/labwc or its own defaults, and not one of the
+        # shell's bindings existed in the nested window: Super+L did nothing,
+        # Super+Space did nothing, Alt+Tab was labwc's own switcher. The first
+        # person to press Super+L on the bench found out this way.
+        #
+        # The real session does not hand labwc session/labwc/ directly either:
+        # rc.xml there is a TEMPLATE, and session/labwc/generate-theme fills
+        # in the three generated regions and writes a finished folder. So the
+        # harness runs the same program, into a folder of this run's own, and
+        # starts labwc with that. Two of the copied files are then blanked:
+        # autostart would start a SECOND shell and poke systemd targets, and
+        # shutdown would tear down a session this window is not.
+        #
+        # The round window buttons are theme files that labwc looks for under
+        # themes/Aquarius/labwc/ in the XDG data folders, not in -C's folder
+        # (see generate-theme). Prepending to XDG_DATA_DIRS puts them where it
+        # will look without hiding the host's applications and icons, which
+        # is what overriding XDG_DATA_HOME would do.
+        aq_labwc_dir="${XDG_RUNTIME_DIR:-/tmp}/aquarius-harness-labwc"
+        rm -rf "${aq_labwc_dir}"
+        mkdir -p "${aq_labwc_dir}"
+        if python3 "${AQ_SHELL_DIR}/session/labwc/generate-theme" \
+                --config-out "${aq_labwc_dir}/config" \
+                --theme-out  "${aq_labwc_dir}/share/themes/Aquarius/labwc" \
+                --gtk-out    "${aq_labwc_dir}/gtk" \
+                > "${aq_labwc_dir}/generate-theme.log" 2>&1; then
+            : > "${aq_labwc_dir}/config/autostart"
+            : > "${aq_labwc_dir}/config/shutdown"
+            export XDG_DATA_DIRS="${aq_labwc_dir}/share:${XDG_DATA_DIRS:-/usr/local/share:/usr/share}"
+            echo "  labwc:      ${aq_labwc_dir}/config (rc.xml generated from session/labwc/)"
+            echo "  keys:       Super+Space search · Super+L lock · Alt+Tab switcher"
+            echo "              (if your desktop takes a key first, use 'qs -p . ipc call …'"
+            echo "              from another terminal — see harness/README.md)"
+            echo ""
+            # labwc's -s/--startup takes a command to run once it is up. (There
+            # is also -S/--session, which additionally shuts labwc down when
+            # that command exits — not what we want, since closing the window
+            # should be what ends the run.)
+            exec labwc -C "${aq_labwc_dir}/config" -s "qs -p ${AQ_SHELL_DIR}"
+        fi
+        echo "  ⚠️  session/labwc/generate-theme failed, so labwc starts with its"
+        echo "      own defaults: no Aquarius key bindings and no round buttons."
+        echo "      The shell itself still runs. The error is in:"
+        echo "        ${aq_labwc_dir}/generate-theme.log"
+        echo ""
         exec labwc -s "qs -p ${AQ_SHELL_DIR}"
         ;;
     *)

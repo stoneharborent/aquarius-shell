@@ -60,6 +60,12 @@ binds {
     Mod+Shift+E { quit skip-confirmation=true; }
     Mod+Q { close-window; }
     Mod+T { spawn "alacritty"; }
+    // The shell's own doors, copied from session/niri/config.kdl so the nested
+    // window answers the same keys as the real session. Your desktop may take
+    // Super+L for its own lock before the nested window sees it; when it does,
+    // `qs -p . ipc call lock lock` from another terminal is the same message.
+    Mod+Space { spawn "qs" "ipc" "call" "search" "toggle"; }
+    Mod+L     { spawn "qs" "ipc" "call" "lock" "lock"; }
     Mod+Left  { focus-column-left; }
     Mod+Right { focus-column-right; }
 }

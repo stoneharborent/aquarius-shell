@@ -2253,6 +2253,41 @@ else
     pass "the login screen speaks only standard protocols"
 fi
 
+# --- Super+L has to reach the shell on BOTH compositors, and in the harness ---
+# The binding is one line, `qs ipc call lock lock`, and it has to exist in three
+# places: labwc's rc.xml, niri's config.kdl, and the harness's niri config. The
+# lock screen landed on 2026-09-06 with only the first, and niri is the default
+# compositor — so on a stock AquariusOS Super+L would have done nothing.
+for aq_lock_bind in \
+    "session/labwc/rc.xml:W-l" \
+    "session/niri/config.kdl:Mod+L" \
+    "harness/niri-nested.kdl:Mod+L"; do
+    aq_lock_file="${aq_lock_bind%%:*}"
+    aq_lock_key="${aq_lock_bind##*:}"
+    if grep -qF "${aq_lock_key}" "${aq_lock_file}" \
+       && grep -A2 -F "${aq_lock_key}" "${aq_lock_file}" | grep -qE 'qs.*ipc.*call.*lock.*lock'; then
+        pass "${aq_lock_file} binds ${aq_lock_key} to 'qs ipc call lock lock'"
+    else
+        fail "${aq_lock_file} does not bind ${aq_lock_key} to 'qs ipc call lock lock'." \
+             "Super+L is the one key everybody expects a lock screen to answer."
+    fi
+done
+
+# The harness has to hand labwc a config folder, or none of rc.xml's bindings
+# exist in the nested window — which is how the bench found the lock screen
+# "not working" on 2026-09-06 when the shell was fine.
+if grep -qE 'labwc -C ' harness/run-nested.sh; then
+    pass "harness/run-nested.sh starts labwc with a config folder (-C)"
+else
+    fail "harness/run-nested.sh starts labwc without -C, so rc.xml's bindings never load nested."
+fi
+if grep -qE '^export QS_CONFIG_PATH=' harness/run-nested.sh; then
+    pass "harness/run-nested.sh exports QS_CONFIG_PATH, so 'qs ipc' finds the nested shell"
+else
+    fail "harness/run-nested.sh does not export QS_CONFIG_PATH." \
+         "Every key binding runs 'qs ipc call', which picks the instance by that variable."
+fi
+
 # --- the singleton has to be declared, twice ----------------------------------
 # Same trap as theme/qmldir: `pragma Singleton` alone is not enough, and the
 # failure message ("GreeterState is not a type") does not mention qmldir.

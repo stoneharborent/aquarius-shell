@@ -261,6 +261,18 @@ qs -p lock/lock.qml              # inside that window
 
 It locks itself as soon as it starts, so there is something to look at.
 
+Or run the whole desktop nested and lock it the way a person would. The harness
+starts the compositor with the shell's own key bindings, so Super+L works in
+the nested window — unless the desktop you are sitting in takes the key first,
+which GNOME does (it is GNOME's own lock shortcut). Then send the same message
+by hand, from another terminal in the shell's folder:
+
+```bash
+qs -p . ipc call lock lock
+```
+
+Only the nested window locks. Your real desktop is untouched.
+
 **On a real AquariusOS machine**, it is already there — press Super+L. That key
 binding runs exactly one line, which you can also type yourself:
 

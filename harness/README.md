@@ -181,7 +181,17 @@ qs -p . ipc show
 qs -p . ipc call search open     # the Flow Search palette
 qs -p . ipc call search close
 qs -p . ipc call dock openAppGrid
+qs -p . ipc call lock lock           # the lock screen (there is no unlock call)
 ```
+
+**Super+L, Super+Space and Alt+Tab work inside the nested window** — the
+harness starts labwc with a folder generated from `session/labwc/` (as the real
+session does) and niri with `harness/niri-nested.kdl`, and both carry the
+shell's bindings. One catch: the desktop you are sitting in sees the key first.
+GNOME takes Super+L for its own lock, so pressing it may lock *your* screen and
+never reach the nested one. The `ipc call lock lock` line above is the same
+message the binding sends, and it always reaches the nested shell. Locking the
+nested session only covers the nested window; your real desktop is untouched.
 
 `qs` only talks to an instance started on the same display, so run these with
 `WAYLAND_DISPLAY` set to the NESTED session's socket (`wayland-1`, usually), not

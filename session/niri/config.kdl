@@ -34,6 +34,7 @@
 // KEY BINDINGS ADDED BY US (everything else below is stock niri)
 // -----------------------------------------------------------------------------
 //   Mod+Space   open/close the Aquarius search palette (the shell's own IPC)
+//   Mod+L       lock the screen (the shell's own IPC)
 //
 // "Mod" is niri's word for Super (the Windows/Command key) when it is running
 // as the real compositor, and Alt when it is running nested in a window. That
@@ -211,6 +212,13 @@ binds {
     //     qs ipc show
     Mod+Space hotkey-overlay-title="Aquarius Search" {
         spawn "qs" "ipc" "call" "search" "toggle";
+    }
+    // Lock the screen. Same one line as labwc's W-l in session/labwc/rc.xml:
+    // it launches nothing, it tells the running shell to lock, which is why it
+    // is instant. Missing until 2026-09-06 — the lock screen landed with the
+    // labwc binding only, and niri is the default compositor.
+    Mod+L hotkey-overlay-title="Lock Screen" {
+        spawn "qs" "ipc" "call" "lock" "lock";
     }
 
     // ---- stock niri, kept minimal on purpose ------------------------------
