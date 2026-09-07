@@ -3829,7 +3829,7 @@ echo "./harness/run-nested.sh on a Linux machine, with the log in front of you."
 # .qml file, and for every folder it imports that carries a qmldir, checks that
 # each type it uses from that folder is named there.
 echo "39. every cross-folder type is named in its folder's qmldir"
-if python3 - "$ROOT" <<'PY'
+if python3 - "$AQ_REPO_ROOT" <<'PY'
 import re, glob, os, sys
 root = sys.argv[1]; missing = []
 for f in sorted(glob.glob(os.path.join(root, '**', '*.qml'), recursive=True)):
