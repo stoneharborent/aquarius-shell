@@ -507,6 +507,44 @@ being a way to check they agree. The shell's copy is deliberately the **superset
 now. On a plain Fedora clone with no ptyxis installed the keybind is simply
 inert: labwc runs the command, the command is not there, nothing happens.
 
+### The one window rule: DaVinci Resolve opens at the size of the screen
+
+At the bottom of `rc.xml`, after the mouse bindings, is the only `<windowRules>`
+block in this session and the only place an application is named by name:
+
+```xml
+<windowRules>
+  <windowRule identifier="resolve">
+    <action name="FitToOutput" />
+    <action name="Maximize" direction="both" />
+  </windowRule>
+</windowRules>
+```
+
+DaVinci Resolve decides for itself how big its own window should be, and on a
+4K screen it sometimes decides on a window whose edges — the close button
+included — are off the display. Nothing inside Resolve fixes that; it is Resolve
+remembering a size from a screen it is no longer on. The window manager can,
+because the window manager is what places the window.
+
+`FitToOutput` shrinks a window that asked to be bigger than the screen it landed
+on, so that un-maximising it later still gives back something that fits.
+`Maximize` then fills that screen. Both run **once**, when the window first
+appears — labwc has exactly one window-rule event and it is "on first map"
+(`include/window-rules.h`, labwc 0.20.2). After that Resolve's window is yours:
+move it, resize it, put it on the other monitor, and nothing here interferes.
+
+`identifier` is the app_id for a Wayland window and the **WM_CLASS** for an X11
+one. Resolve is X11 — there is no Wayland Resolve on any Linux — and the class
+it declares is `resolve`, the same name Blackmagic's own desktop entry puts in
+`StartupWMClass`. Matching is case-insensitive and takes `*` and `?` wildcards;
+this rule uses neither, so it matches Resolve and nothing else.
+
+⚠️ **This block is mirrored in the os-image repository** at
+`system_files/usr/share/aquarius/labwc/rc.xml`, like the rest of this file.
+Change one, change both — `build_files/check-labwc-drift.sh` over there fails
+the build if they disagree.
+
 ### About Super + Tab
 
 Hold **Super** and tap **Tab** to walk forward through your open windows; add

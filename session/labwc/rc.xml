@@ -102,6 +102,13 @@
   themerc-override, written by generate-theme next to this one out of the
   shell's own palette.
 
+  =============================================================================
+  ONE WINDOW RULE
+  =============================================================================
+  DaVinci Resolve opens maximised and never larger than the screen. It is the
+  only application in this file named by name, and the long reason why is
+  written above the rule itself, at the bottom of the file.
+
   Format reference: labwc-config(5), labwc-actions(5), labwc-menu(5) and
   labwc-theme(5), all as of labwc 0.20.2.
   =============================================================================
@@ -517,5 +524,62 @@
     </context>
 
   </mouse>
+
+  <!--
+    =========================================================================
+    DaVinci RESOLVE OPENS AT THE SIZE OF THE SCREEN. Added 2026-09-08.
+    =========================================================================
+    THE PROBLEM, IN ONE SENTENCE. DaVinci Resolve decides for itself how big
+    its own window should be, and on a 4K screen it sometimes decides on a
+    window whose edges — including its close button — are off the display.
+
+    Nobody can fix that inside Resolve: it is Resolve remembering a size from
+    a machine or a screen it is no longer on. The window manager can, because
+    the window manager is what actually places the window.
+
+    WHAT THESE TWO LINES DO, in the order they happen:
+
+      FitToOutput   If Resolve asks for a window bigger than the screen it
+                    lands on, shrink it to the screen. Nothing else is
+                    touched. This is what makes "never larger than the
+                    screen" true even after somebody un-maximises the window
+                    later — un-maximising returns a window to the size it
+                    asked for, and by then that size fits.
+      Maximize      Then fill that screen, the way an application that knew
+                    about the screen would have opened in the first place.
+
+    Both run ONCE, when the window first appears (labwc has exactly one
+    window-rule event, "on first map" — include/window-rules.h in labwc
+    0.20.2). Nothing is imposed on Resolve afterwards: move it, resize it,
+    put it on the other monitor, and labwc leaves it alone from then on.
+
+    WHICH SCREEN. Maximize fills the output the window opened on, which is
+    the one the desktop put it on — the primary display on a single-screen
+    machine and the active one on a desk with two. labwc has no "primary
+    output" name to write down here, and naming a specific output (HDMI-A-1
+    and the like) would be a setting that is right on one computer and wrong
+    on every other.
+
+    HOW THE MATCH WORKS. `identifier` is the app_id for a Wayland window and
+    the WM_CLASS for an X11 one (labwc-config(5), 0.20.2). Resolve is an X11
+    program — it has no Wayland version on any Linux — and the class it
+    declares is `resolve`, which is also the name Blackmagic's own desktop
+    entry puts in StartupWMClass and the name the Aquarius Keys rules use for
+    it. Matching is case-insensitive and understands `*` and `?`; this rule
+    uses neither, so it matches Resolve and nothing else.
+
+    IF THE BENCH EVER SEES RESOLVE GROW BACK OUT of the screen after it has
+    opened, the stronger lever is the `ignoreConfigureRequest="yes"` property
+    on this same rule, which stops an X11 window moving and resizing itself
+    at all. It is deliberately NOT set here, because it would also take away
+    the legitimate times Resolve resizes its own window, and the mild fault
+    is better than the heavy-handed fix until somebody has seen the fault.
+  -->
+  <windowRules>
+    <windowRule identifier="resolve">
+      <action name="FitToOutput" />
+      <action name="Maximize" direction="both" />
+    </windowRule>
+  </windowRules>
 
 </labwc_config>
