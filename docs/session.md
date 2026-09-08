@@ -826,7 +826,25 @@ allowed to live — does the arithmetic, and writes out:
 | `rc.xml` — with three settings filled in | `~/.config/aquarius/labwc/` |
 | `menu.xml`, `autostart`, `shutdown`, `environment` | copied there unchanged |
 | the round window buttons, as SVG | `~/.local/share/themes/Aquarius/labwc/` |
-| the Midnight GTK window colour | `~/.config/gtk-4.0/gtk.css` and `gtk-3.0` |
+| the GTK window chrome, in **both** light and dark | `~/.config/gtk-4.0/gtk.css` and `gtk-3.0` |
+
+That last row is the one exception to "this project ships no GTK theme", and it
+exists because of a bench finding on 7 September 2026: GNOME's own applications
+(Files, Settings, Ptyxis, Text Editor) draw their own title bar inside the
+window, so the labwc frame built above never appears on them at all. The
+generated stylesheet gives them the window background colour, the header-bar
+colour, and the three window buttons redrawn as the same round discs labwc
+draws — deepening under the pointer, close alone going red, all of them fading
+on a window you are not in. Nothing else in GTK is touched: no text colours, no
+widget theming, not even the header bar's height. It used to be written only in
+dark mode and deleted in light; since Royce widened design rule 9 it is written
+in both, and rewritten on every flip. It never overwrites a `gtk.css` it did not
+write itself.
+
+The honest limit: that file sits in your home folder, so every GTK application
+reads it, including one started from the GNOME fallback session — harmless, but
+it keeps whichever scheme the Aquarius session wrote last rather than following
+GNOME's own light/dark switch.
 
 The files in `session/labwc/` are the **template**. `session/aquarius-session`
 runs the generator before starting labwc, and then starts labwc with the

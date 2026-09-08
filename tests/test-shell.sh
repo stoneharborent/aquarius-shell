@@ -1054,30 +1054,117 @@ PYTHON
              "$(grep -E '^window.button.width:' "${aq_ice_big}" || echo '(missing)')"
     fi
 
-    # --- the Midnight GTK exception -------------------------------------------
-    # Two properties, dark only. The file must appear for Midnight and must NOT
-    # appear for Ice — a navy window on the Ice light desktop is the same
-    # mistake in the other direction.
-    if [ -s "${aq_gen_root}/midnight-1/gtk/gtk-4.0/gtk.css" ]; then
-        pass "Midnight writes the two-property GTK colour file"
-        if grep -q "#0B1220" "${aq_gen_root}/midnight-1/gtk/gtk-4.0/gtk.css" \
-                && grep -q "#152033" "${aq_gen_root}/midnight-1/gtk/gtk-4.0/gtk.css"; then
-            pass "and it carries the Midnight window and header-bar colours"
-        else
-            fail "the Midnight GTK file does not carry Midnight's bg (#0B1220)" \
-                 "and panel (#152033) colours."
+    # --- the GTK window chrome ------------------------------------------------
+    # GNOME's own applications (Files, Settings, Ptyxis, Text Editor) draw their
+    # own title bar, so the labwc frame built above never appears on them. The
+    # one thing that can reach them is a GTK stylesheet, and generate-theme
+    # writes it: the two window colours, and the three window buttons redrawn
+    # the way labwc draws them.
+    #
+    # Since 7 September 2026 this is written in BOTH schemes. It used to be
+    # Midnight only, and to be DELETED in light mode; that is why this block no
+    # longer checks that Ice writes nothing, and no longer counts the rules.
+    for aq_pair in \
+        "ice #EAF1F8 #F0F6FC #C8463B 0.100 0.160" \
+        "midnight #0B1220 #152033 #E07B7B 0.120 0.180"
+    do
+        # shellcheck disable=SC2086
+        set -- ${aq_pair}
+        aq_scheme="$1"; aq_bg="$2"; aq_panel="$3"
+        aq_danger="$4"; aq_idle="$5"; aq_hover="$6"
+        aq_css="${aq_gen_root}/${aq_scheme}-1/gtk/gtk-4.0/gtk.css"
+
+        if [ ! -s "${aq_css}" ]; then
+            fail "the ${aq_scheme} theme wrote no GTK stylesheet, so a Files" \
+                 "window on an Aquarius desktop keeps libadwaita's own bar and" \
+                 "buttons and matches nothing around it."
+            continue
         fi
+        pass "${aq_scheme} writes the GTK window-chrome stylesheet"
+
+        if grep -qF "window { background-color: ${aq_bg}; }" "${aq_css}" \
+                && grep -qF "headerbar { background-color: ${aq_panel}; }" "${aq_css}"; then
+            pass "  and it carries ${aq_scheme}'s window (${aq_bg}) and header-bar (${aq_panel}) colours"
+        else
+            fail "the ${aq_scheme} GTK stylesheet does not carry the window" \
+                 "background ${aq_bg} and the header bar ${aq_panel}."
+        fi
+
+        # The disc, at rest. libadwaita draws the disc on the picture inside the
+        # button, so `> image` is the node that has to be coloured; a rule that
+        # named the button instead would parse fine and do nothing.
+        if grep -qF "windowcontrols > button > image {" "${aq_css}" \
+                && grep -qF ", ${aq_idle});" "${aq_css}"; then
+            pass "  the three window buttons get their ${aq_scheme} disc at rest"
+        else
+            fail "the ${aq_scheme} GTK stylesheet has no resting disc on" \
+                 "windowcontrols > button > image at opacity ${aq_idle}."
+        fi
+
+        if grep -qF "windowcontrols > button:hover > image {" "${aq_css}" \
+                && grep -qF ", ${aq_hover});" "${aq_css}"; then
+            pass "  and the disc deepens under the pointer"
+        else
+            fail "the ${aq_scheme} GTK stylesheet does not deepen the disc to" \
+                 "${aq_hover} under the pointer."
+        fi
+
+        # Only close takes colour, and it takes the theme's own danger red.
+        if grep -qF "windowcontrols > button.close:hover > image {" "${aq_css}" \
+                && grep -qF "background-color: ${aq_danger};" "${aq_css}"; then
+            pass "  and close, and only close, goes ${aq_scheme}'s danger red (${aq_danger})"
+        else
+            fail "the ${aq_scheme} GTK stylesheet does not turn the close" \
+                 "button ${aq_danger} under the pointer."
+        fi
+
+        if grep -qF "windowcontrols > button:backdrop {" "${aq_css}" \
+                && grep -qF "opacity: 0.45;" "${aq_css}"; then
+            pass "  and every button fades to 45% on a window you are not in"
+        else
+            fail "the ${aq_scheme} GTK stylesheet does not fade the window" \
+                 "buttons on an unfocused window."
+        fi
+
+        # The GTK 3 twin. Few GTK 3 applications are left, so it is checked for
+        # the same colours and the same three shapes, under GTK 3's own names.
+        aq_css3="${aq_gen_root}/${aq_scheme}-1/gtk/gtk-3.0/gtk.css"
+        if grep -qF "window { background-color: ${aq_bg}; }" "${aq_css3}" \
+                && grep -qF "headerbar button.titlebutton {" "${aq_css3}" \
+                && grep -qF "headerbar button.titlebutton.close:hover {" "${aq_css3}" \
+                && grep -qF "headerbar button.titlebutton:backdrop {" "${aq_css3}"; then
+            pass "  older GTK 3 applications get the same colours and buttons"
+        else
+            fail "the ${aq_scheme} gtk-3.0 twin is missing the colours or the" \
+                 "button.titlebutton rules."
+        fi
+    done
+
+    # The safety net: a gtk.css somebody wrote themselves is never touched, and
+    # the file this program wrote before 7 September 2026 still counts as ours,
+    # so a bench account that already has one is upgraded rather than frozen.
+    aq_marker_dir="${aq_gen_root}/markers"
+    mkdir -p "${aq_marker_dir}/gtk-4.0" "${aq_marker_dir}/gtk-3.0"
+    printf '%s\n' "/* AquariusOS Midnight — generated by generate-theme */" \
+        > "${aq_marker_dir}/gtk-4.0/gtk.css"
+    printf '%s\n' "/* somebody's own theme */" \
+        > "${aq_marker_dir}/gtk-3.0/gtk.css"
+    python3 "${aq_gen}" --quiet --scheme ice --scale 1 --buttons mac \
+        --config-out "${aq_marker_dir}/config" \
+        --theme-out "${aq_marker_dir}/theme" \
+        --gtk-out "${aq_marker_dir}" > /dev/null 2>&1 || true
+    if grep -q "windowcontrols" "${aq_marker_dir}/gtk-4.0/gtk.css"; then
+        pass "a gtk.css carrying the OLD Midnight marker is upgraded, not abandoned"
     else
-        fail "Midnight did not write the GTK colour file, so a Files window on" \
-             "a dark Aquarius desktop stays libadwaita's neutral near-black" \
-             "against navy."
+        fail "a gtk.css written by the older, Midnight-only version of this" \
+             "program was left alone. Every bench account already has one, so" \
+             "they would all keep the old two-line file for ever."
     fi
-    if [ -e "${aq_gen_root}/ice-1/gtk/gtk-4.0/gtk.css" ]; then
-        fail "the Ice theme wrote a GTK colour file. It must not: those two" \
-             "properties are Midnight's, and on a light desktop they would" \
-             "paint every GTK window navy."
+    if grep -q "somebody's own theme" "${aq_marker_dir}/gtk-3.0/gtk.css"; then
+        pass "and a gtk.css nobody here wrote is left exactly where it is"
     else
-        pass "Ice writes no GTK colour file, which is correct"
+        fail "generate-theme overwrote a gtk.css that was not ours. Somebody's" \
+             "own GTK customisation must never be thrown away."
     fi
 
     rm -rf "${aq_gen_root}"
