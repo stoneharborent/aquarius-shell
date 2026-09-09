@@ -3962,6 +3962,72 @@ PYTHON
                  "down, with what was checked to decide each."
         fi
     done
+
+    # -- Enter is TWO keys, and which one is decided by who sent it -------------
+    # Bench, 2026-09-08. Aquarius Keys has a Files-only rule that turns ⌘↓ into
+    # Enter, and the panel read that as "go to the selected app" and closed.
+    # The fix is one boolean: a key that arrives while the release-grace timer
+    # is still running was sent by the remapper (which lets go of ⌘ to send a
+    # chord), not pressed by a person. Three things have to stay true, and each
+    # of them silently un-fixes the bug on its own.
+    #
+    #   1. the flag is READ BEFORE the timer is stopped — stop() first and it is
+    #      always false, and ⌘↓ closes the panel again;
+    #   2. Enter branches on it, instead of always committing;
+    #   3. a modifier the remapper pressed for a chord is remembered, so its
+    #      release does not start a commit (this is ⌘↑, which becomes Alt+↑).
+    aq_switcher_qml="components/switcher/AppSwitcher.qml"
+
+    if python3 - "${aq_switcher_qml}" <<'PY'
+import re, sys
+text = open(sys.argv[1], encoding="utf-8").read()
+# The order of these two lines inside Keys.onPressed is the whole fix.
+read = text.find("const fromRemapper = releaseGrace.running")
+stop = text.find("releaseGrace.stop()", read if read >= 0 else 0)
+sys.exit(0 if (read >= 0 and stop > read) else 1)
+PY
+    then
+        pass "AppSwitcher.qml reads the release grace BEFORE it stops it"
+    else
+        fail "${aq_switcher_qml} does not capture 'fromRemapper' before" \
+             "calling releaseGrace.stop()." \
+             "Stopping the timer first makes the flag always false, and ⌘↓" \
+             "with Files in front closes the switcher again (bench," \
+             "2026-09-08). See docs/app-switcher.md, 'the third edge'."
+    fi
+
+    if grep -q "if (fromRemapper)" "${aq_switcher_qml}" \
+        && grep -q "root.stepDown()" "${aq_switcher_qml}"; then
+        pass "AppSwitcher.qml reads a remapped Enter as Down, not as commit"
+    else
+        fail "${aq_switcher_qml} does not branch on where Enter came from." \
+             "Aquarius Keys' Files block sends ⌘↓ as Enter; under the" \
+             "switcher that is the person pressing Down."
+    fi
+
+    if grep -q "remapperModifier" "${aq_switcher_qml}"; then
+        pass "AppSwitcher.qml ignores the release of a chord's own modifier"
+    else
+        fail "${aq_switcher_qml} no longer remembers remapperModifier." \
+             "⌘↑ in Files is sent as Alt+↑: the remapper presses Alt and lets" \
+             "it go again, and a modifier release is what this panel commits" \
+             "on. Without this the commit is only cancelled by a race."
+    fi
+
+    # -- the write-up, second half ---------------------------------------------
+    # The bench needs to be able to read WHY the switcher was fixed in the shell
+    # rather than in the keys map, because the keys map is the obvious place to
+    # look and the answer is that xremap cannot see the switcher at all.
+    for aq_phrase in "layer surface" "wlr-foreign-toplevel-management" "mac.yaml"; do
+        if grep -qF "${aq_phrase}" docs/app-switcher.md; then
+            pass "docs/app-switcher.md explains ${aq_phrase}"
+        else
+            fail "docs/app-switcher.md does not mention '${aq_phrase}'." \
+                 "The third edge (bench 2026-09-08) turns on the fact that" \
+                 "the panel is a layer surface and so is invisible to the" \
+                 "remapper's front-window question. Say so."
+        fi
+    done
 fi
 
 # -----------------------------------------------------------------------------

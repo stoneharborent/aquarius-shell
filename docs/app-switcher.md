@@ -231,6 +231,73 @@ switch, below what a hand notices; the alternative was taking ⌘↓ away from
 every document, which is the wrong trade. Windows mode is not affected —
 Alt+↓ is not remapped.
 
+### The third edge — ⌘↓ closed the panel when Files was in front (found on the bench, 2026-09-08)
+
+**What Royce saw.** He had been looking at his drives in Files. He held ⌘,
+tapped Tab, and pressed ↓ to see an app's windows — and the switcher went to
+the app and disappeared instead.
+
+**Why.** Aquarius Keys does not have one set of rules; it has a set per
+application, and a general set for everything else. There is a **Files-only**
+block, so that the two habits a Mac user has in a file manager still work:
+
+| In Files | is sent as | so that it does |
+|---|---|---|
+| ⌘↓ | `Enter` | opens the thing you have selected |
+| ⌘↑ | `Alt+↑` | goes up to the folder above |
+
+Now, **how does Aquarius Keys decide you are "in Files"?** It asks the
+compositor which window is the front one. That question is answered through a
+published protocol (`wlr-foreign-toplevel-management`), and the remapper's own
+code — `src/client/wlroots_client.rs` in the exact xremap we build, 0.15.12 —
+does two things worth knowing:
+
+* it remembers a window as "the active one" when the compositor says that
+  window has become active, **and it never forgets**. So "the current
+  application" really means "the last ordinary window that was in front".
+* **the switcher panel is not an ordinary window.** It is a *layer surface* —
+  the same kind of thing the bar and the dock are — and layer surfaces are not
+  in that list at all. The panel can never become "the current application".
+
+So with Files in front, ⌘↓ arrived at the panel as **Enter**, and Enter meant
+"go to what is selected". The panel closed. (⌘↑ was fine by luck: `Alt+↑`
+arrives as ↑, and ↑ already means up.)
+
+**What was considered, in the order the brief asked for.**
+
+* **(a) Tell the remapper to stand aside while the switcher is open.** *Not
+  possible with the remapper we ship.* xremap can be told to look at four
+  things and no others: the front window's application id, the front window's
+  title, which keyboard the key came from, and a "mode" it entered because
+  somebody pressed a key. There is no file, no socket and no command it can be
+  pointed at, so a "the switcher is open" marker on disk is invisible to it.
+  The other half of (a) — the shell putting up a real window while the panel is
+  up, so that xremap sees *us* as the front application — was rejected on three
+  counts: a real window would compete for the keyboard the panel must hold in
+  order to see ⌘ come up at all (which is the entire mechanism this switcher is
+  built on); it would show up in the switcher's own list and in the dock; and
+  when it closed, the remapper would be left pointing at a window that no
+  longer exists, with **no** current application — which switches the Files and
+  terminal rules off until you click something else.
+* **(b) Read Enter as ↓, but only in the instant after the remapper let ⌘ go.**
+  **Chosen.** The remapper always releases ⌘ microseconds before it sends the
+  chord, and a person cannot let go of ⌘ and then press Return inside a
+  sixteenth of a second. So "the sixty-millisecond grace timer is running" is
+  already a reliable way of saying *this key came from the remapper, not from a
+  hand* — and the panel has trusted exactly that since 2026-09-07 for
+  Ctrl+End. No new machinery, no new state, and it cannot mistake a deliberate
+  Return for an arrow.
+* **(c) Take `Super-Down`/`Super-Up` out of the Files block.** Not done, and
+  not recommended: it would cost a Mac habit (⌘↓ opens the selected file, ⌘↑
+  goes up a folder) in order to fix a switcher. Wrong way round. `mac.yaml` is
+  unchanged.
+
+**One more thing the same fix carries.** Since the remapper presses Alt to send
+`Alt+↑` and lets it go again two events later, the panel now remembers a
+modifier that arrived from a chord and ignores its release. Before, that
+release started a commit that was cancelled a moment later by ⌘ coming back —
+which worked, but only because the remapper is fast.
+
 ---
 
 ## What it lists, and in what order

@@ -110,6 +110,49 @@
 //   see releaseGrace beside the key handlers, which also reads Ctrl+End and
 //   Ctrl+Home as Down and Up.
 //
+//   THE THIRD EDGE, FOUND ON THE BENCH 2026-09-08: ⌘↓ CLOSED THE PANEL WHEN
+//   FILES WAS THE FRONT WINDOW. Same family as the second, one step worse, and
+//   the reasoning is written out in full in docs/app-switcher.md. In short:
+//
+//     * Aquarius Keys' mac.yaml has a Files-only block — `Super-Down: Enter`,
+//       `Super-Up: A-Up` — so that ⌘↓ opens the selected file and ⌘↑ goes up a
+//       folder, the way they do on a Mac.
+//     * xremap decides which block applies from THE ACTIVE TOPLEVEL. Read out
+//       of its own source at the pinned version (0.15.12,
+//       src/client/wlroots_client.rs): it binds wlr-foreign-toplevel-management
+//       and sets `active_window` whenever a handle reports the `Activated`
+//       state — and NEVER clears it. So "the current application" is the last
+//       toplevel that was activated, and it stays that way.
+//     * This panel is a LAYER-SHELL surface. It is not a toplevel at all, so it
+//       can never become the active one. With Files in front, ⌘↓ therefore
+//       arrived here as **Enter** — and Enter meant commit.
+//
+//   WHY THE PANEL IS FIXED HERE RATHER THAN IN THE KEYS MAP. Three ways were
+//   weighed (docs/app-switcher.md has the long version):
+//
+//     (a) tell the remapper to stand aside while the switcher is open.
+//         NOT POSSIBLE with the xremap we ship: its only matchers are the
+//         active window's application id, its title, the input device and a
+//         mode entered by a key. There is no file, socket or command it can be
+//         asked to look at, so a "switcher is open" stamp is unreadable to it.
+//         The other half of (a) — the shell owning a real toplevel while the
+//         panel is up — was rejected too: a toplevel would compete for the
+//         keyboard focus this panel needs in order to see the modifier come up
+//         at all, would appear in the switcher's own list and in the dock, and
+//         when it closed xremap would be left pointing at a dead handle with no
+//         active application, which turns the Files and terminal blocks off
+//         until something else is clicked.
+//     (b) READ Enter AS DOWN, BUT ONLY WHILE THE RELEASE GRACE IS RUNNING —
+//         chosen, and it is what the code below does. The remapper always lets
+//         go of Command microseconds before it sends the chord, so a genuine
+//         Return pressed by a person is never preceded by a modifier release.
+//         That is the SAME discriminator the panel has trusted since 2026-09-07
+//         for Ctrl+End; this adds no new mechanism and no new state.
+//     (c) remove the two Files remaps. That costs a Mac habit to fix a
+//         switcher, which is backwards. Not done, and not recommended.
+//
+//   ⌘↑ needed nothing: `A-Up` arrives as Alt then Up, and Up already means up.
+//
 // =============================================================================
 // TWO PROFILES, ONE PANEL
 // =============================================================================
@@ -159,6 +202,13 @@ Scope {
     // The Mac profile's Down-arrow list: is it showing, and which line of it.
     property bool expanded: false
     property int expandedIndex: 0
+
+    // A modifier key that ARRIVED FROM THE REMAPPER as part of a chord, and
+    // whose release therefore has to be ignored (0 = none). Aquarius Keys turns
+    // ⌘↑ into `A-Up` in Files, which means it presses Alt, taps Up and lets Alt
+    // go again — and a modifier release is what this panel commits on. See the
+    // two key handlers near the bottom of this file.
+    property int remapperModifier: 0
 
     // See the long note in components/search/FlowSearch.qml about Exclusive
     // versus OnDemand. Turn this off if Exclusive misbehaves on the bench — but
@@ -323,6 +373,9 @@ Scope {
         root.isOpen = false;
         root.expanded = false;
         root.expandedIndex = 0;
+        // Nothing about the last chord survives into the next time the panel
+        // opens; the surface and its keyboard grab are torn down here.
+        root.remapperModifier = 0;
         root.closed();
     }
 
@@ -545,6 +598,22 @@ Scope {
             //   after the release. A key press means the person is still
             //   driving the panel, whatever the modifier said a moment ago.
             Keys.onPressed: event => {
+                // ⚠️ READ THIS BEFORE THE SWITCH BELOW.
+                //   `releaseGrace` is running for exactly one reason: the
+                //   modifier came up within the last sixty milliseconds and
+                //   nothing has arrived since. A person cannot produce that —
+                //   letting go of Command and then pressing a key inside a
+                //   sixteenth of a second is not a thing hands do. Aquarius
+                //   Keys produces it on every single remapped chord, because
+                //   sending one means releasing Command, tapping the key, and
+                //   putting Command back (xremap's send_key_press_and_release).
+                //
+                //   So this one boolean is "the key about to arrive was sent by
+                //   the remapper, not pressed by the person". It is read BEFORE
+                //   the timer is stopped, because stopping it is also what keeps
+                //   the panel open.
+                const fromRemapper = releaseGrace.running;
+
                 releaseGrace.stop();
                 switch (event.key) {
                 case Qt.Key_Escape:
@@ -566,19 +635,47 @@ Scope {
                     root.stepUp();
                     event.accepted = true;
                     break;
-                // The modifier coming back down while a commit is pending:
-                // Aquarius Keys "resurrecting" Command after its chord. Not a
-                // new press by the person, so nothing to do — the stop() above
-                // already kept the panel open.
+                // A modifier coming down while a commit is pending is one of
+                // two things, and both are the remapper, not the person:
+                //
+                //   the SAME modifier   Aquarius Keys "resurrecting" Command
+                //                       after its chord. Nothing to do — the
+                //                       stop() above already kept the panel
+                //                       open.
+                //   a DIFFERENT one     the chord's own modifier. ⌘↑ in Files
+                //                       becomes `A-Up`, so Alt is pressed here
+                //                       and released again two events later.
+                //                       That release must NOT be read as the
+                //                       person letting go, so the key is
+                //                       remembered and its release swallowed.
+                //                       See Keys.onReleased below.
                 case Qt.Key_Meta:
                 case Qt.Key_Super_L:
                 case Qt.Key_Super_R:
                 case Qt.Key_Alt:
+                    if (fromRemapper)
+                        root.remapperModifier = event.key;
                     event.accepted = true;
                     break;
+                // ENTER MEANS TWO DIFFERENT THINGS, AND WHICH ONE IS DECIDED
+                // BY WHO SENT IT. Bench, 2026-09-08 — the third rough edge at
+                // the top of this file.
+                //
+                //   from the remapper  it is ⌘↓ with Files in front, which
+                //                      Aquarius Keys turns into Enter. Under
+                //                      the switcher that is the person pressing
+                //                      Down, so it opens the window row.
+                //   from a person      Return on a switcher that is up means
+                //                      "this one" — go there and close.
+                //
+                // Nothing else in this panel wants Enter, so there is no third
+                // case to get wrong.
                 case Qt.Key_Return:
                 case Qt.Key_Enter:
-                    root.commit();
+                    if (fromRemapper)
+                        root.stepDown();
+                    else
+                        root.commit();
                     event.accepted = true;
                     break;
                 default:
@@ -606,6 +703,14 @@ Scope {
                 case Qt.Key_Super_L:
                 case Qt.Key_Super_R:
                 case Qt.Key_Alt:
+                    // The remapper putting down the modifier it picked up for a
+                    // chord — see the note in Keys.onPressed. Not a person
+                    // letting go, so no commit is started.
+                    if (root.remapperModifier === event.key) {
+                        root.remapperModifier = 0;
+                        event.accepted = true;
+                        break;
+                    }
                     releaseGrace.restart();
                     event.accepted = true;
                     break;
