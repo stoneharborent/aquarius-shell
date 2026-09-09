@@ -876,13 +876,124 @@ draws — deepening under the pointer, close alone going red, all of them fading
 on a window you are not in. Nothing else in GTK is touched: no text colours, no
 widget theming, not even the header bar's height. It used to be written only in
 dark mode and deleted in light; since Royce widened design rule 9 it is written
-in both, and rewritten on every flip. It never overwrites a `gtk.css` it did not
-write itself.
+in both, and rewritten on every flip.
 
 The honest limit: that file sits in your home folder, so every GTK application
 reads it, including one started from the GNOME fallback session — harmless, but
 it keeps whichever scheme the Aquarius session wrote last rather than following
 GNOME's own light/dark switch.
+
+#### "It never overwrites a file it did not write" — and what that cost
+
+That rule is right and it is not going away. On 8 September 2026 it also cost a
+whole bench finding, and the way it did is worth understanding.
+
+Royce looked at a GNOME window and reported two things: **the minimise line was
+at the bottom of its circle instead of in the middle, and the close button did
+not turn red under the pointer.** Both are exactly what libadwaita's own stock
+buttons look like — which is the point. Our stylesheet was never written.
+
+`~/.config/gtk-4.0/gtk.css` on that machine was two lines, dated 30 August:
+
+```css
+@import 'colors.css';
+@import 'kde_window_geometry.css';
+```
+
+left behind by **Bazzite's KDE integration**, months before, along with a Breeze
+`colors.css`, a `kde_window_geometry.css` and a `settings.ini` that still said
+`gtk-icon-theme-name=breeze-dark` and `gtk-cursor-theme-name=breeze_cursors`.
+The generator saw a file it had not written, declined, and said so through the
+channel the shell silences with `--quiet`. So it said it to nobody, and what
+reached Royce was "the window buttons in your design are wrong".
+
+**Three things changed.**
+
+1. **It always says what it did.** One plain sentence, on stderr, whether it
+   wrote, moved something aside, or declined — and `--quiet` cannot silence it.
+   The shell collects the generator's stderr into the session log, so:
+
+   ```bash
+   grep generate-theme ~/.local/state/aquarius-session/session.log
+   ```
+
+   now answers "why do my window buttons look wrong" in one line.
+
+2. **A file that is plainly another program's output may be replaced** — once,
+   keeping the original beside it as `gtk.css.before-aquarius`. The test for
+   "another program's output" is deliberately narrow, and it is worth stating
+   exactly, because the whole safety of this turns on it: the file counts only
+   when **everything in it, once the comments are gone, is an `@import` of a
+   file sitting beside it that carries Breeze's own fingerprints** (`_breeze`
+   colour names, or the Libadwaita-Breeze header comment). A stylesheet a
+   *person* wrote has rules in it, not only imports, so it can never match. If
+   anything at all is unrecognised — an import of a file we cannot check, a
+   single real rule — the file is treated as yours and left exactly where it is,
+   and the log says so.
+
+3. **`settings.ini` stopped fighting us.** This is the part worth reading twice.
+
+#### The four `settings.ini` keys the session owns, and why only four
+
+`~/.config/gtk-3.0/settings.ini` and `gtk-4.0/settings.ini` are where GTK reads
+its defaults, and **libadwaita reads them too**. Four of those keys are answers
+to questions the Aquarius session has already answered somewhere else, and a
+stale value in this file is a straight contradiction:
+
+| Key | What the session says | Where it decided |
+|---|---|---|
+| `gtk-icon-theme-name` | `Aquarius-Ice` or `Aquarius-Midnight` | follows the light/dark flip |
+| `gtk-cursor-theme-name` | `Adwaita` | AquariusOS ships no cursor set of its own yet |
+| `gtk-decoration-layout` | buttons left in Mac mode, right in Windows mode | `aq keys`, once, at first login |
+| `gtk-application-prefer-dark-theme` | true on Midnight, false on Ice | follows the light/dark flip |
+
+Those four are rewritten. **Everything else in the file is left exactly as it
+was** — your font, your cursor blink, your animation setting, your toolbar
+style. The original is kept once as `settings.ini.before-aquarius`.
+
+Two questions this raises, answered rather than left:
+
+* **Why touch it at all, if GTK 4 reads the settings portal anyway?** Because
+  GTK **3** does not. It has no settings portal; `settings.ini` is the only
+  thing it reads. So a stale `breeze-dark` in there gives every GTK 3
+  application the wrong icons for ever, whatever gsettings says. It also
+  matters to a GTK 4 application started before the portal is up.
+* **What if the file has no KDE fingerprint and still disagrees with us?**
+  Then it is somebody's own preference and it is **left alone**, with a line in
+  the log saying so. The session's answers are still in gsettings, which GTK 4
+  prefers; a person who has hand-edited `settings.ini` has said something and is
+  entitled to be listened to.
+
+#### The icons follow light and dark now too
+
+Both icon themes ship — `Aquarius-Ice` and `Aquarius-Midnight` — and until now
+the machine was set to Ice always. The generator now sets
+`org.gnome.desktop.interface icon-theme` to match the scheme, at login and on
+every flip, and **only if that theme is actually installed** (pointing GTK at a
+theme that is not there is how a desktop ends up with no icons at all).
+
+One honest gap: **the shell's own icons do not follow until the next login.**
+Quickshell is told which icon theme to draw from by `QS_ICON_THEME`, read once
+when it starts, and there is no way to change that in a running instance. So a
+flip to dark gives GTK applications the Midnight icons straight away and leaves
+the dock on the Ice ones until you log back in. The alternative would be
+restarting the shell out from under somebody, which is worse.
+
+#### The minimise line, and why the stylesheet draws it itself
+
+The other half of what Royce reported. Our stylesheet colours the round disc but
+the *glyph* inside it belongs to the icon theme, and the one GNOME applications
+use — Adwaita's `window-minimize-symbolic` — is a bar sitting **low** in its box
+(`m 4 10.007812 h 8 v 1.988282 h -8 z` in a 16-pixel square: centred at 11 where
+the middle is 8). Design rule 9 says the middle, and that is what labwc draws on
+every other window.
+
+It cannot be swapped for our own picture: GTK's `-gtk-icon-source` is honoured
+only by GTK's own built-in icon nodes, never by the image a window button uses.
+So the stylesheet turns the glyph off — `color: transparent`, which is the same
+channel that already turns the X white on a red close button — and draws the
+line itself, centred, as a plain background image. The emitted stylesheet was
+loaded into a real GTK 4 on the bench and parses with no errors.
 
 The files in `session/labwc/` are the **template**. `session/aquarius-session`
 runs the generator before starting labwc, and then starts labwc with the

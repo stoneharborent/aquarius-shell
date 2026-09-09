@@ -1167,6 +1167,131 @@ PYTHON
              "own GTK customisation must never be thrown away."
     fi
 
+    # -------------------------------------------------------------------------
+    # The KDE leftovers, which cost the bench run of 8 September 2026
+    # -------------------------------------------------------------------------
+    # `~/.config/gtk-4.0/gtk.css` on the bench was two lines Bazzite's KDE
+    # integration had written in August:
+    #
+    #     @import 'colors.css';
+    #     @import 'kde_window_geometry.css';
+    #
+    # So the generator declined, correctly by its old rule — and said so only
+    # through report(), which --quiet silences, so it said it to nobody. Royce
+    # saw libadwaita's stock buttons and reported them as a bug in our design.
+    #
+    # These fixtures are the exact files that were on that machine. What has to
+    # be true: a program's leftovers are rescued and replaced, a person's file
+    # is not touched, the same folder run twice keeps the FIRST rescued copy,
+    # and the four settings.ini keys the session owns are corrected while
+    # everything else in that file is left alone.
+    aq_breeze="${aq_gen_root}/breeze"
+    mkdir -p "${aq_breeze}/gtk-4.0" "${aq_breeze}/gtk-3.0"
+    printf "@import 'colors.css';\n@import 'kde_window_geometry.css';\n" \
+        > "${aq_breeze}/gtk-4.0/gtk.css"
+    printf '@define-color borders_breeze #404149;\n' \
+        > "${aq_breeze}/gtk-4.0/colors.css"
+    printf '/* trimmed down version of Libadwaita-Breeze-Dark */\n' \
+        > "${aq_breeze}/gtk-4.0/kde_window_geometry.css"
+    printf '%s\n' '[Settings]' 'gtk-cursor-blink=true' \
+        'gtk-cursor-theme-name=breeze_cursors' \
+        'gtk-decoration-layout=icon:minimize,maximize,close' \
+        'gtk-font-name=Inter,  10' 'gtk-icon-theme-name=breeze-dark' \
+        'gtk-modules=colorreload-gtk-module' \
+        > "${aq_breeze}/gtk-4.0/settings.ini"
+    # A person's own stylesheet, in the GTK 3 folder, to prove the difference.
+    printf 'headerbar { background: pink; }\n' > "${aq_breeze}/gtk-3.0/gtk.css"
+
+    aq_breeze_said="$(python3 "${aq_gen}" --quiet --scheme midnight --scale 1 \
+        --buttons mac \
+        --config-out "${aq_breeze}/config" --theme-out "${aq_breeze}/theme" \
+        --gtk-out "${aq_breeze}" 2>&1 >/dev/null || true)"
+
+    if grep -q "windowcontrols" "${aq_breeze}/gtk-4.0/gtk.css"; then
+        pass "Plasma's own gtk.css is recognised and replaced with ours"
+    else
+        fail "generate-theme still refuses to replace Plasma's gtk.css." \
+             "Two lines of @import that name Breeze's own files are a" \
+             "program's output, not somebody's customisation, and leaving" \
+             "them means GNOME windows keep libadwaita's stock buttons."
+    fi
+
+    if [ -f "${aq_breeze}/gtk-4.0/gtk.css${aq_rescue_suffix:-.before-aquarius}" ]; then
+        pass "  and the file it replaced is kept beside it"
+    else
+        fail "generate-theme replaced Plasma's gtk.css without keeping a copy." \
+             "Anything moved aside is kept once, as <name>.before-aquarius."
+    fi
+
+    if grep -q "background: pink" "${aq_breeze}/gtk-3.0/gtk.css"; then
+        pass "  while a stylesheet somebody wrote is still left alone"
+    else
+        fail "generate-theme overwrote a hand-written gtk.css. The rescue is" \
+             "only ever for a file whose whole content is imports of files" \
+             "that carry another program's fingerprints."
+    fi
+
+    # It must SAY what it did, on stderr, even under --quiet. That channel is
+    # the whole reason the bench could not see the refusal.
+    if printf '%s' "${aq_breeze_said}" | grep -q "generate-theme:"; then
+        pass "  and it says what it did on stderr, even with --quiet"
+    else
+        fail "generate-theme said nothing about the GTK files under --quiet." \
+             "The shell runs it quietly on every light/dark flip and collects" \
+             "its stderr into the session log; a refusal nobody hears is" \
+             "indistinguishable from a bug (bench, 2026-09-08)."
+    fi
+
+    # The four keys the session owns, corrected; everything else untouched.
+    if grep -q '^gtk-icon-theme-name=Aquarius-Midnight$' "${aq_breeze}/gtk-4.0/settings.ini" \
+       && grep -q '^gtk-decoration-layout=close,minimize,maximize:$' "${aq_breeze}/gtk-4.0/settings.ini" \
+       && ! grep -q 'breeze' "${aq_breeze}/gtk-4.0/settings.ini"; then
+        pass "  the settings.ini keys that fight the session are corrected"
+    else
+        fail "generate-theme left a KDE-era settings.ini fighting us." \
+             "libadwaita reads gtk-icon-theme-name, gtk-cursor-theme-name and" \
+             "gtk-decoration-layout from it, and GTK 3 reads nothing else at" \
+             "all — it has no settings portal."
+    fi
+
+    if grep -q '^gtk-font-name=Inter,  10$' "${aq_breeze}/gtk-4.0/settings.ini" \
+       && grep -q '^gtk-cursor-blink=true$' "${aq_breeze}/gtk-4.0/settings.ini"; then
+        pass "  and everything else in that file is left exactly as it was"
+    else
+        fail "generate-theme rewrote more of settings.ini than the four keys" \
+             "the session owns. Somebody's font and their cursor blink are" \
+             "theirs."
+    fi
+
+    # Twice in a row must not lose the original.
+    cp "${aq_breeze}/gtk-4.0/gtk.css.before-aquarius" "${aq_breeze}/first-rescue"
+    python3 "${aq_gen}" --quiet --scheme ice --scale 1 --buttons windows \
+        --config-out "${aq_breeze}/config" --theme-out "${aq_breeze}/theme" \
+        --gtk-out "${aq_breeze}" > /dev/null 2>&1 || true
+    if cmp -s "${aq_breeze}/first-rescue" "${aq_breeze}/gtk-4.0/gtk.css.before-aquarius"; then
+        pass "  running it again keeps the FIRST rescued copy, not the second"
+    else
+        fail "generate-theme overwrote its own rescued copy on the second run." \
+             "The thing worth keeping is what was there before AquariusOS."
+    fi
+
+    # And the minimise line has to be in the MIDDLE of the disc — design rule 9,
+    # and the other half of what Royce reported on 8 September. The glyph GNOME
+    # applications draw is Adwaita's, which sits low in its box, so the
+    # stylesheet turns it off and draws the line itself.
+    aq_min_css="${aq_breeze}/gtk-4.0/gtk.css"
+    if grep -qF "windowcontrols > button.minimize > image {" "${aq_min_css}" \
+       && grep -A6 -F "windowcontrols > button.minimize > image {" "${aq_min_css}" \
+            | grep -qF "background-position: center;"; then
+        pass "  the minimise line is drawn centred, not left to Adwaita's glyph"
+    else
+        fail "the GTK stylesheet no longer centres the minimise line." \
+             "Adwaita's window-minimize-symbolic is a bar LOW in its box, so a" \
+             "GNOME window would show the line at the bottom of the disc —" \
+             "which is exactly what the bench reported on 2026-09-08. Design" \
+             "rule 9 says the middle."
+    fi
+
     rm -rf "${aq_gen_root}"
     trap - EXIT
 fi
