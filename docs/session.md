@@ -1080,17 +1080,26 @@ lock screen?" with no way to ask:
 qs ipc call theme status
 ```
 
-It prints four lines: what the portal last said, whether the shell is Ice or
-Midnight **and why**, which wallpaper the lock screen would draw, and whether
-this session has a window-frame generator to run when the theme flips. If those
-say dark and the screen still looks light, the thing you are looking at is
-something the shell does not draw — read the next section.
+It prints five lines: what the portal last said, whether the shell is Ice or
+Midnight **and why**, which wallpaper the lock screen would draw, whether this
+session has a window-frame generator to run when the theme flips, and whether it
+has a wallpaper setter to tell about the flip. If those say dark and the screen
+still looks light, the thing you are looking at is something the shell does not
+draw — read the next section.
 
-### The wallpaper does not follow light and dark — and the shell cannot fix it
+### The wallpaper, and the two halves that make it follow light and dark
 
-**What you see.** Flip the machine to dark. The bar goes navy, the dock goes
-navy, the menus go navy — and the picture behind them stays the pale Ice
-"Pour". Both pictures ship; only one is ever shown.
+> **State, 8 September 2026: the shell's half is written and tested.** It runs
+> the program named in `$AQ_WALLPAPER_SETTER` with one word — `ice` or
+> `midnight` — every time the theme flips, and does nothing at all when that
+> variable is unset. The session's half (`/usr/libexec/aquarius-wallpaper` and
+> the export in `aquarius-session`) is being written in the `os-image`
+> repository, and until it lands nothing happens, which is correct rather than
+> broken. `harness/wallpaper-check.sh` proves the shell's half on its own.
+
+**What you saw before it.** Flip the machine to dark. The bar goes navy, the
+dock goes navy, the menus go navy — and the picture behind them stays the pale
+Ice "Pour". Both pictures ship; only one is ever shown.
 
 **Why.** The wallpaper is not drawn by the shell. It is drawn by `swaybg`,
 which the session's `labwc/autostart` starts **once**, at login, naming the Ice
@@ -1123,26 +1132,55 @@ invent the interface.
    `auto`, at the same point in the file. That alone fixes *login* — the
    picture is right for the theme the machine is already in.
 
-3. **The shell tells it when the theme changes.** The shell already has this
-   exact seam for the window frames: `services/SystemAppearance.qml` runs the
-   program named in `$AQ_FRAME_GENERATOR` every time light/dark flips, and does
-   nothing at all when that variable is unset (the harness, or somebody running
-   the shell on their own desktop). The wallpaper wants the same shape:
+3. **The shell tells it when the theme changes — ✅ written, 2026-09-08.** The
+   shell already had this exact seam for the window frames:
+   `services/SystemAppearance.qml` runs the program named in
+   `$AQ_FRAME_GENERATOR` every time light/dark flips, and does nothing at all
+   when that variable is unset. The wallpaper is the same shape, beside it:
 
    | | |
    |---|---|
-   | Variable | `AQ_WALLPAPER_SETTER`, exported by `session/aquarius-session` beside `AQ_FRAME_GENERATOR` |
-   | The shell runs | `$AQ_WALLPAPER_SETTER <ice\|midnight>` on every flip, fire-and-forget |
+   | Variable | `AQ_WALLPAPER_SETTER`, to be exported by `aquarius-session` beside `AQ_FRAME_GENERATOR` |
+   | The shell runs | `$AQ_WALLPAPER_SETTER <ice\|midnight>`, fire-and-forget |
+   | When | on a **flip** — not on the portal's first answer; see below |
    | If unset | nothing happens, and that is correct — there is no Aquarius wallpaper to swap |
-   | If it fails | one line in the log; the desktop is otherwise fine |
+   | If it fails | one line in the log; the desktop keeps the picture it had |
 
-   The shell half is four lines beside `frameProc` and is **not written yet**,
-   deliberately: adding a call to a program that does not exist would be a
-   failure logged on every flip. Write the program first; the shell change goes
-   in with it.
+   **Why on a flip and not at login as well.** The window frames are rebuilt on
+   the portal's first answer too, and that is fine because nobody can see it
+   happen. Restarting `swaybg` *is* visible — the desktop blinks — and step 2
+   above has already put the right picture up before the shell even starts. So
+   the shell speaks only when the answer **changes**.
 
-Until all three exist, "dark" means everything except the picture, and
-`qs ipc call theme status` will tell you the shell is right.
+   **Which word it sends, and where it gets it.** `ice` or `midnight`: the
+   palettes' own names, and the same two words `generate-theme --scheme` takes.
+   One vocabulary for "which look is on". It follows the **portal**, not
+   `Theme.dark`, exactly as `generate-theme` does when it runs at login with no
+   shell to ask. The honest consequence, written in the code as well: the day a
+   Settings panel can pin the theme by hand, the frames and the wallpaper will
+   follow the system and the shell will not, and all three have to change
+   together.
+
+Until the session's half lands, "dark" still means everything except the
+picture, and `qs ipc call theme status` will tell you so — its `desktop` line
+names the setter, or says there is not one.
+
+**Testing the shell's half without any of the rest of it.** There is a check
+that starts the real shell in an invisible window manager, replaces `gdbus`
+with a script that says "light" and then, three seconds later, prints exactly
+the line a real `gdbus monitor` prints when somebody turns the machine dark,
+and puts a fake wallpaper setter on the PATH that writes down what it was asked
+for:
+
+```bash
+./harness/wallpaper-check.sh
+```
+
+It proves three things: the setter is called, it is called with `midnight`, and
+it is called exactly once. Then it runs the shell again with
+`AQ_WALLPAPER_SETTER` unset and proves nothing is run at all.
+`tests/test-shell.sh` section 44 runs it on any machine that can, and says so
+and skips on any machine that cannot.
 
 ---
 

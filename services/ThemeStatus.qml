@@ -91,6 +91,16 @@ Scope {
                             + "an Aquarius session) — window frames do not follow"
                           : SystemAppearance.frameGenerator));
 
+            // The desktop's own picture, which belongs to swaybg and not to us.
+            // If this says there is no setter, a dark machine keeps a light
+            // desktop and the shell is not at fault — read docs/session.md.
+            lines.push("desktop    : "
+                       + (SystemAppearance.wallpaperSetter === ""
+                          ? "no wallpaper setter in this session — the desktop "
+                            + "picture does not follow the theme"
+                          : SystemAppearance.wallpaperSetter + " "
+                            + SystemAppearance.schemeName));
+
             return lines.join("\n");
         }
 

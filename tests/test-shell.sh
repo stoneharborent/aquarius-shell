@@ -4473,6 +4473,110 @@ if [ "${aq_console_log}" -eq 0 ]; then
     pass "no QML file writes to console.log, which this Quickshell throws away"
 fi
 
+# -----------------------------------------------------------------------------
+# 44. The desktop's wallpaper follows light and dark
+# -----------------------------------------------------------------------------
+# The last piece of "the machine went dark" that was still visibly wrong. The
+# bar, the dock, the menus, the window frames and the lock screen all follow;
+# the picture behind them did not, because it is put up by `swaybg`, started
+# once by the session at login, and nothing re-ran it. On the bench that read as
+# "the flip to dark didn't carry over" — twice.
+#
+# The fix is a contract in two halves (docs/session.md): the session ships a
+# small program that puts the right picture up, and the shell runs it, with one
+# word, every time the theme flips. This section is the shell's half.
+#
+# The static checks below hold anywhere, including on a Mac. The REAL proof —
+# start the shell, make it go dark, and see what it ran — is
+# harness/wallpaper-check.sh, and it is run from here on a machine that can.
+echo ""
+echo "=== 44. the desktop wallpaper follows light and dark ==="
+
+aq_appearance="services/SystemAppearance.qml"
+
+if grep -qF 'Quickshell.env("AQ_WALLPAPER_SETTER")' "${aq_appearance}"; then
+    pass "SystemAppearance.qml reads AQ_WALLPAPER_SETTER"
+else
+    fail "${aq_appearance} does not read AQ_WALLPAPER_SETTER." \
+         "That is the session's half of the wallpaper contract: the name of" \
+         "the program that puts the right picture up. Without it a machine" \
+         "flipped to dark keeps a light desktop behind a dark bar. See" \
+         "docs/session.md."
+fi
+
+# Doing nothing when there is nobody to tell is half the contract. A shell that
+# called a missing program would log a failure on every flip, for ever.
+if grep -qF 'if (root.wallpaperSetter === "")' "${aq_appearance}"; then
+    pass "  and does nothing at all when it is unset"
+else
+    fail "${aq_appearance} does not guard on an empty AQ_WALLPAPER_SETTER." \
+         "The harness, somebody's own desktop, and any image whose session" \
+         "half has not landed yet all have no setter, and in all three the" \
+         "right thing to do is nothing."
+fi
+
+# The word has to be the palette's own name — the same two words
+# `generate-theme --scheme` takes — or the session cannot know which picture to
+# put up, and there would be two vocabularies for one question.
+if grep -qF '"midnight" : "ice"' "${aq_appearance}"; then
+    pass "  and asks for it by the palette's own name: midnight or ice"
+else
+    fail "${aq_appearance} no longer names the schemes 'midnight' and 'ice'." \
+         "Those are the palettes' own names (theme/Midnight.qml,"  \
+         "theme/Ice.qml) and the two words generate-theme --scheme takes." \
+         "One vocabulary, so nothing outside QML is told twice."
+fi
+
+# It runs on a FLIP, not on the portal's first answer: the session has already
+# put the right picture up before the shell starts, and restarting swaybg for
+# nothing makes the desktop blink.
+if grep -qE '^\s*if \(flipped\)' "${aq_appearance}"; then
+    pass "  and only on a flip, so the desktop does not blink at login"
+else
+    fail "${aq_appearance} does not run the setter on a flip specifically." \
+         "The window frames run on the portal's FIRST answer too, and that is" \
+         "fine because rebuilding them is invisible. Restarting swaybg is" \
+         "not: the desktop blinks. The session's autostart has already put" \
+         "the right picture up by the time the shell starts."
+fi
+
+if grep -qF "AQ_WALLPAPER_SETTER" docs/session.md; then
+    pass "  and the whole contract is written down in docs/session.md"
+else
+    fail "docs/session.md no longer describes the wallpaper contract." \
+         "Two repositories have to agree about one environment variable and" \
+         "one word; that agreement has to be written somewhere a person can" \
+         "read."
+fi
+
+# -- and now the real thing, where the machine can run it ---------------------
+aq_wallpaper_check="harness/wallpaper-check.sh"
+
+if [ ! -x "${aq_wallpaper_check}" ]; then
+    fail "${aq_wallpaper_check} is missing or not executable." \
+         "The static checks above read the file; only that script actually" \
+         "starts the shell, makes it go dark and sees what it ran."
+elif [ "$(uname -s)" != "Linux" ]; then
+    echo "  note   this is not Linux, so the shell cannot be started here."
+    echo "         CI runs harness/wallpaper-check.sh; see the load job."
+elif ! command -v qs > /dev/null 2>&1; then
+    echo "  note   qs is not on this machine, so the shell cannot be started."
+    echo "         CI runs harness/wallpaper-check.sh; see the load job."
+elif ! command -v labwc > /dev/null 2>&1 \
+        && ! command -v sway > /dev/null 2>&1 \
+        && ! command -v cage > /dev/null 2>&1; then
+    echo "  note   no window manager here, so the shell cannot be started."
+    echo "         CI runs harness/wallpaper-check.sh; see the load job."
+else
+    if ./"${aq_wallpaper_check}" > "${TMPDIR:-/tmp}/aq-wallpaper-check.log" 2>&1; then
+        pass "and the shell really does ask for it — harness/wallpaper-check.sh"
+    else
+        fail "harness/wallpaper-check.sh failed. What it said:" \
+             "$(sed 's/^/  /' "${TMPDIR:-/tmp}/aq-wallpaper-check.log" | tail -20)"
+    fi
+    rm -f "${TMPDIR:-/tmp}/aq-wallpaper-check.log"
+fi
+
 # ------------------------------------------------------------------------------
 echo ""
 if [ "${aq_failures}" -ne 0 ]; then

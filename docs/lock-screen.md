@@ -426,6 +426,7 @@ theme      : Midnight (dark)
              because: the system asked for it
 wallpaper  : /usr/share/backgrounds/aquarius/the-pour-midnight-3840x2160.png
 frames     : /usr/share/aquarius/labwc/generate-theme
+desktop    : /usr/libexec/aquarius-wallpaper midnight
 ```
 
 Read it top to bottom. If `system` says the portal never answered, the fault is

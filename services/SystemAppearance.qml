@@ -64,6 +64,12 @@
 //   This file owns the question "what does the system prefer". It does not own
 //   the answer "which palette is in force" — that is Theme.qml's job, because
 //   Theme.qml is also where a future manual override in Settings would live.
+//
+//   It DOES own telling the two things outside QML that cannot follow a QML
+//   binding: the window frames, which belong to labwc, and the wallpaper, which
+//   belongs to swaybg. Both are the same shape — a program named by an
+//   environment variable, run fire-and-forget, doing nothing at all when the
+//   variable is unset — and both are written out at length further down.
 // =============================================================================
 pragma Singleton
 
@@ -160,6 +166,13 @@ Singleton {
     function acceptScheme(value, source) {
         const changed = root.colorScheme !== value || !root.available;
 
+        // ⚠️ A FLIP IS NOT THE SAME AS THE FIRST ANSWER, and two things below
+        //   need to tell them apart. `changed` is true the very first time the
+        //   portal speaks, because until then we had nothing. `flipped` is true
+        //   only when we already had an answer and it is now a different one —
+        //   which is what a person means by "I flipped it to dark".
+        const flipped = root.available && root.colorScheme !== value;
+
         root.colorScheme = value;
         root.available = true;
         root.status = "following the system (" + source + ")";
@@ -170,7 +183,37 @@ Singleton {
         // for. See the long note beside frameProc.
         if (changed)
             root.rebuildWindowFrames();
+
+        // And neither is the WALLPAPER. See the long note beside
+        // wallpaperProc — including why this one is `flipped` and the line
+        // above it is `changed`.
+        if (flipped)
+            root.followWallpaper();
     }
+
+    // =========================================================================
+    // WHICH LOOK IS ON, AS ONE WORD
+    // =========================================================================
+    // "ice" or "midnight" — the two names the palettes have (theme/Ice.qml,
+    // theme/Midnight.qml) and the same two words `generate-theme --scheme`
+    // takes. One vocabulary, so that nothing outside QML has to be told twice.
+    //
+    // ⚠️ IT FOLLOWS THE PORTAL, NOT Theme.dark, and that is deliberate and
+    //   worth understanding. `Theme.dark` is a writable property: assigning to
+    //   it (from a future Settings panel) breaks the binding and pins the
+    //   theme by hand. Everything outside QML that has to follow the look —
+    //   the window frames, and now the wallpaper — asks the SYSTEM instead,
+    //   because that is what generate-theme already does when it runs at login
+    //   with no shell to ask (`ask_the_portal()` in session/labwc/generate-
+    //   theme). Two answers to one question would be worse than one answer
+    //   that is occasionally overridden.
+    //
+    //   The honest consequence: the day a Settings panel can pin the theme by
+    //   hand, the frames and the wallpaper will follow the system and the shell
+    //   will not, and all three have to be changed together. Written here
+    //   because that is the day somebody will be looking at this line.
+    readonly property string schemeName:
+        (root.available && root.prefersDark) ? "midnight" : "ice"
 
     // =========================================================================
     // THE WINDOW FRAMES, WHICH THE SHELL DOES NOT DRAW
@@ -240,6 +283,89 @@ Singleton {
                 console.info("aquarius-shell: window frames — could not rebuild "
                             + "them (exit " + exitCode + "). The title bars keep "
                             + "the theme they had until the next login.");
+        }
+    }
+
+    // =========================================================================
+    // THE WALLPAPER, WHICH THE SHELL DOES NOT DRAW EITHER
+    // =========================================================================
+    // WHAT WAS WRONG. Flip the machine to dark and the bar, the dock and the
+    // menus all go navy — and the picture behind them stays the pale Ice Pour.
+    // Both pictures ship; only one was ever shown. Bench, 2026-09-07 and again
+    // 2026-09-08, where it is the most likely thing behind "the flip to dark
+    // didn't carry over".
+    //
+    // WHY THE SHELL CANNOT JUST DRAW IT. The wallpaper is put up by `swaybg`,
+    // started once by the session at login. That is a good decision and it is
+    // not changing: a wallpaper drawn by a separate program survives the shell
+    // crashing, so a bad night's work on the bar can never leave somebody
+    // staring at a black screen. The cost is that nothing re-runs it.
+    //
+    // SO THE SESSION OWNS THE PICTURE AND THE SHELL OWNS THE NEWS. This is the
+    // second half of a contract whose first half lives in the os-image
+    // repository, and the whole of it is written out in plain language in
+    // docs/session.md:
+    //
+    //   the session ships   /usr/libexec/aquarius-wallpaper <ice|midnight|auto>
+    //                       — it stops the swaybg it started before and starts
+    //                         a new one with the right picture
+    //   autostart calls it  with `auto` at login, so the picture is already
+    //                       right for the theme the machine is in
+    //   the shell calls it  here, with one word, every time the theme FLIPS
+    //
+    // ⚠️ WHY THIS RUNS ON A FLIP AND THE WINDOW FRAMES RUN ON THE FIRST ANSWER
+    //   TOO. Because the session has already put the right picture up by the
+    //   time the shell starts — `autostart` runs the setter before it runs
+    //   `qs`. Calling it again a second later would restart swaybg for no
+    //   reason, and a swaybg restart is VISIBLE: the desktop blinks. The window
+    //   frames have no such flash, and generate-theme at login is cheap, so
+    //   that one stays as it was.
+    //
+    // IF IT FAILS, THE DESKTOP IS FINE. The picture simply stays as it was
+    // until the next login. A cosmetic step must never be able to take the
+    // desktop down, so this is fire-and-forget with one sentence in the log
+    // and nothing else — the same shape, and the same rule, as the frames.
+    //
+    // Unset means "not an Aquarius session" — the nested harness, somebody
+    // running the shell on their own desktop, or an image whose session half of
+    // this contract has not landed yet. Then NOTHING happens, which is exactly
+    // right: there is no Aquarius wallpaper to swap, and calling a program that
+    // is not there would be a failure logged on every flip for ever.
+    readonly property string wallpaperSetter: Quickshell.env("AQ_WALLPAPER_SETTER") || ""
+
+    function followWallpaper() {
+        if (root.wallpaperSetter === "")
+            return;
+
+        // The command is assigned rather than bound because the word in it
+        // changes with the theme, and a binding that updates a property of a
+        // process while that process is running is a question nobody should
+        // have to answer. Set it, then start it.
+        wallpaperProc.running = false;
+        wallpaperProc.command = [root.wallpaperSetter, root.schemeName];
+        wallpaperProc.running = true;
+    }
+
+    Process {
+        id: wallpaperProc
+        running: false
+        command: []
+
+        // Kept only so that a failure can say what the program complained
+        // about. On an ordinary run it is empty: the setter writes its own
+        // sentence into the session log.
+        stderr: StdioCollector { }
+
+        onExited: function (exitCode) {
+            if (exitCode === 0)
+                return;
+
+            const said = wallpaperProc.stderr.text.trim();
+            console.info("aquarius-shell: wallpaper — could not swap it (exit "
+                         + exitCode + ")"
+                         + (said === "" ? "" : ": " + said)
+                         + ". The picture keeps the theme it had until the next "
+                         + "login.");
         }
     }
 

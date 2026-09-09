@@ -566,6 +566,74 @@ cost an extra three minutes.
 
 ---
 
+## The wallpaper check — the first one that makes something *happen*
+
+`load-check.sh` asks one question: does the shell start. `wallpaper-check.sh`,
+beside it, is a different kind of check and the first of its kind here — it
+starts the real shell and then **makes something happen to it**, and reads what
+the shell did about it.
+
+```bash
+./harness/wallpaper-check.sh
+```
+
+### What it is for
+
+The wallpaper is the one part of "the desktop follows the theme" that the shell
+does not draw. `swaybg` puts the picture up, started once by the session at
+login, and nothing re-runs it — so a machine flipped to dark had a navy bar, a
+navy dock and a *pale* picture behind them. On the bench that read as "the flip
+to dark didn't carry over", twice.
+
+The fix is a contract in two halves (`../docs/session.md`): the session ships a
+small program that puts the right picture up, and the shell runs it, with one
+word, every time the theme flips. This check is the shell's half, proved on its
+own — the session's half lives in the `os-image` repository and does not have to
+exist for this to run.
+
+### The two fakes, and why faking is honest here
+
+**A fake wallpaper setter.** A script on the PATH that writes down what it was
+called with. That is the whole point: we are not testing that `swaybg` works, we
+are testing that the shell asks for the right thing.
+
+**A fake `gdbus`.** This one is more interesting. The shell asks the appearance
+portal whether the machine is light or dark by running `gdbus`, and hears about
+*changes* by leaving a `gdbus monitor` running and reading its output a line at
+a time. A build machine has no portal at all — and even this bench PC has only
+one, belonging to a person who is using it, so flipping the real setting to run
+a test would change the desktop somebody is sitting at.
+
+So `gdbus` is replaced by a script that answers "light" once and then, three
+seconds later, prints exactly the line a real `gdbus monitor` prints when
+somebody turns the machine dark. Everything after that is the real shell doing
+the real thing.
+
+> ⚠️ **That makes this a test of the parser too, deliberately.** The line the
+> fake prints was copied from a real `gdbus monitor` on the bench — colons,
+> quotes, brackets and all. "The shell is not hearing the change" was one of the
+> two suspects behind the lock-screen report of 8 September 2026, and there was
+> no way to test it. Now there is: change how that line is read and this check
+> goes red.
+
+### What it proves, and what it does not
+
+It proves the setter is called, that it is called with `midnight` and not some
+other word, and that it is called **once** — the session has already put the
+right picture up before the shell starts, and restarting `swaybg` for nothing
+makes the desktop blink. Then it runs the shell again with
+`AQ_WALLPAPER_SETTER` unset and proves nothing is run at all.
+
+It does **not** prove the picture changes. That is
+`/usr/libexec/aquarius-wallpaper`'s job, it lives in the other repository, and
+it is the bench's to look at.
+
+`tests/test-shell.sh` section 44 runs this on any machine that can (Linux, `qs`,
+and one of labwc/sway/cage) and says so and skips on any machine that cannot —
+so it is green on the Mac without pretending it checked anything.
+
+---
+
 ## What this harness is *not*
 
 It is **not** the AquariusOS desktop. It is a window with a small desktop in it,
