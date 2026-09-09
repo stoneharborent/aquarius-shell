@@ -192,6 +192,55 @@ health check is the net under that. A username containing characters a URL has t
 escape would fail the read-back comparison and leave the list empty, which fails
 safe rather than wrong.
 
+### It was finally tested, 8 September 2026 — and it works
+
+The bench list of 8 September said *"drives appear in Files but not in the
+dock"*, and the open question was the one this whole section is about: does the
+chain notice a folder that is created **after** the shell has started? On the
+bench that is exactly what happens — the shell starts at login and `/run/media`
+does not exist until the first drive is plugged in, a minute later.
+
+Nobody could test it, because making `/run/media/<you>` appear on demand needs
+root, and a test that needs root is a test that never runs. So the chain can now
+be pointed at a folder anybody can create:
+
+```bash
+AQ_MEDIA_ROOT=/tmp/fake/media/tester ./harness/run-nested.sh
+```
+
+Everything then behaves exactly as it does on a real machine: the grandparent is
+watched, the parent is watched, and the drives are the subfolders. The recipe,
+step by step, is in [`../harness/README.md`](../harness/README.md). On a real
+login the variable is unset and the folder is `/run/media/<you>`; the Aquarius
+session sets it nowhere.
+
+**What was measured**, with the shell running in an invisible labwc on the bench
+PC and screenshots of the real dock at each step:
+
+| Step | The dock drew |
+|---|---|
+| nothing mounted | no separator, no tiles — the right end of the dock is simply not there |
+| the media folders appear (udisks making them for the first mount) | still nothing; there are no drives yet |
+| one drive mounted | the hairline separator, then one tile |
+| a second drive | separator, then two tiles |
+| both unmounted | back to no separator and no tiles |
+| the folders removed again | unchanged — nothing |
+
+Every step landed within about a second, and it behaved the same whether the
+folders existed before the shell started or appeared afterwards. Pointed at the
+**real** `/run/media/rorobeckley` in the live session — where the shell had
+started a minute before the first drive was plugged in — it listed both mounted
+volumes, and a screenshot of the running dock showed both tiles.
+
+**So the dock was already drawing the drives.** What is easy to miss is what a
+drive tile looks like: a small, quiet, line-drawn mark with **no label under
+it**. Two of them at the right-hand end of a dock read as "two empty squares"
+rather than "my two drives" — especially next to the app icons, which are all
+full-colour artwork. That is a design question and it is left open here rather
+than answered quietly: the honest options are a label under the tile, the
+volume's own icon where the drive has one, or nothing at all on the grounds that
+hovering already names it. **Royce's call.**
+
 ---
 
 ## The pinned list

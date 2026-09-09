@@ -234,6 +234,51 @@ click left` will do it from a script.
 > other way, that grey rectangle in your screenshot is the overview, not a bug
 > in the shell.
 
+### Testing the drives at the right end of the dock
+
+The dock shows one tile per external drive that is plugged in and mounted. It
+finds them by watching the folder udisks2 mounts removable drives into —
+`/run/media/<your name>` — and the thing that is hard to test is that **that
+folder does not exist most of the time**. udisks2 creates it when the first
+drive is mounted and removes it again after the last one is unmounted, so on a
+real machine the shell almost always starts with it missing and has to notice it
+appearing later.
+
+You cannot make `/run/media/somebody` appear on demand without being root. So
+the dock can be pointed at a folder you *can* create:
+
+```bash
+AQ_MEDIA_ROOT=/tmp/fake/media/tester ./harness/run-nested.sh
+```
+
+Then, from another terminal, be udisks2 by hand:
+
+```bash
+mkdir -p /tmp/fake/media/tester            # the first mount creates the folders
+mkdir "/tmp/fake/media/tester/My Drive"    # a drive appears
+mkdir "/tmp/fake/media/tester/Backup"      # and another
+rmdir "/tmp/fake/media/tester/My Drive"    # unplugged
+rmdir "/tmp/fake/media/tester/Backup"
+rmdir /tmp/fake/media/tester /tmp/fake/media   # the last one is unmounted
+```
+
+Watch the right-hand end of the dock after each line. A tile should appear
+within about a second, and the hairline separator before the tiles should only
+be there while there is at least one.
+
+Two rules about the path you give it:
+
+* it has to be **at least two folders deep** (`…/media/tester`), because the
+  dock watches the folder, its parent and its grandparent — that is what makes
+  it notice the middle one being created;
+* the **grandparent must already exist** when the shell starts (`/tmp/fake` in
+  the example, which `mkdir -p` above makes). On a real machine that is `/run`,
+  which always exists. Why any of this matters is the long note at the top of
+  `components/dock/DockDrives.qml`.
+
+Unset the variable and you are back to the real thing: `/run/media/<you>`,
+which is what every actual login uses.
+
 ### Testing notifications
 
 The shell wants to BE the machine's notification daemon, and only one program per

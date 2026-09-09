@@ -2970,22 +2970,48 @@ aq_drives_code="$(sed -E 's,//.*,,' components/dock/DockDrives.qml)"
 # contains "//" and the comment stripper would cut the path in half. They match
 # the property declarations rather than a loose mention, so a path named in prose
 # cannot stand in for the real thing.
-if grep -qE 'runRoot:[[:space:]]*"file:///run"' components/dock/DockDrives.qml; then
-    pass "DockDrives.qml starts from /run, which always exists"
+# Since 2026-09-08 the three levels are DERIVED from one path rather than
+# written out three times, so that the whole chain can be pointed at a folder a
+# test is allowed to create (see AQ_MEDIA_ROOT below). What has to stay true is
+# that the real default is still /run/media/<user> and that the two levels above
+# it are still watched rather than assumed.
+if grep -qE 'return "/run/media/" \+ root\.user' components/dock/DockDrives.qml; then
+    pass "DockDrives.qml still defaults to /run/media/<user>"
 else
-    fail "components/dock/DockDrives.qml no longer watches file:///run." \
-         "That is the one directory a FolderListModel may be pointed at" \
-         "unconditionally, and the whole chain hangs off what it sees."
+    fail "components/dock/DockDrives.qml no longer defaults to" \
+         "/run/media/<user>. That is where udisks2 mounts this user's" \
+         "removable drives, and its subfolders ARE the list."
 fi
 
-if grep -qE 'mediaBase:[[:space:]]*"file:///run/media"' \
-        components/dock/DockDrives.qml; then
-    pass "DockDrives.qml watches the mount root as its own level"
+if grep -qF 'root.parentOf(root.mediaRootPath)' components/dock/DockDrives.qml \
+   && grep -qF 'root.parentOf(root.mediaBasePath)' components/dock/DockDrives.qml; then
+    pass "DockDrives.qml watches the mount root's parent and grandparent"
 else
-    fail "components/dock/DockDrives.qml no longer names file:///run/media as a" \
-         "level of its own. /run/media is created by udisks2 on the first mount" \
-         "and removed after the last unmount, so it has to be watched rather" \
-         "than assumed."
+    fail "components/dock/DockDrives.qml no longer derives the two levels" \
+         "above the mount root. /run/media is created by udisks2 on the first" \
+         "mount and removed after the last unmount, so it has to be watched" \
+         "rather than assumed — and its own parent is what makes that" \
+         "possible."
+fi
+
+# The override is the only way any of this can be tested without root, and a
+# test that needs root is a test that never runs. It has to exist, and it has to
+# be written down where somebody at a bench will find it.
+if grep -qF 'AQ_MEDIA_ROOT' components/dock/DockDrives.qml; then
+    pass "DockDrives.qml can be pointed at a test folder (AQ_MEDIA_ROOT)"
+else
+    fail "components/dock/DockDrives.qml has no AQ_MEDIA_ROOT override." \
+         "Making /run/media/<user> appear on demand needs root, so without" \
+         "this the one thing this file exists to get right — a directory that" \
+         "appears AFTER the shell starts — cannot be checked by anybody."
+fi
+
+if grep -qF 'AQ_MEDIA_ROOT' harness/README.md \
+   && grep -qF 'AQ_MEDIA_ROOT' docs/dock.md; then
+    pass "AQ_MEDIA_ROOT is written up in the harness README and docs/dock.md"
+else
+    fail "AQ_MEDIA_ROOT is not explained in both harness/README.md and" \
+         "docs/dock.md. An undocumented test knob is a knob nobody turns."
 fi
 
 # The two lower models are built from Components by Loaders, which is the only

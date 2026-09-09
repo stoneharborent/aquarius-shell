@@ -118,6 +118,30 @@
 // catches the fallback, because the fallback works by writing a different value
 // into that very property.
 //
+// DOES ANY OF THAT ACTUALLY WORK? YES — MEASURED, 8 SEPTEMBER 2026.
+//   The bench list on 2026-09-08 said "drives appear in Files but not in the
+//   dock", and the open question was the one this file is built around: does
+//   the chain notice a directory that is created AFTER the shell has started?
+//   On the bench PC, on the shipped Quickshell and Qt, with the shell running
+//   in an invisible labwc:
+//
+//     * pointed at a temporary folder, with the two levels underneath created
+//       one at a time while it ran: level 2 came alive when its folder
+//       appeared, level 3 when its folder appeared, a "drive" folder became a
+//       tile, removing it emptied the list, and removing the folders unbuilt
+//       the whole chain again. Every step within about a second.
+//     * pointed at the real /run/media/rorobeckley, in the live session — where
+//       the shell had started a minute BEFORE the first drive was plugged in —
+//       it listed both mounted volumes, and a screenshot of the running dock
+//       showed both tiles with the separator before them.
+//
+//   So the chain was already right and the dock was already drawing the drives.
+//   What is easy to miss, and probably what was missed, is that a drive tile is
+//   a quiet line-drawn mark with no label under it — two of them at the right
+//   end of the dock read as "two empty squares" rather than "my two drives".
+//   That is a design question, not a broken feature, and it is written up in
+//   docs/dock.md rather than silently changed here.
+//
 // WHAT AN HONEST READING OF THE GUARD IS. The existence checks re-run whenever
 // the listing above them changes size, which is what happens when a directory is
 // created or removed. A directory swapped for another in the same instant, with
@@ -149,7 +173,7 @@ Row {
 
     spacing: Theme.dockGap
 
-    // ---- the three directories, named once -----------------------------------
+    // ---- the three directories, worked out from ONE path ----------------------
     // The current user, for building the /run/media/<user> path. udisks2 mounts
     // per user under their own name.
     readonly property string user: {
@@ -157,20 +181,86 @@ Row {
         return (u === null || u === undefined) ? "" : String(u);
     }
 
-    // Level 1. /run exists on every running Linux system — it is a tmpfs the
-    // init system mounts before anything else — so a model pointed here cannot
-    // take the fallback described in the header.
-    readonly property string runRoot: "file:///run"
+    // THE ONE PATH EVERYTHING ELSE IS DERIVED FROM: the folder udisks2 puts this
+    // user's removable drives in. Its subfolders ARE the drives.
+    //
+    // ⚠️ AQ_MEDIA_ROOT — why a shell has an override for a system path at all.
+    //   The trap this file is built around (read the header) is about a
+    //   directory that does not exist when the shell starts and appears later,
+    //   and NOBODY COULD TEST THAT. Making /run/media/<user> appear on demand
+    //   needs root, and a check that needs root is a check that never runs. So
+    //   the whole chain can be pointed somewhere a test CAN create and remove
+    //   directories in:
+    //
+    //       AQ_MEDIA_ROOT=/tmp/fake/media/somebody  qs -p .
+    //
+    //   Everything below then works exactly as it does on a real machine: the
+    //   grandparent is watched, the parent is watched, and the drives are the
+    //   subfolders. The recipe is in harness/README.md.
+    //
+    //   Unset — which is every real login — means /run/media/<user>, and the
+    //   Aquarius session sets it nowhere.
+    readonly property string mediaRootPath: {
+        const override = Quickshell.env("AQ_MEDIA_ROOT");
+        if (override !== null && override !== undefined && String(override) !== "")
+            return root.withoutTrailingSlash(String(override));
+        if (root.user === "")
+            return "";
+        return "/run/media/" + root.user;
+    }
 
-    // Level 2. Created by udisks2 when it first needs it; removed again when the
-    // last removable volume is unmounted.
-    readonly property string mediaBase: "file:///run/media"
+    // Level 2's path: the folder the one above sits in. On a real machine that
+    // is /run/media, which udisks2 creates when it mounts the first removable
+    // volume and removes again after the last one is unmounted.
+    readonly property string mediaBasePath: root.parentOf(root.mediaRootPath)
 
-    // Level 3, the real one. The udisks2 removable-mount root for THIS user, as
-    // a file URL. Empty when there is no USER in the environment, which leaves
-    // the chain unbuilt and shows nothing rather than guessing.
-    readonly property string mediaRoot:
-        root.user === "" ? "" : root.mediaBase + "/" + root.user
+    // Level 1's path: /run on a real machine. It exists on every running Linux
+    // system — it is a tmpfs the init system mounts before anything else — so a
+    // model pointed here cannot take the fallback described in the header.
+    //
+    // ⚠️ WHATEVER AQ_MEDIA_ROOT NAMES, ITS GRANDPARENT MUST ALREADY EXIST when
+    //   the shell starts, for exactly that reason. A test creates it first and
+    //   then makes the two levels underneath it appear.
+    readonly property string runRootPath: root.parentOf(root.mediaBasePath)
+
+    // The two NAMES the chain looks for in the listing above it.
+    readonly property string mediaBaseName: root.baseNameOf(root.mediaBasePath)
+    readonly property string mediaRootName: root.baseNameOf(root.mediaRootPath)
+
+    // The same three as file URLs, which is what FolderListModel wants. Empty
+    // when the path is empty, which leaves that level of the chain unbuilt and
+    // shows nothing rather than guessing.
+    readonly property string runRoot: root.asUrl(root.runRootPath)
+    readonly property string mediaBase: root.asUrl(root.mediaBasePath)
+    readonly property string mediaRoot: root.asUrl(root.mediaRootPath)
+
+    // ---- taking a path apart --------------------------------------------------
+    // Deliberately plain string work rather than anything clever: this runs
+    // before the first tile is drawn and a wrong answer here shows somebody
+    // their home directory (see the header).
+    //
+    // A path with no "/" in it after the first character has no parent worth
+    // watching, and that returns "" — which unbuilds the chain and draws
+    // nothing, which is the safe end of the trade.
+    function parentOf(path): string {
+        const s = String(path);
+        const cut = s.lastIndexOf("/");
+        if (cut <= 0)
+            return "";
+        return s.slice(0, cut);
+    }
+
+    function baseNameOf(path): string {
+        const s = String(path);
+        const cut = s.lastIndexOf("/");
+        if (cut < 0)
+            return s;
+        return s.slice(cut + 1);
+    }
+
+    function asUrl(path): string {
+        return String(path) === "" ? "" : "file://" + String(path);
+    }
 
     // ---- the two questions the chain asks ------------------------------------
 
@@ -249,7 +339,7 @@ Row {
         id: mediaLoader
 
         visible: false
-        active: root.listingHas(runDir, "media")
+        active: root.runRoot !== "" && root.listingHas(runDir, root.mediaBaseName)
         sourceComponent: mediaDirComponent
     }
 
@@ -288,7 +378,7 @@ Row {
                 && mediaLoader.item !== null
                 && mediaLoader.item !== undefined
                 && mediaLoader.item.healthy === true
-                && root.listingHas(mediaLoader.item, root.user)
+                && root.listingHas(mediaLoader.item, root.mediaRootName)
         sourceComponent: driveModelComponent
     }
 
