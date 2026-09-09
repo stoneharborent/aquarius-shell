@@ -4320,6 +4320,67 @@ if [ "${aq_wallpaper_copies}" -eq 0 ]; then
     pass "no QML file carries a second copy of a wallpaper path"
 fi
 
+# -----------------------------------------------------------------------------
+# 42. Where a window opens, and what happens to DaVinci Resolve
+# -----------------------------------------------------------------------------
+# Bench, 2026-09-08: Resolve's window "cannot be moved or resized" and its
+# loading splash "opened top-left, not centred". Both were one window rule that
+# ran Maximize on first map — a maximised labwc window is pinned until somebody
+# un-maximises it, and a Maximize on a fixed-size splash moves it to the corner
+# of the maximised geometry without resizing it.
+#
+# Royce's call was a NORMAL window. These checks keep it that way.
+echo ""
+echo "=== 42. new windows open centred, and Resolve is a normal window ==="
+
+aq_rc="session/labwc/rc.xml"
+
+if grep -qF "<policy>center</policy>" "${aq_rc}"; then
+    pass "rc.xml opens new windows in the middle of the screen"
+else
+    fail "${aq_rc} has no <placement><policy>center</policy>." \
+         "labwc's own default is 'cascade' — each new window a little down" \
+         "and to the right of the last. Centring is the Mac behaviour, and" \
+         "it is also the ONLY way to centre Resolve: labwc 0.20.2 has no" \
+         "Center action (it answers 'Invalid action: Center')."
+fi
+
+if grep -qF '<windowRule identifier="resolve">' "${aq_rc}"; then
+    pass "rc.xml still has a rule for DaVinci Resolve"
+
+    aq_resolve_rule="$(python3 - "${aq_rc}" <<'PY'
+import re, sys
+text = open(sys.argv[1], encoding="utf-8").read()
+# Only what is INSIDE the rule — the long comment above it names Maximize on
+# purpose, as the history of why it is gone.
+match = re.search(r'<windowRule identifier="resolve">(.*?)</windowRule>',
+                  text, re.DOTALL)
+sys.stdout.write(match.group(1) if match else "")
+PY
+)"
+
+    if printf '%s' "${aq_resolve_rule}" | grep -qF 'name="FitToOutput"'; then
+        pass "  and it still shrinks Resolve to the screen if it asks for more"
+    else
+        fail "${aq_rc}'s Resolve rule no longer runs FitToOutput." \
+             "Resolve remembers a window size from whatever machine it last" \
+             "ran on, and on a 4K screen that has put its close button off" \
+             "the display."
+    fi
+
+    if printf '%s' "${aq_resolve_rule}" | grep -qF 'name="Maximize"'; then
+        fail "${aq_rc}'s Resolve rule maximises the window again." \
+             "A maximised labwc window cannot be moved or resized until it is" \
+             "un-maximised, and the same rule catches Resolve's splash and" \
+             "puts it in the top-left corner. Royce asked for a normal" \
+             "window (bench, 2026-09-08)."
+    else
+        pass "  and it does NOT maximise it, so the window can be moved"
+    fi
+else
+    fail "${aq_rc} no longer has a windowRule for DaVinci Resolve."
+fi
+
 # ------------------------------------------------------------------------------
 echo ""
 if [ "${aq_failures}" -ne 0 ]; then
