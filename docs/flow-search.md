@@ -53,6 +53,71 @@ actions"**, and it grows when the providers do.
 | **Settings** | Not built | Needs a settings app. |
 | Web | Never | Not a provider. |
 
+### An app installed while you are logged in shows up on its own
+
+**The question, from the bench on 8 September 2026.** Royce installed DaVinci
+Resolve, and afterwards it "is not in the app search" and had no dock icon. The
+entries were written at 16:34; the shell had started at 16:25. So: does
+`DesktopEntries` notice a `.desktop` file that appears *after* the shell is
+running, or does it read the folder once at start-up and never look again?
+
+**It notices.** Measured on the bench PC, on the shipped Quickshell 0.3.1, with
+the shell running in an invisible labwc:
+
+| What was done while the shell was running | What happened |
+|---|---|
+| a new `.desktop` written into `~/.local/share/applications` | it appeared in the index within about two seconds |
+| its `Name=` edited in place | the new name appeared, same file, no restart |
+| the file deleted | it left the index again |
+
+So nothing needed building, and this is written down so nobody builds a
+directory watcher we do not need. **Anybody can repeat it** — start the shell,
+then in another terminal:
+
+```bash
+cat > ~/.local/share/applications/aq-probe.desktop <<'EOF'
+[Desktop Entry]
+Type=Application
+Name=Aquarius Probe App
+Exec=/bin/true
+Icon=utilities-terminal
+EOF
+```
+
+Open the palette and type "probe". It is there. Delete the file and it is gone.
+
+**So why was Resolve not in the search?** Most likely it was simply looked for
+before the entries were written — the installer writes them at the very end. The
+part that was genuinely broken is the *dock icon*, and that is a different
+mechanism; see below.
+
+### The dock icon, and the one string it turns on
+
+A window tells the compositor what it is with a short name — for DaVinci
+Resolve, which is an X11 program, that is its `WM_CLASS`, and the class it
+declares is `resolve`. The dock has to get from that string to the menu entry
+that carries the name and the artwork, and it does that through
+`services/AppIdentity.qml`, which asks Quickshell to match the window's name
+against every entry's **`StartupWMClass`**.
+
+What was actually on the bench machine, in
+`aquarius-resolve-com.blackmagicdesign.resolve.desktop`:
+
+```
+StartupWMClass=/usr/share/applications/com.blackmagicdesign.resolve.desktop
+```
+
+A **file path**, not a class name — `distrobox-export`'s raw output. Nothing can
+match a window called `resolve` to that, so the dock had no name and no icon for
+Resolve, exactly as reported.
+
+The repair belongs in the `os-image` repository, which owns the installer, and
+it is one line: `StartupWMClass=resolve`. **That it is enough was checked from
+this side**, on the bench, rather than assumed: with an entry carrying
+`StartupWMClass=resolve` written while the shell was running, the shell's lookup
+found it immediately, from both `resolve` and `Resolve` — Quickshell matches the
+class exactly and then case-insensitively.
+
 ### Why files is not here
 
 A file provider is four lines of QML if you are willing to lie about it: run

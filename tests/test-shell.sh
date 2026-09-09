@@ -4335,6 +4335,32 @@ echo "=== 42. new windows open centred, and Resolve is a normal window ==="
 
 aq_rc="session/labwc/rc.xml"
 
+# -- one lookup, and the one string it turns on -------------------------------
+# Bench, 2026-09-08: Resolve had no dock icon and no name, because the menu
+# entry distrobox-export wrote carried a FILE PATH in StartupWMClass instead of
+# the window class. os-image repairs the entry; this side has to keep asking the
+# question that reads it. `heuristicLookup` is the only call that consults
+# StartupWMClass at all — swap it for byId() and the repair stops working with
+# nothing to show for it.
+if grep -qF "DesktopEntries.heuristicLookup" services/AppIdentity.qml; then
+    pass "AppIdentity still matches a window through StartupWMClass"
+else
+    fail "services/AppIdentity.qml no longer calls heuristicLookup." \
+         "That is the only lookup that consults an entry's StartupWMClass," \
+         "and StartupWMClass is the only thing that connects an X11 window" \
+         "calling itself 'resolve' to DaVinci Resolve's menu entry."
+fi
+
+if grep -qF "StartupWMClass" docs/dock.md \
+   && grep -qF "StartupWMClass" docs/flow-search.md; then
+    pass "  and both docs say what was measured about it on the bench"
+else
+    fail "docs/dock.md and docs/flow-search.md should both record what was" \
+         "found on 2026-09-08: the index DOES pick up a .desktop file written" \
+         "after the shell started, and the dock icon turned on one wrong" \
+         "StartupWMClass line."
+fi
+
 if grep -qF "<policy>center</policy>" "${aq_rc}"; then
     pass "rc.xml opens new windows in the middle of the screen"
 else

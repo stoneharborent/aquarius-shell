@@ -687,6 +687,25 @@ An id, incidentally, never carries the `.desktop` ending: quickshell builds it
 from the file's base name. That is why `DockModel.pinnedEntry()` strips it before
 falling back to `byId()`.
 
+**When it goes wrong, it is almost always the entry, not the lookup.** DaVinci
+Resolve on the bench, 8 September 2026, is the worked example: no icon, no name,
+its own anonymous tile. Its window calls itself `resolve`, and the menu entry
+`distrobox-export` had written said
+
+```
+StartupWMClass=/usr/share/applications/com.blackmagicdesign.resolve.desktop
+```
+
+— a file path where a class name belongs. Nothing could match those two.
+
+The repair is one line in the `os-image` repository, which owns the installer:
+`StartupWMClass=resolve`. That it is enough was checked from this side rather
+than assumed — an entry carrying it, written while the shell was already
+running, was found by the lookup within a couple of seconds, from `resolve` and
+from `Resolve`. (And yes, the index **does** pick up a `.desktop` file written
+after the shell started; that was measured too. See
+[`flow-search.md`](flow-search.md).)
+
 ### Rearranging the dock — drag a pinned app
 
 Press a pinned app and carry it left or right; the other pinned apps step aside,
