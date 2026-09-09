@@ -141,7 +141,7 @@ Scope {
 
     onCoveredChanged: {
         if (root.covered)
-            console.log("aquarius-lock: the compositor confirms every screen is covered");
+            console.info("aquarius-lock: the compositor confirms every screen is covered");
     }
 
     // ==========================================================================

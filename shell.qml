@@ -45,7 +45,7 @@ ShellRoot {
         // here so the shell has one observable place where that happens. See
         // docs/quick-settings.md.
         onQuickSettingsToggled: nowOpen =>
-            console.log("aquarius-shell: quick settings", nowOpen ? "opened" : "closed")
+            console.info("aquarius-shell: quick settings", nowOpen ? "opened" : "closed")
     }
 
     Dock {

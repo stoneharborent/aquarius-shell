@@ -36,6 +36,9 @@
 import QtQuick
 
 import Quickshell
+// Process, for the one file this window writes: the "the login screen has
+// drawn" stamp the boot animation waits on. See announceReady() below.
+import Quickshell.Io
 import Quickshell.Wayland
 
 import "."
@@ -78,6 +81,88 @@ PanelWindow {
     Component.onCompleted: {
         if (root.primary && this.WlrLayershell !== null)
             this.WlrLayershell.keyboardFocus = WlrKeyboardFocus.Exclusive;
+    }
+
+    // =========================================================================
+    // "THE LOGIN SCREEN HAS DRAWN" — the one thing the rest of the boot waits on
+    // =========================================================================
+    // WHY ANYTHING OUTSIDE THIS FILE CARES
+    //
+    //   A computer booting AquariusOS shows the Aquarius boot animation, drawn
+    //   by a program called Plymouth. Somebody has to tell Plymouth to let go of
+    //   the screen — and the moment to do it is not "when the login manager
+    //   starts", it is "when the login screen has actually painted something".
+    //   Let go any earlier and the screen goes to the text console for a second
+    //   or two on the way, which is exactly the "no terminals or text during
+    //   boot" Royce asked for the opposite of.
+    //
+    //   GNOME's own login screen does this, and this is the same handshake: the
+    //   greeter touches a file when it has drawn, and the session watches for
+    //   that file and then runs `plymouth quit --retain-splash`, which hands the
+    //   screen over with the last frame of the animation still on it.
+    //
+    // THE FILE, AND WHY IT IS IN A FOLDER RATHER THAN LOOSE IN /run
+    //
+    //       /run/aquarius-greeter/ready
+    //
+    //   /run itself belongs to root, and the login screen does not run as root —
+    //   it runs as greetd's own unprivileged user. So `greetd.service` makes
+    //   /run/aquarius-greeter/ first, owned by that user, and this writes inside
+    //   it. (An earlier draft of the contract used /run/aquarius-greeter-ready,
+    //   loose in /run, which could never have been written. The watchdog accepts
+    //   both; this writes the one that works.) The full contract is in the
+    //   os-image repository, docs/restart/greeter-debug.md, and the plain
+    //   version is in docs/greeter.md.
+    //
+    // WHEN IT IS WRITTEN
+    //
+    //   On the primary screen only — there is one login screen even on a desk
+    //   with three monitors — one turn of the event loop after the window is
+    //   really visible. That is the same pattern, and the same reason, as the
+    //   keyboard grab above: the surface has to exist before anything can be
+    //   said about it.
+    //
+    // IF IT FAILS, NOTHING BREAKS. Somebody running this shell on their own
+    // desktop, or in the harness, has no /run/aquarius-greeter and cannot make
+    // one; the touch fails, one sentence goes into the log, and the login screen
+    // carries on exactly as before. The worst that happens on a real machine is
+    // that the boot animation is dismissed by the watchdog's timeout instead of
+    // by us — a second of plainness, not a failure to log in. A login screen may
+    // never be taken down by a piece of housekeeping.
+    readonly property string readyStamp:
+        Quickshell.env("AQ_GREETER_READY_STAMP") || "/run/aquarius-greeter/ready"
+
+    property bool readyAnnounced: false
+
+    function announceReady(): void {
+        if (root.readyAnnounced || !root.primary || root.readyStamp === "")
+            return;
+        root.readyAnnounced = true;
+        readyProc.running = true;
+    }
+
+    // ⚠️ The stamp is announced from the ONE onVisibleChanged handler at the
+    //   bottom of this file, not from a second one here. QML allows exactly one
+    //   handler per signal on an object, and a second is not a warning — it is
+    //   "Property value set multiple times" and the whole login screen fails to
+    //   load. Found the moment this was written; see docs/greeter.md.
+
+    Process {
+        id: readyProc
+        running: false
+        command: ["touch", root.readyStamp]
+
+        onExited: function (exitCode) {
+            if (exitCode === 0)
+                console.info("aquarius-greeter: drawn; touched "
+                            + root.readyStamp + " so the boot animation can "
+                            + "hand the screen over.");
+            else
+                console.info("aquarius-greeter: could not write "
+                            + root.readyStamp + " (exit " + exitCode + "). The "
+                            + "login screen is fine; the boot animation will "
+                            + "be dismissed on a timer instead.");
+        }
     }
 
     // ---- the wallpaper ------------------------------------------------------
@@ -198,8 +283,16 @@ PanelWindow {
         }
     }
 
+    // The one handler for this signal on this object, doing two things — see
+    // the warning beside the ready stamp above. Both wait one turn of the event
+    // loop, because the surface has to exist before anything can be said about
+    // it or focused inside it.
     onVisibleChanged: {
-        if (root.primary && root.visible)
+        if (!root.visible)
+            return;
+        if (root.primary)
             Qt.callLater(card.field.takeFocus);
+        // "The login screen has drawn" — what the boot animation waits for.
+        Qt.callLater(() => root.announceReady());
     }
 }

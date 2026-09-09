@@ -114,6 +114,63 @@ another person's.
 
 ---
 
+## Telling the boot animation it can let go
+
+Added 8 September 2026, after the bench boot showed a few seconds of black
+screen and then a few seconds of scrolling text before the login screen.
+
+**The problem, in one sentence.** The Aquarius boot animation is drawn by a
+program called Plymouth, and if Plymouth lets go of the screen before the login
+screen has painted anything, the text console takes the screen in the gap. That
+gap is the "commands, terminals and text during boot" Royce asked never to see.
+
+**The handshake.** It is the same one GNOME's login screen uses. The login
+screen touches a file the moment it has drawn; the session watches for that
+file, and only then runs `plymouth quit --retain-splash`, which hands the screen
+over with the last frame of the animation still on it.
+
+```
+/run/aquarius-greeter/ready
+```
+
+**Why a folder and not a file loose in `/run`.** `/run` belongs to root and the
+login screen does not run as root — it runs as greetd's own unprivileged user,
+which cannot create anything there. So `greetd.service` makes
+`/run/aquarius-greeter/` first, owned by that user, and the greeter writes
+inside it. (An earlier draft of the contract said `/run/aquarius-greeter-ready`,
+loose in `/run`; that could never have been written. The watchdog accepts both
+names; the greeter writes the one that works.)
+
+**When it is written.** On the primary screen only — there is one login screen
+even on a desk with three monitors — one turn of the event loop after the window
+is really visible, which is the same pattern the keyboard grab uses and for the
+same reason: the surface has to exist before anything can be said about it. It
+is written once; a second monitor appearing later does not touch it.
+
+**If it fails, nothing breaks.** On somebody's own desktop, or in the harness,
+there is no `/run/aquarius-greeter` and no way to make one. The touch fails, one
+sentence goes into the log, and the login screen carries on exactly as before.
+On a real machine the worst case is that the boot animation is dismissed by the
+watchdog's timer instead of by us — a second of plainness, not a computer nobody
+can log into. A login screen may never be taken down by a piece of housekeeping.
+
+**To try it without being root**, point it somewhere you can write:
+
+```bash
+AQ_GREETER_READY_STAMP=/tmp/greeter-ready qs -p greeter.qml
+```
+
+The file appears as soon as the login screen draws, and the log says so.
+
+> ⚠️ **One QML trap, found writing this.** An object may have exactly **one**
+> handler per signal. `GreeterWindow.qml` already had an `onVisibleChanged` (it
+> is what puts the cursor in the password box), so adding a second one for the
+> stamp did not warn — it failed the whole login screen to load with *"Property
+> value set multiple times"*. Both things now happen in the one handler at the
+> bottom of that file, with a note beside the stamp saying so.
+
+---
+
 ## Decisions worth knowing about
 
 **Layer-shell, not an ordinary window.** A layer-shell surface covers the whole

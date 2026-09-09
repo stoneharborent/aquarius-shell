@@ -230,14 +230,14 @@ Singleton {
         stderr: StdioCollector {
             onStreamFinished: {
                 if (this.text.trim() !== "")
-                    console.log("aquarius-shell: window frames — "
+                    console.info("aquarius-shell: window frames — "
                                 + this.text.trim());
             }
         }
 
         onExited: function (exitCode) {
             if (exitCode !== 0)
-                console.log("aquarius-shell: window frames — could not rebuild "
+                console.info("aquarius-shell: window frames — could not rebuild "
                             + "them (exit " + exitCode + "). The title bars keep "
                             + "the theme they had until the next login.");
         }
@@ -246,7 +246,7 @@ Singleton {
     function giveUp(reason) {
         root.available = false;
         root.status = reason;
-        console.log("aquarius-shell: appearance — " + reason
+        console.info("aquarius-shell: appearance — " + reason
                     + "; staying on the stored theme default (Ice).");
     }
 
@@ -270,7 +270,7 @@ Singleton {
         stderr: StdioCollector {
             onStreamFinished: {
                 if (this.text.trim() !== "")
-                    console.log("aquarius-shell: appearance — gdbus said: "
+                    console.info("aquarius-shell: appearance — gdbus said: "
                                 + this.text.trim());
             }
         }
@@ -340,7 +340,7 @@ Singleton {
             // simply stops noticing further changes until the next reload.
             // Restarting in a loop here would be a way to spin a CPU core
             // forever on a machine where gdbus is broken.
-            console.log("aquarius-shell: appearance — stopped watching for "
+            console.info("aquarius-shell: appearance — stopped watching for "
                         + "changes. The current light/dark setting is kept.");
         }
     }

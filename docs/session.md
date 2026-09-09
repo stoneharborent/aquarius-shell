@@ -1061,6 +1061,16 @@ grep appearance ~/.local/state/aquarius-session/session.log
 
 It says, in words, which of the three cases you are in.
 
+> ⚠️ **Those lines were invisible until 8 September 2026, and it is worth
+> knowing why.** Every explanatory sentence the shell writes used to go through
+> `console.log`, and the Quickshell AquariusOS ships **drops `console.log`
+> entirely** — it reaches neither the terminal nor the shell's own log file.
+> Measured, not guessed: the same three lines written with `console.log`,
+> `console.info` and `console.warn` produced two lines of output. So a shell
+> that had been carefully explaining itself for a fortnight had been explaining
+> itself to nobody, which is part of why the bench had nothing to read. Every
+> one of those sentences is now `console.info`, and they do come through.
+
 ### Or just ask the shell what it believes
 
 Added 8 September 2026, after an afternoon went on "did the dark flip reach the

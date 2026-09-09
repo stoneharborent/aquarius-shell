@@ -111,7 +111,7 @@ QtObject {
         // "there is no image-info.json" is the expected answer off the OS.
         onLoadFailed: {
             root.isHandheld = false;
-            console.log("aquarius-shell: no /usr/share/ublue-os/image-info.json;",
+            console.info("aquarius-shell: no /usr/share/ublue-os/image-info.json;",
                         "assuming this is not a handheld.");
         }
     }

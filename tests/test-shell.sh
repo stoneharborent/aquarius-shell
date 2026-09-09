@@ -4407,6 +4407,65 @@ else
     fail "${aq_rc} no longer has a windowRule for DaVinci Resolve."
 fi
 
+# -----------------------------------------------------------------------------
+# 43. The login screen says when it has drawn, and the shell can be heard at all
+# -----------------------------------------------------------------------------
+# Two findings from 8 September 2026, in one section because they are the same
+# idea: a program that explains itself to nobody might as well not explain
+# itself.
+#
+#   * The boot animation waits for the login screen to touch a file before it
+#     lets go of the screen. Without that, the text console takes the screen in
+#     the gap — the "text during boot" Royce asked never to see.
+#   * `console.log` from QML is DROPPED by the Quickshell AquariusOS ships. It
+#     reaches neither the terminal nor the shell's own log. Measured: the same
+#     sentence written three ways produced output for `console.info` and
+#     `console.warn` and nothing at all for `console.log`. So every explanatory
+#     line in this shell had been going nowhere.
+echo ""
+echo "=== 43. the shell can actually be heard, and the greeter says it drew ==="
+
+if grep -qF "/run/aquarius-greeter/ready" greeter/GreeterWindow.qml; then
+    pass "the login screen touches /run/aquarius-greeter/ready when it draws"
+else
+    fail "greeter/GreeterWindow.qml no longer writes the ready stamp." \
+         "The boot animation waits for it before letting go of the screen;" \
+         "without it the text console takes the screen on the way in. It is" \
+         "in a FOLDER because /run belongs to root and the login screen runs" \
+         "as greetd's unprivileged user — greetd.service makes the folder." \
+         "See docs/greeter.md."
+fi
+
+if grep -qF "AQ_GREETER_READY_STAMP" greeter/GreeterWindow.qml; then
+    pass "  and it can be pointed somewhere writable, so it can be tested"
+else
+    fail "greeter/GreeterWindow.qml has no AQ_GREETER_READY_STAMP override." \
+         "Nobody can write to /run without being root, so without this the" \
+         "stamp can only ever be tested on a real login."
+fi
+
+# The stamp must never be able to take the login screen down with it.
+if grep -qF "onExited" greeter/GreeterWindow.qml; then
+    pass "  and a failure to write it is logged, not thrown"
+else
+    fail "greeter/GreeterWindow.qml does not handle the touch failing." \
+         "On any machine that is not AquariusOS the write cannot succeed," \
+         "and a login screen may never be taken down by housekeeping."
+fi
+
+aq_console_log=0
+while IFS= read -r aq_file; do
+    fail "${aq_file} uses console.log, which goes nowhere." \
+         "The Quickshell AquariusOS ships drops console.log entirely — it" \
+         "reaches neither the terminal nor the shell's own log file. Use" \
+         "console.info for an explanation and console.warn for a problem." \
+         "Measured on the bench, 2026-09-08; see docs/session.md."
+    aq_console_log=1
+done < <(grep -rl "console\.log" --include='*.qml' . | sort)
+if [ "${aq_console_log}" -eq 0 ]; then
+    pass "no QML file writes to console.log, which this Quickshell throws away"
+fi
+
 # ------------------------------------------------------------------------------
 echo ""
 if [ "${aq_failures}" -ne 0 ]; then

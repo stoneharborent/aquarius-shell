@@ -124,7 +124,7 @@ QsSlider {
             if (exitCode !== 0 && !root.readSucceeded) {
                 // Said once, quietly. On a desktop tower this is the normal,
                 // expected outcome and not a fault.
-                console.log("aquarius-shell: no readable backlight",
+                console.info("aquarius-shell: no readable backlight",
                             "(brightnessctl exited", exitCode + ").",
                             "Hiding the Brightness slider.");
             }

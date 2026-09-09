@@ -67,7 +67,7 @@ QsTile {
     property var osCommand: ["/usr/bin/return-to-gamemode"]
 
     onActivated: {
-        console.log("aquarius-shell: handing off to the OS's Game Mode:",
+        console.info("aquarius-shell: handing off to the OS's Game Mode:",
                     root.osCommand.join(" "));
         handoff.command = root.osCommand;
         handoff.startDetached();
