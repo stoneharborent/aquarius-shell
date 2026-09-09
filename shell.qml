@@ -24,6 +24,7 @@ import "components/notifications"
 import "components/search"
 import "lock"
 import "components/switcher"
+import "services"
 
 ShellRoot {
     TopBar {
@@ -106,5 +107,15 @@ ShellRoot {
     // docs/lock-screen.md.
     LockLayer {
         notificationCount: notifications.notificationCount
+    }
+
+    // One command that says what the shell believes about light and dark:
+    //
+    //     qs ipc call theme status
+    //
+    // It draws nothing. It exists so that "the dark flip did not carry over"
+    // can be answered in one line at the bench instead of by reading four
+    // files. See services/ThemeStatus.qml and docs/lock-screen.md.
+    ThemeStatus {
     }
 }

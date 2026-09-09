@@ -47,11 +47,13 @@ PanelWindow {
     // True on the one screen that shows the card and holds the keyboard.
     property bool primary: false
 
-    // Where the wallpaper comes from. Written as properties rather than
-    // straight into the Image so that the harness can point them at something
-    // else on a machine that is not AquariusOS.
-    property string wallpaperLight: "/usr/share/backgrounds/aquarius/the-pour-ice-3840x2160.png"
-    property string wallpaperDark: "/usr/share/backgrounds/aquarius/the-pour-midnight-3840x2160.png"
+    // Where the wallpaper comes from. Still properties, so the harness can
+    // point them at something else on a machine that is not AquariusOS — but
+    // their DEFAULTS come from Theme, which is the one place the two pictures
+    // are named. The lock screen reads the same two. See the note beside
+    // `wallpaperLight` in theme/Theme.qml.
+    property string wallpaperLight: Theme.wallpaperLight
+    property string wallpaperDark: Theme.wallpaperDark
 
     anchors {
         top: true

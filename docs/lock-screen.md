@@ -380,6 +380,64 @@ first, and both now have a check of their own.
 
 ---
 
+## "The dark flip didn't carry over to the lock screen" — 8 September 2026
+
+**What was reported.** On the bench, the machine was set to dark and the lock
+screen still looked light.
+
+**What was found when it was actually run.** It could not be reproduced, and
+this section exists so nobody spends another afternoon reasoning about it.
+
+The whole chain was driven on the bench machine itself, on the real appearance
+portal, with the shell running in an invisible labwc beside the live desktop
+(the same trick `harness/load-check.sh` uses, so the person's session was never
+touched). Three screenshots were taken:
+
+| Step | What was done | What the lock screen was |
+|---|---|---|
+| A | machine set to dark, shell started, screen locked | **Midnight** — dark, as it should be |
+| B | flipped to light **while still locked** | **Ice** — it changed, live, in about a second |
+| C | flipped back to dark **while still locked** | **Midnight** again |
+
+So on this machine, on this build, every link works: the portal answers, the
+shell's watcher hears the change, `Theme.dark` follows, and the veil repaints —
+including while the screen is already locked, which is the hardest case.
+
+**What is genuinely still wrong, and is a different thing.** The **desktop's**
+wallpaper does not follow the theme. It is drawn by `swaybg`, which the session
+starts once at login with the Ice picture and never touches again (see
+[`session.md`](session.md), "The wallpaper does not follow light and dark").
+So a machine flipped to dark has a Midnight bar, a Midnight dock and a *light*
+picture behind them. That is the most likely thing to have been seen and read
+as "dark did not carry over", and fixing it needs a change on the session's
+side, not in the shell.
+
+**And there is now one command instead of an afternoon.** Ask the running shell
+what it believes:
+
+```bash
+qs ipc call theme status
+```
+
+```
+system     : following the system (portal, live)
+             portal answered: yes; value: 1 (0 no preference, 1 dark, 2 light)
+theme      : Midnight (dark)
+             because: the system asked for it
+wallpaper  : /usr/share/backgrounds/aquarius/the-pour-midnight-3840x2160.png
+frames     : /usr/share/aquarius/labwc/generate-theme
+```
+
+Read it top to bottom. If `system` says the portal never answered, the fault is
+the portal (is `xdg-desktop-portal` running?). If `system` says dark and `theme`
+says Ice, the fault is in the shell and that is a bug worth reporting. If both
+say dark and the **screen** still looks light, the shell is right and what you
+are looking at is something the shell does not draw — the wallpaper, the window
+frames, or a GTK application. The file is `services/ThemeStatus.qml`; it only
+reads, and there is deliberately no way to force a theme over IPC.
+
+---
+
 ## Deviations from the approved spec
 
 Written down rather than quietly done.

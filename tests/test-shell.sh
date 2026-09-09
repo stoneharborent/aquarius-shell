@@ -4088,6 +4088,87 @@ if [ "${aq_missing_import}" -eq 0 ]; then
     pass "every file with a Component.on… handler imports QtQuick or QtQml"
 fi
 
+# -----------------------------------------------------------------------------
+# 41. The bench can ask the shell what it believes about light and dark
+# -----------------------------------------------------------------------------
+# Bench, 2026-09-08: "the flip to dark didn't carry over to the lock screen".
+# Every link looked right on paper and there was no way to ask the running
+# shell, so an afternoon went on reading code. `qs ipc call theme status` is
+# that question. These checks keep it wired up, keep it read-only, and keep the
+# two wallpaper paths in ONE place — three copies of a path is how the lock
+# screen and the login screen end up disagreeing about which picture is dark.
+echo ""
+echo "=== 41. the shell can say what it believes about light and dark ==="
+
+aq_theme_status="services/ThemeStatus.qml"
+
+if [ ! -f "${aq_theme_status}" ]; then
+    fail "${aq_theme_status} is missing." \
+         "It is the one command the bench has for 'is the shell Ice or" \
+         "Midnight, and why' — see docs/lock-screen.md."
+else
+    if grep -q 'target: "theme"' "${aq_theme_status}"; then
+        pass "ThemeStatus.qml answers 'qs ipc call theme …'"
+    else
+        fail "${aq_theme_status} does not declare an IpcHandler called 'theme'."
+    fi
+
+    for aq_fn in status dark; do
+        if grep -qE "function ${aq_fn}\(\): (string|bool)" "${aq_theme_status}"; then
+            pass "ThemeStatus.qml answers 'theme ${aq_fn}'"
+        else
+            fail "${aq_theme_status} has no '${aq_fn}' function with an" \
+                 "explicit return type. Quickshell will not register a handler" \
+                 "function whose types are left implicit."
+        fi
+    done
+
+    # It READS. A debug lever that changes what the desktop looks like is a
+    # setting, and a setting belongs in Settings with a person's name on it.
+    if grep -qE "^\s*(Theme|SystemAppearance)\.[a-zA-Z]+ *=[^=]" "${aq_theme_status}"; then
+        fail "${aq_theme_status} writes to Theme or SystemAppearance." \
+             "This file exists to REPORT what the shell believes. Forcing a" \
+             "theme over IPC would be a setting without a settings page."
+    else
+        pass "ThemeStatus.qml only reads; it cannot force a theme"
+    fi
+
+    # An IpcHandler has to be in the scene to be registered at all, so a file
+    # nothing instantiates answers nothing — and would fail silently.
+    if grep -q "ThemeStatus" shell.qml; then
+        pass "shell.qml instantiates ThemeStatus, so the handler is registered"
+    else
+        fail "shell.qml does not instantiate ThemeStatus." \
+             "An IpcHandler that is not part of the scene is never registered," \
+             "and 'qs ipc call theme status' answers 'no such target' with no" \
+             "other sign that anything is wrong."
+    fi
+fi
+
+# -- one place names the two wallpapers ---------------------------------------
+if grep -q "wallpaperLight" theme/Theme.qml && grep -q "wallpaperDark" theme/Theme.qml; then
+    pass "theme/Theme.qml names the light and dark wallpapers"
+else
+    fail "theme/Theme.qml does not name the two wallpapers." \
+         "The lock screen, the login screen and the status line all need to" \
+         "agree about which picture goes with which theme."
+fi
+
+aq_wallpaper_copies=0
+while IFS= read -r aq_file; do
+    case "${aq_file}" in
+        ./theme/Theme.qml) continue ;;
+    esac
+    fail "${aq_file} writes a wallpaper path of its own." \
+         "The two pictures are named once, in theme/Theme.qml. A second copy" \
+         "is how the lock screen and the login screen end up showing" \
+         "different pictures for the same theme."
+    aq_wallpaper_copies=1
+done < <(grep -rl "backgrounds/aquarius" --include='*.qml' . | sort)
+if [ "${aq_wallpaper_copies}" -eq 0 ]; then
+    pass "no QML file carries a second copy of a wallpaper path"
+fi
+
 # ------------------------------------------------------------------------------
 echo ""
 if [ "${aq_failures}" -ne 0 ]; then

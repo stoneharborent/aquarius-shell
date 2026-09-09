@@ -19,3 +19,8 @@ singleton KeyProfile 1.0 KeyProfile.qml
 singleton Overlays 1.0 Overlays.qml
 singleton SettingsLauncher 1.0 SettingsLauncher.qml
 singleton SystemAppearance 1.0 SystemAppearance.qml
+
+# NOT a singleton, and that is the point: an IpcHandler has to be part of the
+# scene to be registered, and a singleton is only built when something asks for
+# it. `qs ipc call theme status` — see the header of the file.
+ThemeStatus 1.0 ThemeStatus.qml

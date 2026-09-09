@@ -950,6 +950,79 @@ grep appearance ~/.local/state/aquarius-session/session.log
 
 It says, in words, which of the three cases you are in.
 
+### Or just ask the shell what it believes
+
+Added 8 September 2026, after an afternoon went on "did the dark flip reach the
+lock screen?" with no way to ask:
+
+```bash
+qs ipc call theme status
+```
+
+It prints four lines: what the portal last said, whether the shell is Ice or
+Midnight **and why**, which wallpaper the lock screen would draw, and whether
+this session has a window-frame generator to run when the theme flips. If those
+say dark and the screen still looks light, the thing you are looking at is
+something the shell does not draw — read the next section.
+
+### The wallpaper does not follow light and dark — and the shell cannot fix it
+
+**What you see.** Flip the machine to dark. The bar goes navy, the dock goes
+navy, the menus go navy — and the picture behind them stays the pale Ice
+"Pour". Both pictures ship; only one is ever shown.
+
+**Why.** The wallpaper is not drawn by the shell. It is drawn by `swaybg`,
+which the session's `labwc/autostart` starts **once**, at login, naming the Ice
+file. That is a deliberate decision and a good one: a wallpaper drawn by a
+separate program survives the shell crashing, so a bad night's work on the bar
+can never leave somebody staring at a black screen. The cost is that nothing
+re-runs it when the theme changes.
+
+**The contract for fixing it.** This has to be done on the session's side — in
+the `os-image` repository, which owns the copy of `autostart` that actually
+ships — and it is written out here so that whoever does it does not have to
+invent the interface.
+
+1. **The session ships one small program** whose only job is "put the right
+   wallpaper up", called with the scheme:
+
+   ```
+   /usr/libexec/aquarius-wallpaper ice        # the light picture
+   /usr/libexec/aquarius-wallpaper midnight   # the dark one
+   /usr/libexec/aquarius-wallpaper auto       # ask the appearance portal
+   ```
+
+   It stops any `swaybg` it started before (its own pid file, not `pkill
+   swaybg` — somebody may be running their own), starts a new one with
+   `-c '#0B1220' -m fill`, and says one plain line into `$AQ_LOG`. A missing
+   picture, or a missing `swaybg`, is one logged sentence and exit 0: a
+   wallpaper is decoration and must never be able to take a login down.
+
+2. **`labwc/autostart` calls it instead of running `swaybg` itself**, with
+   `auto`, at the same point in the file. That alone fixes *login* — the
+   picture is right for the theme the machine is already in.
+
+3. **The shell tells it when the theme changes.** The shell already has this
+   exact seam for the window frames: `services/SystemAppearance.qml` runs the
+   program named in `$AQ_FRAME_GENERATOR` every time light/dark flips, and does
+   nothing at all when that variable is unset (the harness, or somebody running
+   the shell on their own desktop). The wallpaper wants the same shape:
+
+   | | |
+   |---|---|
+   | Variable | `AQ_WALLPAPER_SETTER`, exported by `session/aquarius-session` beside `AQ_FRAME_GENERATOR` |
+   | The shell runs | `$AQ_WALLPAPER_SETTER <ice\|midnight>` on every flip, fire-and-forget |
+   | If unset | nothing happens, and that is correct — there is no Aquarius wallpaper to swap |
+   | If it fails | one line in the log; the desktop is otherwise fine |
+
+   The shell half is four lines beside `frameProc` and is **not written yet**,
+   deliberately: adding a call to a program that does not exist would be a
+   failure logged on every flip. Write the program first; the shell change goes
+   in with it.
+
+Until all three exist, "dark" means everything except the picture, and
+`qs ipc call theme status` will tell you the shell is right.
+
 ---
 
 ## When it does not work

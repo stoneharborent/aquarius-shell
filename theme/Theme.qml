@@ -99,6 +99,40 @@ Singleton {
                         ? SystemAppearance.prefersDark
                         : root.storedDark
 
+    // =========================================================================
+    // THE WALLPAPER THAT GOES WITH EACH PALETTE
+    // =========================================================================
+    // Two pictures ship with the operating system — the Pour, painted in Ice
+    // and painted in Midnight — and three places in this repository need to
+    // know which one goes with which theme: the lock screen's veil, the login
+    // screen's background, and the status line the bench reads
+    // (`qs ipc call theme status`, services/ThemeStatus.qml).
+    //
+    // They are named HERE, once, for the same reason every colour is: three
+    // copies of a path is three chances for two of them to disagree, and the
+    // way that shows up on a bench is "the lock screen went dark and the login
+    // screen did not", which looks like a bug in the lock screen.
+    //
+    // ⚠️ THE DESKTOP'S OWN WALLPAPER IS NOT THIS. It is drawn by `swaybg`,
+    // started once by the session at login, so that the picture survives the
+    // shell crashing. Nothing in the shell can swap it today, and that is why
+    // a machine flipped to dark still has a light desktop behind its Midnight
+    // bar. The contract for fixing that is written down in docs/session.md;
+    // it needs a change on the session's side, not here.
+    //
+    // A machine that is not AquariusOS has neither file, and every one of the
+    // three readers copes: a missing picture is a plain coloured ground, not a
+    // failure. Each of them also keeps its own overridable property, so the
+    // harness can still point at something else.
+    readonly property string wallpaperLight:
+        "/usr/share/backgrounds/aquarius/the-pour-ice-3840x2160.png"
+    readonly property string wallpaperDark:
+        "/usr/share/backgrounds/aquarius/the-pour-midnight-3840x2160.png"
+
+    // The one in force right now, following `dark` like every colour does.
+    readonly property string wallpaper:
+        root.dark ? root.wallpaperDark : root.wallpaperLight
+
     // `colors` is the palette object itself. Components normally use the
     // shortcuts underneath instead, but a component that wants to pass a whole
     // palette around can use this.

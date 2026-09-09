@@ -39,11 +39,13 @@ import "../theme"
 Item {
     id: root
 
-    // Where the wallpaper is. Written as properties rather than straight into
-    // the Image so the nested harness can point them at something else on a
-    // machine that is not AquariusOS.
-    property string wallpaperLight: "/usr/share/backgrounds/aquarius/the-pour-ice-3840x2160.png"
-    property string wallpaperDark: "/usr/share/backgrounds/aquarius/the-pour-midnight-3840x2160.png"
+    // Where the wallpaper is. Still properties, so the nested harness can point
+    // them at something else on a machine that is not AquariusOS — but their
+    // DEFAULTS now come from Theme, which is the one place the two pictures are
+    // named. The login screen reads the same two. See the note beside
+    // `wallpaperLight` in theme/Theme.qml.
+    property string wallpaperLight: Theme.wallpaperLight
+    property string wallpaperDark: Theme.wallpaperDark
 
     // True once the blur is really there. The wash leans on this: without a
     // blur it has to work harder, because a sharp wallpaper under a light wash
