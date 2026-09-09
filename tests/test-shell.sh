@@ -1201,8 +1201,15 @@ PYTHON
         > "${aq_breeze}/gtk-4.0/settings.ini"
     # A person's own stylesheet, in the GTK 3 folder, to prove the difference.
     printf 'headerbar { background: pink; }\n' > "${aq_breeze}/gtk-3.0/gtk.css"
+    # The icon-theme key is only corrected when the Aquarius icon theme is
+    # actually installed (generate-theme looks in $XDG_DATA_HOME/icons first,
+    # and pointing GTK at a theme that is not there means no icons at all). On
+    # the bench it is installed; in CI it is not — the first CI run of this
+    # check failed for exactly that reason (2026-09-09). So pretend it is.
+    mkdir -p "${aq_breeze}/share/icons/Aquarius-Midnight"
 
-    aq_breeze_said="$(python3 "${aq_gen}" --quiet --scheme midnight --scale 1 \
+    aq_breeze_said="$(XDG_DATA_HOME="${aq_breeze}/share" \
+        python3 "${aq_gen}" --quiet --scheme midnight --scale 1 \
         --buttons mac \
         --config-out "${aq_breeze}/config" --theme-out "${aq_breeze}/theme" \
         --gtk-out "${aq_breeze}" 2>&1 >/dev/null || true)"
