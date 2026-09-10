@@ -1303,6 +1303,12 @@ PYTHON
     trap - EXIT
 fi
 
+if PYTHONDONTWRITEBYTECODE=1 python3 tests/test-gtk-button-layout.py; then
+    pass "GTK button placement follows repeated Mac/Windows switches"
+else
+    fail "GTK button placement stopped following the one desktop switch"
+fi
+
 # ------------------------------------------------------------------------------
 echo ""
 echo "=== 16. no machine-specific paths in the session files ==="
@@ -4491,6 +4497,25 @@ fi
 # start the shell, make it go dark, and see what it ran — is
 # harness/wallpaper-check.sh, and it is run from here on a machine that can.
 echo ""
+if python3 - "${aq_rc}" <<'PYRULE'
+import sys
+import xml.etree.ElementTree as ET
+rules = ET.parse(sys.argv[1]).getroot().findall("./windowRules/windowRule")
+scoped = [r for r in rules if r.get("identifier") == "resolve"
+          and r.get("serverDecoration") == "yes"]
+assert len(scoped) == 1
+rule = scoped[0]
+assert rule.get("title") == "DaVinci Resolve* - *"
+assert rule.get("type") == "normal"
+assert [a.get("name") for a in rule.findall("action")] == ["UnMaximize", "FitToOutput"]
+assert rule.get("ignoreConfigureRequest") is None
+PYRULE
+then
+    pass "only Resolve's normal project window gets a frame and one initial restore"
+else
+    fail "Resolve's window rule lost its scope or normal-window behavior"
+fi
+
 echo "=== 44. the desktop wallpaper follows light and dark ==="
 
 aq_appearance="services/SystemAppearance.qml"

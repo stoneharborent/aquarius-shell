@@ -1434,3 +1434,29 @@ it:
 *The strategy this came from is the custom-DE plan (`docs/custom-de/PLAN.md` on
 the `research/custom-de` branch of `os-image`). The phase this belongs to is P2
 — see [`ROADMAP.md`](ROADMAP.md).*
+
+### Window buttons after changing Mac/Windows style
+
+The one keyboard-style choice also places the window buttons. The generated
+labwc frame and GTK 3/4 settings follow each change, including on a fresh login
+and after an old KDE configuration has been repaired. Only the decoration-layout
+key is synchronized in a custom GTK settings file; fonts and unrelated personal
+settings remain intact. An application that reads this file only at startup
+may need to be reopened before it shows the new placement.
+
+Apps that draw their own controls can override the desktop's choice. Use their
+native-title-bar option when one is available; adding another compositor frame
+around every app would leave some windows with two sets of buttons.
+
+Resolve's project window has a specific exception: it asks for no frame and can
+restore itself maximized. The Aquarius Session supplies its normal frame and
+restores that window when it first appears. The rule matches the `resolve`
+class, a normal window, and a title beginning `DaVinci Resolve` with ` - ` before
+the project name. Splash screens and dialogs do not receive this exception.
+You can still maximize the editor afterwards; no fixed size is imposed.
+
+Verification on 10 September 2026 used three disposable X11 windows: a matching
+frameless maximized editor, a splash, and a dialog. Only the editor was restored
+and given a visible frame. Maximizing it afterwards still worked. Recheck the
+real Resolve project window after updating because app title changes can affect
+this deliberately narrow match.
