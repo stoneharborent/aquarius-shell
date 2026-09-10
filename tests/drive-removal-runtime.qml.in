@@ -1,0 +1,76 @@
+// Run from a temporary configuration root, as prepared by drive-removal-runtime.sh.
+// All commands below are fakes. No real mount or eject command is ever run.
+import QtQuick
+import Quickshell
+import "services"
+import "components/dock"
+
+ShellRoot {
+    id: test
+    property int step: 0
+    property int ticks: 0
+    property var first
+    property var second
+    property Component fakeFactory: Component {
+        DriveRemovalJob {
+            process.command: ["python3", "-c", "import time; time.sleep(.2); print('{\"status\":\"failed\",\"identity\":\"original\"}')"]
+        }
+    }
+    DriveRemovalWindow {}
+    function check(ok, message) {
+        if (!ok) { console.error("DRIVE TEST FAILED: " + message); Qt.exit(1); }
+    }
+    Component.onCompleted: {
+        DriveRemoval.jobFactory = fakeFactory;
+        DriveRemoval.request("/fake/one", "Field SSD");
+        DriveRemoval.request("/fake/one", "Duplicate from another monitor");
+        DriveRemoval.request("/fake/two", "Camera card");
+        check(DriveRemoval.jobs.length === 2, "duplicate coalescing and independent jobs");
+        first = DriveRemoval.jobs[0]; second = DriveRemoval.jobs[1];
+        check(first.busy && second.busy, "both jobs show progress");
+        first.start();
+        check(DriveRemoval.jobs.length === 2, "repeat click leaves jobs intact");
+        DriveRemoval.dismiss(first);
+        check(DriveRemoval.jobs.length === 2, "running job cannot be discarded");
+    }
+    Timer {
+        interval: 100
+        repeat: true
+        running: true
+        onTriggered: {
+            test.ticks++;
+            test.check(test.ticks < 150, "controller completion timeout");
+            if (test.step === 0 && !test.first.busy && !test.second.busy) {
+                test.check(test.first.retryable && test.second.retryable, "busy failure offers Retry");
+                test.check(test.first.identity === "original", "failure saves mount identity");
+                DriveRemoval.dismiss(test.second);
+                test.first.process.command = ["python3", "-c", "print('{\"status\":\"success\",\"identity\":\"original\"}')"];
+                test.first.start(); test.step++;
+            } else if (test.step === 1 && !test.first.busy) {
+                test.check(test.first.status === "success", "Retry sees successful completion");
+                test.first.status = "failed";
+                test.first.process.command = ["python3", "-c", "print('{\"status\":\"success\",\"identity\":\"replacement\"}')"];
+                test.first.start(); test.step++;
+            } else if (test.step === 2 && !test.first.busy) {
+                test.check(test.first.status === "failed" && test.first.identity === "original", "replacement response cannot erase original identity");
+                test.first.process.command = ["python3", "-c", "print('malformed')"];
+                test.first.start(); test.step++;
+            } else if (test.step === 3 && !test.first.busy) {
+                test.check(test.first.status === "failed" && test.first.identity === "original", "malformed retry preserves identity");
+                test.first.identity = ""; test.first.status = "ready";
+                test.first.start(); test.step++;
+            } else if (test.step === 4 && !test.first.busy) {
+                test.check(test.first.status === "unavailable" && !test.first.retryable, "unknown identity requires new selection");
+                test.first.status = "ready";
+                test.first.process.command = ["/nonexistent-aquarius-test-executable"];
+                test.first.start(); test.step++;
+            } else if (test.step === 5 && !test.first.busy) {
+                test.check(!test.first.retryable, "start failure settles without unsafe Retry");
+                DriveRemoval.dismiss(test.first);
+                test.check(DriveRemoval.jobs.length === 0, "dismiss clears finished job");
+                console.info("DRIVE TEST PASSED");
+                Qt.quit();
+            }
+        }
+    }
+}

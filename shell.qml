@@ -48,6 +48,8 @@ ShellRoot {
             console.info("aquarius-shell: quick settings", nowOpen ? "opened" : "closed")
     }
 
+    DriveRemovalWindow {}
+
     Dock {
         // The dashed "+" tile. The full-screen app grid it was drawn for does
         // not exist yet, so it opens the nearest real thing: the search

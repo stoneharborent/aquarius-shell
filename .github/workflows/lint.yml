@@ -240,7 +240,7 @@ jobs:
             libxkbcommon xkeyboard-config \
             dbus-daemon dbus-tools \
             fontconfig dejavu-sans-fonts \
-            findutils procps-ng tar gzip
+            findutils procps-ng tar gzip python3 coreutils
           # The window managers. labwc is the one AquariusOS ships and the one
           # the check prefers; sway and cage are installed so that the check has
           # somewhere to fall back to if labwc's headless mode ever breaks,
@@ -350,6 +350,9 @@ jobs:
           # Bluetooth are missing from this list, the shell will fail to load and
           # the reason will be here rather than a mystery further down.
           grep -ao 'Quickshell\.[A-Za-z.]*' "$(command -v quickshell)" | sort -u | sed 's/^/  /'
+
+      - name: Test drive removal with fake commands in a private session
+        run: bash tests/drive-removal-runtime.sh
 
       # ----------------------------------------------------------------------
       # And the actual question.

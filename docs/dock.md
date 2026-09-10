@@ -107,11 +107,12 @@ it goes. **When nothing is plugged in, the dock draws nothing there** — no
 separator, no placeholder.
 
 - **Left-click** opens the drive in the file manager (`xdg-open <mount path>`).
-- **Right-click** offers *Eject / Unmount*, which unmounts it through GVfs/GIO
-  (`gio mount -u -f <mount path>`).
-- Each tile draws the shell's own **drive glyph** (from `QsGlyph`) rather than
-  app artwork, because a drive has no `.desktop` entry; the volume's name is on
-  the tile's accessibility label and at the head of the right-click menu.
+- **Right-click** offers **Eject**. A separate window shows progress and stays
+  available when the drive tile disappears. If files are still in use, close
+  them and choose **Retry**. Nothing is forced or detached. A successful result
+  covers this one item: eject any other items shown for the same physical drive
+  before unplugging it. Tab to a drive tile and press Space to open its menu;
+  the result window's buttons also work with the keyboard.
 
 **Where the list comes from — the standardised route, and why this one.** The
 task was to read the mounts through UDisks2 over D-Bus or the GVfs/GIO volume
@@ -127,10 +128,19 @@ table's user-facing face. The trade, written down so nobody has to rediscover
 it: it depends on the os-image side auto-mounting removable drives to
 `/run/media` (which it does, passwordless) and on `Qt.labs.folderlistmodel`
 being present — and it is behind a `Loader` so a missing module costs the drives
-list and nothing else. Unmounting takes the GIO road because `gio mount -u` is
-the one unmount that works from a mount **path** alone, which is all a directory
-listing gives us. When a UDisks2 or GIO binding lands in a future Quickshell,
-`DockDrives.qml` is the one file that changes.
+list and nothing else. The shared `services/DriveRemoval.qml` controller owns one operation per mount
+path, so two monitors cannot start duplicate requests and another drive can be
+ejected independently. `services/unmount-volume.py` reads the exact mount entry,
+uses normal `gio mount -u` for ordinary volumes or `fusermount3 -u` for Mac FUSE
+volumes, and checks that the mount disappeared before reporting success. A retry
+keeps the original mount identity; it cannot target a replacement mounted at the
+same location. If the identity is unknown, the window asks you to check Files
+and make a new selection instead. No command output appears in the window.
+
+`tests/test-drive-removal.py` tests mount and command results with fakes.
+`tests/drive-removal-runtime.sh` loads the actual controller and result windows
+with fake commands in a private session; CI runs it after installing Quickshell.
+Neither test ejects a real drive.
 
 ### ⚠️ The trap underneath it: a model that lists the wrong directory
 

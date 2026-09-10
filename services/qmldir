@@ -24,3 +24,6 @@ singleton SystemAppearance 1.0 SystemAppearance.qml
 # scene to be registered, and a singleton is only built when something asks for
 # it. `qs ipc call theme status` — see the header of the file.
 ThemeStatus 1.0 ThemeStatus.qml
+
+singleton DriveRemoval 1.0 DriveRemoval.qml
+DriveRemovalJob 1.0 DriveRemovalJob.qml

@@ -6,7 +6,7 @@
 // The right end of the dock is a live list of the removable/external drives
 // that are plugged in and mounted (see DockDrives.qml for where that list comes
 // from). This is one of them: a dock tile that draws the drive glyph, opens the
-// drive in Files when clicked, and offers Eject / Unmount on a right-click.
+// drive in Files when clicked, and offers Unmount volume on a right-click.
 //
 //        ▤          <- the drive glyph, on the slab, no box (same as an app)
 //
@@ -29,21 +29,8 @@
 //   volume's name is carried on the tile's accessibility label and shown at the
 //   head of the right-click menu.
 //
-// HOW IT REACHES THE SYSTEM — and the standardised route it takes
-//   Opening and unmounting both go through GVfs/GIO's `gio` command, run
-//   detached:
-//
-//     open    xdg-open <mount path>      -> the user's file manager
-//     unmount gio mount -u -f <path>     -> GVfs, which sees the udisks2 mount
-//
-//   DockDrives.qml carries the full note on why the list is read the way it is
-//   and why GIO is the unmount path. The os-image side provides passwordless
-//   automount and unmount for removable drives, so neither of these raises a
-//   polkit prompt. These are launches / one-shot system requests, the same shape
-//   as everything else the shell shells out for, and they use execDetached so a
-//   shell reload cannot orphan them — not the Process-command form
-//   tests/test-shell.sh section 22 guards.
-// =============================================================================
+// Removal is owned by services/DriveRemoval, so its progress and result survive
+// this tile disappearing. Only normal unmount is offered; it affects one volume.
 import QtQuick
 
 import Quickshell
@@ -65,9 +52,14 @@ Item {
     implicitWidth: Theme.dockTileSize
     implicitHeight: Theme.dockTileSize
 
+    activeFocusOnTab: true
+    Keys.onReturnPressed: root.open()
+    Keys.onSpacePressed: driveMenu.toggle()
+    Keys.onMenuPressed: driveMenu.toggle()
+
     Accessible.role: Accessible.Button
     Accessible.name: root.mountLabel
-    Accessible.description: qsTr("External drive · click to open, right-click to eject")
+    Accessible.description: qsTr("External drive · click to open, right-click or press Space to eject")
 
     function open(): void {
         if (root.mountPath !== "")
@@ -76,7 +68,7 @@ Item {
 
     function unmount(): void {
         if (root.mountPath !== "")
-            Quickshell.execDetached(["gio", "mount", "-u", "-f", root.mountPath]);
+            DriveRemoval.request(root.mountPath, root.mountLabel);
     }
 
     // ---- one overlay at a time -----------------------------------------------
@@ -232,7 +224,10 @@ Item {
 
                 MenuRow {
                     width: menuCol.width
-                    label: qsTr("Eject / Unmount")
+                    label: qsTr("Eject")
+                    activeFocusOnTab: true
+                    Keys.onReturnPressed: activated()
+                    Keys.onSpacePressed: activated()
                     onActivated: {
                         root.unmount();
                         driveMenu.visible = false;

@@ -801,10 +801,10 @@ echo "=== 15. the colour rule reaches the session files too ==="
 # comes out of the QML it just read. Section 15b proves that, on the generator's
 # actual output, which is a far stronger check than reading its source.
 
-if grep -rn -E '#[0-9A-Fa-f]{3,8}\b' \
+if grep -rIn --exclude-dir=__pycache__ --exclude='*.pyc' --exclude='*.pyo' -E '#[0-9A-Fa-f]{3,8}\b' \
         session/niri session/labwc session/portals \
         --exclude=generate-theme > /dev/null 2>&1; then
-    grep -rn -E '#[0-9A-Fa-f]{3,8}\b' \
+    grep -rIn --exclude-dir=__pycache__ --exclude='*.pyc' --exclude='*.pyo' -E '#[0-9A-Fa-f]{3,8}\b' \
         session/niri session/labwc session/portals \
         --exclude=generate-theme || true
     fail "a session configuration contains what looks like a hex colour." \
@@ -2017,7 +2017,7 @@ echo "=== 28. every enum namespace is one the shipped build actually has ==="
 # three .pragma library JavaScript files (Fuzzy, Calc, Progress) — those are
 # `import "x.js" as Name`, so they are our own code and cannot be missing from a
 # Quickshell build.
-aq_ns_ours="Theme FocusState Overlays SettingsLauncher SystemAppearance Fuzzy
+aq_ns_ours="Theme FocusState Overlays DriveRemoval SettingsLauncher SystemAppearance Fuzzy
 Calc Progress GreeterState LockState AppIdentity KeyProfile"
 
 # Names Qt itself provides — globals, value types and attached types.
@@ -3030,10 +3030,10 @@ if grep -qF '"xdg-open"' components/dock/DockDrive.qml; then
 else
     fail "components/dock/DockDrive.qml no longer opens the drive (xdg-open)."
 fi
-if grep -qF '"gio", "mount", "-u"' components/dock/DockDrive.qml; then
-    pass "DockDrive.qml unmounts through GVfs/GIO"
+if PYTHONDONTWRITEBYTECODE=1 python3 tests/test-drive-removal.py; then
+    pass "drive removal uses safe argv, checks results and protects retries"
 else
-    fail "components/dock/DockDrive.qml no longer unmounts with 'gio mount -u'."
+    fail "drive removal behavior tests failed"
 fi
 
 # The drive tile draws the drive glyph, which therefore has to exist in the
