@@ -3025,7 +3025,8 @@ fi
 
 # Opening a drive goes to the file manager; unmounting takes the GVfs/GIO road,
 # which is the one unmount that works from a mount path alone.
-if grep -qF '"xdg-open"' components/dock/DockDrive.qml; then
+if grep -qF '/components/dock/open-drive.py' components/dock/DockDrive.qml \
+    && grep -qF '"xdg-open"' components/dock/open-drive.py; then
     pass "DockDrive.qml opens a drive in the file manager"
 else
     fail "components/dock/DockDrive.qml no longer opens the drive (xdg-open)."

@@ -26,14 +26,14 @@
 //   for Quickshell.iconPath to resolve. The shell draws its own drive mark from
 //   QsGlyph, the same vector-glyph vocabulary the Quick Settings tiles and the
 //   bar use, so it follows the theme and needs no icon theme installed. The
-//   volume's name is carried on the tile's accessibility label and shown at the
+//   volume's name appears on hover, in the accessibility label, and at the
 //   head of the right-click menu.
 //
 // HOW IT REACHES THE SYSTEM — and the standardised route it takes
 //   Opening and unmounting both go through GVfs/GIO's `gio` command, run
 //   detached:
 //
-//     open    xdg-open <mount path>      -> the user's file manager
+//     open    open-drive.py <mount path> -> xdg-open at the files' folder
 //     unmount gio mount -u -f <path>     -> GVfs, which sees the udisks2 mount
 //
 //   DockDrives.qml carries the full note on why the list is read the way it is
@@ -71,7 +71,7 @@ Item {
 
     function open(): void {
         if (root.mountPath !== "")
-            Quickshell.execDetached(["xdg-open", root.mountPath]);
+            Quickshell.execDetached(["python3", Quickshell.shellDir + "/components/dock/open-drive.py", root.mountPath]);
     }
 
     function unmount(): void {
@@ -159,6 +159,47 @@ Item {
                 driveMenu.toggle();
             else
                 root.open();
+        }
+    }
+
+    // A separate, input-transparent surface keeps the label above the dock
+    // without stealing the pointer or keyboard from the tile underneath.
+    PopupWindow {
+        anchor {
+            item: root
+            edges: Edges.Top
+            gravity: Edges.Top
+            margins.bottom: Theme.logoMenuGapUnderBar + Theme.dockLift
+        }
+        visible: pointer.containsMouse && !pointer.pressed
+            && !driveMenu.visible && root.mountLabel !== ""
+        grabFocus: false
+        mask: Region {}
+        color: "transparent"
+        implicitWidth: labelCard.implicitWidth
+        implicitHeight: labelCard.implicitHeight
+
+        Rectangle {
+            id: labelCard
+            implicitWidth: Math.min(driveLabel.implicitWidth + Theme.logoMenuRowPaddingH * 2,
+                                    Theme.logoMenuMinWidth * 2)
+            implicitHeight: driveLabel.implicitHeight + Theme.logoMenuPaddingV * 2
+            radius: Theme.logoMenuRadius
+            color: Theme.surface
+            border.width: Theme.hairline
+            border.color: Theme.lineStrong
+
+            Text {
+                id: driveLabel
+                anchors.centerIn: parent
+                width: parent.implicitWidth - Theme.logoMenuRowPaddingH * 2
+                text: root.mountLabel
+                textFormat: Text.PlainText
+                elide: Text.ElideMiddle
+                font.family: Theme.fontBody
+                font.pixelSize: Theme.fsCaption
+                color: Theme.ink
+            }
         }
     }
 
