@@ -1001,3 +1001,20 @@ Then, in order:
 Write down what actually happened. The roadmap's P1 gate — *does it feel better
 than the themed panel?* — has a dock-shaped sibling, and it can only be answered
 by looking at it.
+
+### Drive labels and Mac folders (10 September 2026)
+
+Hover over a drive to see its name above the dock. The label uses the current
+light or dark palette and does not take keyboard focus or intercept clicks.
+Long names shorten in the middle to keep both ends visible.
+
+Clicking a drive opens Files. APFS-FUSE mounts expose an extra `root` folder
+beside `private-dir`; the dock now opens that `root` directly. The opener checks
+the exact mount's filesystem type before using it, so an ordinary drive with a
+folder named `root` still opens at its normal top level. Eject continues to use
+the actual mount, never the content folder.
+
+Bench check: hover each drive, click it, and confirm the expected files appear.
+Right-click should show the drive menu in place of the hover label. Move away
+and confirm the label disappears. This shortcut does not change Files' sidebar
+or how file copying and merging work.
