@@ -378,14 +378,15 @@ Item {
             visible: pointer.pressed
         }
 
-        IconImage {
+        // Match visible artwork, not the amount of transparent padding an
+        // app vendor includes. Shared rendering applies to future installs too.
+        DockAppIcon {
             id: icon
 
             anchors.centerIn: parent
             implicitSize: Theme.dockTileSize - Theme.dockTileInset * 2
             source: root.iconSource
-            asynchronous: true
-            visible: root.iconSource !== ""
+            visible: root.iconSource !== "" && !icon.error
         }
 
         // The two-letter fallback, drawn exactly as the design draws it.

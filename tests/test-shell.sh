@@ -801,20 +801,39 @@ echo "=== 15. the colour rule reaches the session files too ==="
 # comes out of the QML it just read. Section 15b proves that, on the generator's
 # actual output, which is a far stronger check than reading its source.
 
-if grep -rn -E '#[0-9A-Fa-f]{3,8}\b' \
-        session/niri session/labwc session/portals \
-        --exclude=generate-theme > /dev/null 2>&1; then
-    grep -rn -E '#[0-9A-Fa-f]{3,8}\b' \
-        session/niri session/labwc session/portals \
-        --exclude=generate-theme || true
-    fail "a session configuration contains what looks like a hex colour." \
-         "Colour belongs in theme/Ice.qml and theme/Midnight.qml only." \
-         "labwc's own colours are no longer written by hand at all — they are" \
-         "generated from those two files by session/labwc/generate-theme, so" \
-         "there is nowhere left that needs a colour typed into it. Leave" \
-         "everything else at the compositor's own defaults."
+# Resolve's user-requested charcoal palette is an app-specific exception to
+# the desktop palette. Parse it narrowly; every other session color stays checked.
+if python3 - <<'PYCOLORS'
+from pathlib import Path
+import re
+import xml.etree.ElementTree as ET
+bad = []
+for folder in ('session/niri', 'session/labwc', 'session/portals'):
+    for path in Path(folder).rglob('*'):
+        if not path.is_file() or path.name == 'generate-theme' or '__pycache__' in path.parts:
+            continue
+        text = path.read_text()
+        if path == Path('session/labwc/rc.xml'):
+            root = ET.fromstring(text)
+            for rule in root.iter('windowRule'):
+                palette = rule.attrib.get('decorationColors')
+                if palette is None:
+                    continue
+                if (rule.get('identifier') != 'resolve' or rule.get('type') != 'normal'
+                        or not re.fullmatch(r'#[0-9a-fA-F]{6}(?:\s+#[0-9a-fA-F]{6}){5}', palette)):
+                    bad.append(str(path) + ': invalid Resolve decoration palette')
+                del rule.attrib['decorationColors']
+            text = ET.tostring(root, encoding='unicode')
+        if re.search(r'#[0-9A-Fa-f]{3,8}\b', text):
+            bad.append(str(path) + ': unexpected session color')
+if bad:
+    print('\n'.join(bad))
+    raise SystemExit(1)
+PYCOLORS
+then
+    pass "session colors follow the desktop palette, with Resolve's explicit frame palette"
 else
-    pass "no colours in the compositor or portal configurations"
+    fail "unexpected or invalid colors in session configuration"
 fi
 
 # ------------------------------------------------------------------------------
@@ -2028,7 +2047,7 @@ Calc Progress GreeterState LockState AppIdentity KeyProfile"
 
 # Names Qt itself provides — globals, value types and attached types.
 aq_ns_qt="Qt Math JSON Date Object Array Locale Accessible Component Keys Easing
-Font Text TextInput Image Flickable Loader Layout Shape ShapePath"
+Font Text TextInput Image Canvas Flickable Loader Layout Shape ShapePath"
 
 # Quickshell's own. EVERY ONE OF THESE WAS PROBED under 0.2.1 git on 2026-09-02
 # and answered "object". Do not add to this list from the documentation.

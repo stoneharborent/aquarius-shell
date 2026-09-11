@@ -1460,3 +1460,17 @@ frameless maximized editor, a splash, and a dialog. Only the editor was restored
 and given a visible frame. Maximizing it afterwards still worked. Recheck the
 real Resolve project window after updating because app title changes can affect
 this deliberately narrow match.
+
+### Dock icon artwork sizing
+
+`DockAppIcon.qml` fits visible artwork to the standard dock icon slot. It samples
+alpha bounds once per source, keeps an antialiasing margin, and caps enlargement
+at 1.6x. Aspect ratio, vendor colors and original files are preserved. This
+shared renderer covers installed and newly installed apps for every account,
+including Resolve and ChatGPT; no per-user asset patch is needed. Unsupported
+image analysis falls back to the ordinary image, while missing or transparent
+icons use the existing initials fallback.
+
+`tests/test-dock-icons.sh` renders synthetic fixtures with real Qt offscreen and
+checks visible bounds, aspect ratio, fallback, source changes and slot resizing.
+CI runs this alongside the shell load gate.
