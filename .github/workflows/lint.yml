@@ -354,6 +354,9 @@ jobs:
       # ----------------------------------------------------------------------
       # And the actual question.
       # ----------------------------------------------------------------------
+      - name: Check dock artwork sizes with real rendering
+        run: ./tests/test-dock-icons.sh
+
       - name: Load the shell, the login screen and the lock screen
         # Print the shell's whole start-up log even when it passes. It is the
         # only place anybody can see what the shell says on a machine that is not
