@@ -1,0 +1,127 @@
+#!/usr/bin/env bash
+# =============================================================================
+# A FAKE aquarius-capture — for tests and for the nested harness
+# =============================================================================
+# The real one lives on the AquariusOS image, at /usr/libexec/aquarius-capture,
+# and is built in the OTHER repository (os-image). It takes real pictures with
+# grim and records real video with wf-recorder. None of that can happen on a
+# build machine or in CI, and it should not: the shell's half of feature 017 is
+# "does the bar say the right thing about what the helper reports", and that is
+# what this stand-in lets a test ask.
+#
+# It answers the whole contract and nothing else:
+#
+#     shot   screen|window|area     pretends, writes a line to the log
+#     record screen|window|area     starts a "recording" (a file with a date in it)
+#     record stop                   stops it
+#     status                        the contract's JSON, always exit 0
+#     folder                        where captures would go
+#
+# The "recording" is one line in $AQ_CAPTURE_STATE (default: a file in the
+# system temporary directory), holding the unix second it started and the file
+# it would be writing. That is enough for the shell to be tested against: the
+# elapsed seconds really do count up, a stop really does end it, and a status
+# read after a restart really does recover the state.
+#
+# TO USE IT BY HAND, in the nested harness:
+#
+#     AQ_CAPTURE_BIN="$PWD/tests/fixtures/capture/aquarius-capture" ./harness/run-nested.sh
+#
+# The bar's two buttons then work end to end with nothing installed: the record
+# button goes red and its clock ticks, and clicking it again stops.
+# =============================================================================
+set -uo pipefail
+
+aq_state="${AQ_CAPTURE_STATE:-${TMPDIR:-/tmp}/aquarius-capture-fake.state}"
+aq_folder="${AQ_CAPTURE_FOLDER:-${TMPDIR:-/tmp}/aquarius-capture-fake-Screenshots}"
+aq_log="${AQ_CAPTURE_LOG:-}"
+
+aq_note() {
+    [ -n "${aq_log}" ] || return 0
+    echo "$*" >> "${aq_log}"
+}
+
+aq_is_mode() {
+    case "$1" in
+        screen|window|area) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+aq_command="${1:-}"
+
+case "${aq_command}" in
+    shot)
+        aq_mode="${2:-}"
+        aq_is_mode "${aq_mode}" || { echo "unknown mode: ${aq_mode}" >&2; exit 2; }
+        mkdir -p "${aq_folder}"
+        # The real helper names files Mac style. So does this, so that a test
+        # reading the name back is reading the same shape.
+        aq_file="${aq_folder}/Screenshot $(date '+%Y-%m-%d at %H.%M.%S').png"
+        : > "${aq_file}"
+        aq_note "shot ${aq_mode} ${aq_file}"
+        exit 0
+        ;;
+
+    record)
+        aq_mode="${2:-}"
+
+        if [ "${aq_mode}" = "stop" ]; then
+            if [ ! -f "${aq_state}" ]; then
+                aq_note "stop with nothing running"
+                exit 1
+            fi
+            rm -f "${aq_state}"
+            aq_note "stop"
+            exit 0
+        fi
+
+        aq_is_mode "${aq_mode}" || { echo "unknown mode: ${aq_mode}" >&2; exit 2; }
+
+        if [ -f "${aq_state}" ]; then
+            # The real helper refuses a second recording too. The shell guards
+            # against asking, and this is the belt to that pair of braces.
+            echo "already recording" >&2
+            exit 1
+        fi
+
+        mkdir -p "${aq_folder}"
+        aq_file="${aq_folder}/Screen Recording $(date '+%Y-%m-%d at %H.%M.%S').mp4"
+        : > "${aq_file}"
+        printf '%s\n%s\n' "$(date '+%s')" "${aq_file}" > "${aq_state}"
+        aq_note "record ${aq_mode} ${aq_file}"
+        # "returns immediately once it is running" — the contract's words.
+        exit 0
+        ;;
+
+    status)
+        # ALWAYS exit 0. The shell polls this once a second; a non-zero exit
+        # would be a fault it has to reason about, and there is no fault here.
+        if [ -f "${aq_state}" ]; then
+            aq_started="$(sed -n 1p "${aq_state}")"
+            aq_file="$(sed -n 2p "${aq_state}")"
+            aq_elapsed=$(( $(date '+%s') - aq_started ))
+            [ "${aq_elapsed}" -ge 0 ] || aq_elapsed=0
+            # The file name can contain spaces, so it is quoted by hand here
+            # rather than by a JSON library this machine may not have.
+            printf '{"recording":true,"started":%s,"file":"%s","elapsed":%s}\n' \
+                "${aq_started}" "${aq_file}" "${aq_elapsed}"
+        else
+            printf '{"recording":false,"started":0,"file":"","elapsed":0}\n'
+        fi
+        exit 0
+        ;;
+
+    folder)
+        echo "${aq_folder}"
+        exit 0
+        ;;
+
+    *)
+        echo "usage: aquarius-capture shot|record screen|window|area" >&2
+        echo "       aquarius-capture record stop" >&2
+        echo "       aquarius-capture status" >&2
+        echo "       aquarius-capture folder" >&2
+        exit 64
+        ;;
+esac

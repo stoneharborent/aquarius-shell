@@ -82,7 +82,7 @@ these. Full explanation and troubleshooting: **[`harness/README.md`](harness/REA
 |---|---|
 | `shell.qml` | The front door. Everything hangs off this file. Deliberately tiny. |
 | `theme/` | **Ice** (light) and **Midnight** (dark) as the single source of truth for every colour, size and typeface. No component anywhere contains a hex value. |
-| `components/bar/` | The top bar — the first real piece. Aquarius mark (opens the Aquarius menu — `docs/logo-menu.md`), active app name, status cluster (live glyphs + system tray), clock. |
+| `components/bar/` | The top bar — the first real piece. Aquarius mark (opens the Aquarius menu — `docs/logo-menu.md`), active app name, status cluster (Screenshot and Record buttons — `docs/capture.md` — live glyphs + system tray), clock. |
 | `components/dock/` | The centred dock: pinned + running apps, hover lift, the centred running dot, a right-click menu on every tile (open, pin, quit), and mounted external drives at the right end. `docs/dock.md`. |
 | `components/quicksettings/` | The Quick Settings panel and the bar glyphs that open it. `docs/quick-settings.md`. |
 | `components/notifications/` | The notification daemon, toasts, and the panel off the clock. `docs/notifications.md`. |
@@ -90,7 +90,7 @@ these. Full explanation and troubleshooting: **[`harness/README.md`](harness/REA
 | `components/switcher/` | The app switcher — hold Command (or Alt), tap Tab, let go. Applications on the Mac keyboard style, windows on the Windows one. `docs/app-switcher.md`. |
 | `greeter/` | **The login screen** — this repo's second entry point (`qs -p greeter/greeter.qml`). The Ice wallpaper, the Aquarius mark, a password box, and the conversation with greetd that starts your desktop. `docs/greeter.md`. |
 | `lock/` | **The lock screen** — Super+L, the Aquarius menu's Lock Screen row, or ten minutes of nobody touching the machine. Part of the desktop shell rather than a program of its own, so that locking is instant; `lock/lock.qml` is a way to look at it in the harness. The password is checked by PAM and never by this shell. `docs/lock-screen.md`. |
-| `services/` | Shared single-instance state: Focus (do-not-disturb), the system light/dark preference, the one-overlay-at-a-time rule, and the shell's single door to the Settings app. |
+| `services/` | Shared single-instance state: Focus (do-not-disturb), the system light/dark preference, the one-overlay-at-a-time rule, the shell's single door to the Settings app, and the one door to the OS's capture helper (`docs/capture.md`). |
 | `session/` | The experimental Aquarius Session: login entry, launcher, niri + labwc configs, portals. `labwc/generate-theme` READS `theme/Ice.qml` or `theme/Midnight.qml` and writes labwc's own colours, sizes and window buttons out of it, so there is no second copy of the palette anywhere — the desktop menu, the window title bars and the round window buttons all follow the shell's theme and `AQ_UI_SCALE`. `docs/session.md`. |
 | `assets/` | The Aquarius logo, copied from `os-image/branding/`. |
 | `harness/` | How to run it on Linux, written for a beginner. |

@@ -211,6 +211,16 @@ echo ""
 # you mean. Both nested window managers below pass it on to what they start.
 export QS_CONFIG_PATH="${AQ_SHELL_DIR}"
 
+# ---- the capture helper, faked -----------------------------------------------
+# The bar's Screenshot and Record buttons run one program on the finished image,
+# /usr/libexec/aquarius-capture, which is built in the os-image repository and
+# is not on a build machine or in CI. CaptureService reads AQ_CAPTURE_BIN to
+# find it, so the stand-in in tests/fixtures/capture answers here instead: the
+# service becomes "available", polls a status, and the whole path the bench runs
+# is the path this harness loads. Set AQ_CAPTURE_BIN yourself to point somewhere
+# else — the real helper, on a machine that has one.
+export AQ_CAPTURE_BIN="${AQ_CAPTURE_BIN:-${AQ_SHELL_DIR}/tests/fixtures/capture/aquarius-capture}"
+
 # Which icon theme the nested shell draws from. Qt reports one only when it
 # recognises the desktop (GNOME, KDE); anywhere else the name is empty and only
 # hicolor is searched, so the Aquarius icons never load. The real session sets

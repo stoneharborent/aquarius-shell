@@ -179,6 +179,31 @@ Item {
                 "M8 6.5v-1a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v1"
             ],
             f: "M7 13.5a1.1 1.1 0 1 0 2.2 0 1.1 1.1 0 1 0-2.2 0"
+        },
+
+        // --- ours ---------------------------------------------------------------
+        // A stills camera: the body, the little bump over the lens, and the lens
+        // itself. It marks the Screenshot button in the bar (feature 017,
+        // 2026-09-13). The V2 mock has no capture buttons at all, so this is new
+        // work, drawn on the same 24-grid at the same 1.8 weight as the drive and
+        // the chevron beside it.
+        "camera": {
+            w: 24, h: 24, s: 1.8,
+            p: [
+                "M3.2 9a2 2 0 0 1 2-2h2.4l1.5-2.2h5.8L16.4 7h2.4a2 2 0 0 1 2 2v8.2a2 2 0 0 1-2 2H5.2a2 2 0 0 1-2-2z",
+                "M12 16.6a3.4 3.4 0 1 0 0-6.8 3.4 3.4 0 0 0 0 6.8"
+            ]
+        },
+
+        // --- ours ---------------------------------------------------------------
+        // The record mark: a ring with a solid dot in it, the same shape every
+        // camera and every recorder has used for fifty years. The bar draws it in
+        // Theme.ink at rest and in Theme.danger while a recording is running —
+        // the colour is the CALLER's, never this file's.
+        "record": {
+            w: 24, h: 24, s: 1.8,
+            p: ["M12 3.4a8.6 8.6 0 1 0 0 17.2 8.6 8.6 0 0 0 0-17.2"],
+            f: "M12 7.8a4.2 4.2 0 1 0 0 8.4 4.2 4.2 0 0 0 0-8.4"
         }
     })
 

@@ -249,6 +249,16 @@ export LIBGL_ALWAYS_SOFTWARE=1
 # with grep, and colour codes get in the way of that.
 export NO_COLOR=1
 
+# ---- the capture helper, faked -----------------------------------------------
+# The bar's Screenshot and Record buttons run one program on the finished image,
+# /usr/libexec/aquarius-capture, which is built in the os-image repository and
+# is not on a build machine or in CI. CaptureService reads AQ_CAPTURE_BIN to
+# find it, so the stand-in in tests/fixtures/capture answers here instead: the
+# service becomes "available", polls a status, and the whole path the bench runs
+# is the path this harness loads. Set AQ_CAPTURE_BIN yourself to point somewhere
+# else — the real helper, on a machine that has one.
+export AQ_CAPTURE_BIN="${AQ_CAPTURE_BIN:-${AQ_SHELL_DIR}/tests/fixtures/capture/aquarius-capture}"
+
 # -----------------------------------------------------------------------------
 # Tidying up, however this ends
 # -----------------------------------------------------------------------------

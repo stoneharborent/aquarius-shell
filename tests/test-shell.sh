@@ -94,6 +94,11 @@ for aq_file in \
     components/bar/ActiveAppName.qml \
     components/bar/BarClock.qml \
     components/bar/StatusCluster.qml \
+    components/bar/CaptureMenu.qml \
+    components/bar/MenuRow.qml \
+    services/CaptureService.qml \
+    tests/fixtures/capture/aquarius-capture \
+    docs/capture.md \
     components/bar/TrayItem.qml \
     services/qmldir \
     services/AppIdentity.qml \
@@ -2043,7 +2048,7 @@ echo "=== 28. every enum namespace is one the shipped build actually has ==="
 # `import "x.js" as Name`, so they are our own code and cannot be missing from a
 # Quickshell build.
 aq_ns_ours="Theme FocusState Overlays SettingsLauncher SystemAppearance Fuzzy
-Calc Progress GreeterState LockState AppIdentity KeyProfile"
+Calc Progress GreeterState LockState AppIdentity KeyProfile CaptureService"
 
 # Names Qt itself provides — globals, value types and attached types.
 aq_ns_qt="Qt Math JSON Date Object Array Locale Accessible Component Keys Easing
@@ -4620,6 +4625,305 @@ else
              "$(sed 's/^/  /' "${TMPDIR:-/tmp}/aq-wallpaper-check.log" | tail -20)"
     fi
     rm -f "${TMPDIR:-/tmp}/aq-wallpaper-check.log"
+fi
+
+
+# ------------------------------------------------------------------------------
+echo ""
+echo "=== 45. the bar can take a screenshot and record the screen ==="
+# ------------------------------------------------------------------------------
+# Feature 017, the shell's half. Two buttons in the status cluster, three modes
+# each, and ONE program on the image doing all of the work:
+#
+#     /usr/libexec/aquarius-capture shot|record screen|window|area
+#     /usr/libexec/aquarius-capture record stop
+#     /usr/libexec/aquarius-capture status     -> JSON, always exit 0
+#     /usr/libexec/aquarius-capture folder
+#
+# That program belongs to the OTHER repository. What can be checked here is that
+# the shell speaks exactly that contract, never a compositor's private door,
+# survives the helper being absent, and reads the JSON the way the contract says
+# it is written. The last part is checked by RUNNING the stand-in helper.
+
+aq_capture_service="services/CaptureService.qml"
+aq_capture_menu="components/bar/CaptureMenu.qml"
+aq_capture_fake="tests/fixtures/capture/aquarius-capture"
+
+# -- the contract, spelled the same way in the shell as on the image -----------
+for aq_word in "/usr/libexec/aquarius-capture" "AQ_CAPTURE_BIN" '"shot"' '"record"' '"stop"' '"status"' '"folder"'; do
+    if grep -qF -- "${aq_word}" "${aq_capture_service}"; then
+        pass "CaptureService speaks ${aq_word}"
+    else
+        fail "${aq_capture_service} never mentions ${aq_word}." \
+             "The four verbs and the path are a FIXED contract shared with" \
+             "os-image. If it changed, it changed in both repositories at once."
+    fi
+done
+
+# -- the three modes, and no fourth -------------------------------------------
+if grep -qF 'readonly property var modes: ["screen", "window", "area"]' "${aq_capture_service}"; then
+    pass "the only modes are screen, window and area"
+else
+    fail "${aq_capture_service} no longer declares exactly the three modes" \
+         "the helper accepts. A fourth one reaches a program that will" \
+         "reject it, and the person sees nothing happen."
+fi
+
+for aq_mode in screen window area; do
+    if grep -qF "\"${aq_mode}\"" "${aq_capture_menu}"; then
+        pass "the menu offers ${aq_mode}"
+    else
+        fail "${aq_capture_menu} has no '${aq_mode}' row."
+    fi
+done
+
+# -- no compositor-private door ------------------------------------------------
+# The one architectural law. Section 3 above already bans the compositor-specific
+# Quickshell modules everywhere; this is the narrower question of whether the
+# capture path reached for a screencopy interface by hand.
+if grep -rnE 'zwlr_screencopy|hyprland/?[a-z]*screenshot|grim|slurp|wf-recorder|wl-screenrec' \
+        "${aq_capture_service}" "${aq_capture_menu}" components/bar/StatusCluster.qml \
+        | grep -v '^\s*//' | grep -vE '^[^:]+:[0-9]+:\s*//' > /dev/null 2>&1; then
+    grep -rnE 'zwlr_screencopy|grim|slurp|wf-recorder|wl-screenrec' \
+        "${aq_capture_service}" "${aq_capture_menu}" components/bar/StatusCluster.qml || true
+    fail "the capture path names a capture PROGRAM or a private protocol." \
+         "Which program takes the picture is the image's business. The shell" \
+         "knows one command and four verbs, and nothing else."
+else
+    pass "the shell names no capture program and no private protocol"
+fi
+
+# -- the helper being missing is not a crash ----------------------------------
+for aq_needle in "property bool available" "warnMissing" "console.warn"; do
+    if grep -qF -- "${aq_needle}" "${aq_capture_service}"; then
+        pass "a missing helper is handled (${aq_needle})"
+    else
+        fail "${aq_capture_service} has no '${aq_needle}'." \
+             "On a machine with no capture helper — every developer's, and" \
+             "the nested harness — the buttons must still draw and a click" \
+             "must warn and do nothing."
+    fi
+done
+
+# -- the double-start guard ----------------------------------------------------
+if grep -qF 'if (root.recording || root.starting || root.stopping || recordProc.running)' \
+        "${aq_capture_service}"; then
+    pass "a second click cannot start a second recording"
+else
+    fail "${aq_capture_service} has lost its double-start guard." \
+         "Two recorders writing at once is two half-files and a machine on" \
+         "its knees in the middle of somebody's screencast."
+fi
+
+# -- the helper is the only thing that may say 'recording' ---------------------
+if python3 - <<'PYTHON'
+import re
+import sys
+import pathlib
+
+text = pathlib.Path('services/CaptureService.qml').read_text(encoding='utf-8')
+text = re.sub(r'/\*.*?\*/', '', text, flags=re.S)
+text = re.sub(r'//[^\n]*', '', text)
+
+# Every assignment to root.recording / root.elapsedSeconds must be inside
+# applyStatus() — the function that parses what the helper said.
+start = text.find('function applyStatus')
+end = text.find('Component.onCompleted')
+inside = text[start:end] if start != -1 and end != -1 else ''
+
+bad = 0
+for name in ('recording', 'elapsedSeconds'):
+    for match in re.finditer(r'root\.' + name + r'\s*=', text):
+        if not (start <= match.start() < start + len(inside)):
+            print("  FAIL root.%s is assigned outside applyStatus()" % name)
+            bad += 1
+
+if bad == 0:
+    print("  OK   only applyStatus() writes the recording state")
+sys.exit(1 if bad else 0)
+PYTHON
+then
+    :
+else
+    fail "something other than applyStatus() sets the recording state." \
+         "The helper is the truth: a recording can be started by a key" \
+         "binding or a terminal, and the shell can be reloaded while one is" \
+         "running. A shell that remembers instead of asking will be wrong."
+fi
+
+# -- the bar actually has the two buttons -------------------------------------
+for aq_needle in \
+    "CaptureService.shot" \
+    "CaptureService.record" \
+    "CaptureService.stop" \
+    "CaptureService.recording" \
+    "CaptureService.elapsedText" \
+    'glyph: "camera"' \
+    'glyph: "record"'
+do
+    if grep -qF -- "${aq_needle}" components/bar/StatusCluster.qml; then
+        pass "the status cluster has ${aq_needle}"
+    else
+        fail "components/bar/StatusCluster.qml is missing ${aq_needle}." \
+             "The bar side of feature 017 is two BarItems: a camera that" \
+             "opens the menu, and a record circle that opens the menu when" \
+             "nothing is running and STOPS with one click when something is."
+    fi
+done
+
+# A running recording must stop on a single click, with no menu in the way.
+if grep -qF "if (CaptureService.recording)" components/bar/StatusCluster.qml \
+        && grep -qF "CaptureService.stop();" components/bar/StatusCluster.qml; then
+    pass "one click stops a running recording, with no menu"
+else
+    fail "the record button does not stop a running recording on one click."
+fi
+
+# -- and now the part that RUNS -----------------------------------------------
+# The stand-in helper answers the whole contract. What is proved here: the JSON
+# is the shape CaptureService parses, the elapsed seconds really count, a second
+# start is refused, a stop really ends it, and `status` exits 0 in every state.
+if [ ! -x "${aq_capture_fake}" ]; then
+    fail "${aq_capture_fake} is missing or not executable." \
+         "It is the fake helper the harness and these checks run."
+else
+    aq_cap_root="$(mktemp -d)"
+    AQ_CAPTURE_STATE="${aq_cap_root}/state"
+    AQ_CAPTURE_FOLDER="${aq_cap_root}/Screenshots"
+    export AQ_CAPTURE_STATE AQ_CAPTURE_FOLDER
+
+    aq_cap_idle="$("${aq_capture_fake}" status)"
+    aq_cap_idle_code=$?
+    if [ "${aq_cap_idle_code}" -eq 0 ]; then
+        pass "status exits 0 with nothing recording"
+    else
+        fail "status exited ${aq_cap_idle_code} with nothing recording; the" \
+             "contract says it ALWAYS exits 0."
+    fi
+
+    "${aq_capture_fake}" record area
+    sleep 1
+    aq_cap_live="$("${aq_capture_fake}" status)"
+
+    if "${aq_capture_fake}" record screen 2>/dev/null; then
+        fail "the helper started a SECOND recording while one was running."
+    else
+        pass "a second recording is refused while one is running"
+    fi
+
+    "${aq_capture_fake}" record stop
+    aq_cap_after="$("${aq_capture_fake}" status)"
+
+    if AQ_IDLE="${aq_cap_idle}" AQ_LIVE="${aq_cap_live}" AQ_AFTER="${aq_cap_after}" \
+        python3 - <<'PYTHON'
+import json
+import os
+import sys
+
+problems = []
+
+
+def parse(name):
+    raw = os.environ[name]
+    try:
+        return json.loads(raw)
+    except Exception as exc:
+        problems.append("%s is not JSON (%s): %s" % (name, exc, raw))
+        return {}
+
+
+idle = parse("AQ_IDLE")
+live = parse("AQ_LIVE")
+after = parse("AQ_AFTER")
+
+for name, value in (("idle", idle), ("live", live), ("after", after)):
+    for key in ("recording", "started", "file", "elapsed"):
+        if key not in value:
+            problems.append("the %s status has no '%s' key" % (name, key))
+
+if idle.get("recording") is not False:
+    problems.append("the idle status does not say recording:false")
+if live.get("recording") is not True:
+    problems.append("the running status does not say recording:true")
+if after.get("recording") is not False:
+    problems.append("the status after a stop does not say recording:false")
+
+if not isinstance(live.get("elapsed"), (int, float)) or live.get("elapsed") < 1:
+    problems.append("the elapsed seconds did not count up: %r" % (live.get("elapsed"),))
+
+if not str(live.get("file", "")).endswith(".mp4"):
+    problems.append("the running status names no .mp4 file: %r" % (live.get("file"),))
+
+
+# The bar's clock, exactly as services/CaptureService.qml formats it. The rule
+# is mm:ss with the hours rolled into the minutes, so the item never changes
+# width in the middle of a screencast.
+def elapsed_text(seconds):
+    total = seconds if seconds > 0 else 0
+    minutes = total // 60
+    rest = total % 60
+    return "%02d:%02d" % (minutes, rest)
+
+
+for seconds, expected in ((0, "00:00"), (5, "00:05"), (61, "01:01"),
+                          (599, "09:59"), (3600, "60:00"), (5400, "90:00")):
+    got = elapsed_text(seconds)
+    if got != expected:
+        problems.append("%ds should read %s and reads %s" % (seconds, expected, got))
+
+for problem in problems:
+    print("       " + problem)
+sys.exit(1 if problems else 0)
+PYTHON
+    then
+        pass "the helper's JSON is the shape CaptureService parses, and the clock counts"
+    else
+        fail "the capture status contract is not being honoured (listed above)."
+    fi
+
+    # The stand-in's own shot path, so that a bench run with AQ_CAPTURE_BIN set
+    # is known to write something Mac-named into the Screenshots folder.
+    "${aq_capture_fake}" shot area
+    if ls "${AQ_CAPTURE_FOLDER}"/Screenshot*.png > /dev/null 2>&1; then
+        pass "a screenshot lands in the Screenshots folder, named Mac style"
+    else
+        fail "the fake helper's 'shot' wrote nothing into ${AQ_CAPTURE_FOLDER}."
+    fi
+
+    # An unknown mode is refused rather than quietly doing something else.
+    if "${aq_capture_fake}" shot everything 2>/dev/null; then
+        fail "the helper accepted a mode that does not exist."
+    else
+        pass "an unknown mode is refused"
+    fi
+
+    unset AQ_CAPTURE_STATE AQ_CAPTURE_FOLDER
+    rm -rf "${aq_cap_root}"
+fi
+
+# -- the harness hands the shell the stand-in ---------------------------------
+for aq_script in harness/load-check.sh harness/run-nested.sh; do
+    # shellcheck disable=SC2016  # the single quotes are the point: this is the
+    # literal line the script must contain, not something to expand here.
+    if grep -qF 'AQ_CAPTURE_BIN="${AQ_CAPTURE_BIN:-${AQ_SHELL_DIR}/tests/fixtures/capture/aquarius-capture}"' "${aq_script}"; then
+        pass "${aq_script} gives the shell a capture helper to talk to"
+    else
+        fail "${aq_script} does not set AQ_CAPTURE_BIN." \
+             "Without it CaptureService finds nothing on a build machine and" \
+             "the load gate never exercises the status poll at all."
+    fi
+done
+
+# -- the mirrored labwc files are NOT this repository's to guess --------------
+# The key bindings for feature 017 are added to rc.xml in os-image, and the four
+# labwc files here are a MIRROR of those. Guessing at them here would create the
+# drift the mirror exists to prevent.
+if grep -qF "aquarius-capture" session/labwc/rc.xml; then
+    pass "session/labwc/rc.xml carries the capture key bindings (mirrored from os-image)"
+else
+    echo "  note   session/labwc/rc.xml has no capture key bindings yet."
+    echo "         They are added in os-image and MIRRORED here afterwards;"
+    echo "         check-labwc-drift.sh is what keeps the two copies honest."
 fi
 
 # ------------------------------------------------------------------------------

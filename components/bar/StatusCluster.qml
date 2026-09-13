@@ -8,6 +8,12 @@
 //   Left to right, what the bar actually draws between the app name and the
 //   clock:
 //
+//     * SCREENSHOT and RECORD. Two buttons, three modes each (whole screen, an
+//       app, an area you drag). They run ONE program the OS image installs —
+//       /usr/libexec/aquarius-capture — and nothing else; services/
+//       CaptureService.qml holds that whole contract and docs/capture.md
+//       explains it in plain words. While a recording runs the record button is
+//       red, carries a mm:ss clock, and stops on one click.
 //     * THE SYSTEM TRAY. Every application that puts an icon in the tray, via
 //       StatusNotifierItem. See TrayItem.qml. Empty on a machine with no tray
 //       applications running, which is most machines most of the time.
@@ -90,6 +96,7 @@ import QtQuick
 
 import Quickshell.Services.SystemTray
 
+import "../../services"
 import "../../theme"
 import "../quicksettings"
 
@@ -102,6 +109,106 @@ Row {
     signal quickSettingsToggled(bool nowOpen)
 
     spacing: Theme.barItemSpacing
+
+    // ---- screenshot and screen recording --------------------------------------
+    // Feature 017. Two buttons, three modes each, and one small program on the
+    // image that does all of the actual work — services/CaptureService.qml has
+    // the whole contract written out. They sit at the LEFT of the cluster, ahead
+    // of the tray, because they are ours and the tray is other applications';
+    // that is the slot the old Drop/Search placeholders used to hold and the
+    // note above always said a real button would take it.
+    //
+    // Both buttons draw on every machine, including one with no capture helper
+    // installed (the nested harness). A bar that is a different shape depending
+    // on which machine it woke up on is harder to reason about than one that is
+    // always the same; a click with no helper writes one clear warning to the
+    // log and does nothing else. See CaptureService.warnMissing().
+
+    BarItem {
+        id: screenshotButton
+
+        interactive: true
+        active: screenshotMenu.open
+        onClicked: screenshotMenu.toggle()
+
+        Accessible.role: Accessible.Button
+        Accessible.name: qsTr("Screenshot")
+        Accessible.description: qsTr("Whole screen, an app, or an area you choose")
+
+        QsGlyph {
+            anchors.verticalCenter: parent.verticalCenter
+            glyph: "camera"
+            size: Theme.barGlyphSize
+            color: Theme.ink
+        }
+    }
+
+    CaptureMenu {
+        id: screenshotMenu
+        anchorItem: screenshotButton
+        onChosen: mode => CaptureService.shot(mode)
+    }
+
+    BarItem {
+        id: recordButton
+
+        interactive: true
+
+        // While a recording is running the pill stays lit, the way every other
+        // bar item stays lit while the thing it opened is on screen. Here the
+        // thing on screen is the recording itself.
+        active: recordMenu.open || CaptureService.recording
+
+        // One click stops a running recording — no menu, no confirm. The menu is
+        // for CHOOSING what to record, and while one is already running there is
+        // nothing left to choose. Stopping a recording is also the one thing a
+        // person wants to do in a hurry.
+        onClicked: {
+            if (CaptureService.recording)
+                CaptureService.stop();
+            else
+                recordMenu.toggle();
+        }
+
+        Accessible.role: Accessible.Button
+        Accessible.name: CaptureService.recording
+                         ? qsTr("Stop recording")
+                         : qsTr("Record screen")
+        Accessible.description: CaptureService.recording
+                                ? qsTr("Recording for %1").arg(CaptureService.elapsedText)
+                                : qsTr("Whole screen, an app, or an area you choose")
+
+        QsGlyph {
+            anchors.verticalCenter: parent.verticalCenter
+            glyph: "record"
+            size: Theme.barGlyphSize
+            // The one state change in this cluster that is a colour: a running
+            // recording turns the mark the theme's danger red. Both palettes
+            // define it; there is no hex value here.
+            color: CaptureService.recording ? Theme.danger : Theme.ink
+        }
+
+        // mm:ss, and only while recording. The item grows by the width of the
+        // clock as it starts and shrinks again when it stops, which is the whole
+        // reason the clock is fixed at two digits of minutes: it must not change
+        // width every sixty seconds and shuffle the bar.
+        Text {
+            anchors.verticalCenter: parent.verticalCenter
+            visible: CaptureService.recording
+            text: CaptureService.elapsedText
+            font.family: Theme.fontBody
+            font.pixelSize: Theme.fsCaption
+            font.weight: Font.Medium
+            color: Theme.danger
+            textFormat: Text.PlainText
+        }
+    }
+
+    CaptureMenu {
+        id: recordMenu
+        anchorItem: recordButton
+        onChosen: mode => CaptureService.record(mode)
+    }
 
     // ---- the system tray ------------------------------------------------------
     // Referencing the SystemTray singleton is what makes Quickshell start
