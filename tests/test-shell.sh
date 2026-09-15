@@ -2163,7 +2163,7 @@ SwitcherKeys"
 
 # Names Qt itself provides — globals, value types and attached types.
 aq_ns_qt="Qt Math JSON Date Object Array Locale Accessible Component Keys Easing
-Font Text TextInput Image Flickable Loader Layout Shape ShapePath"
+Font Text TextInput Image Canvas Flickable Loader Layout Shape ShapePath"
 
 # Quickshell's own. EVERY ONE OF THESE WAS PROBED under 0.2.1 git on 2026-09-02
 # and answered "object". Do not add to this list from the documentation.
