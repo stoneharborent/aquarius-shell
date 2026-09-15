@@ -134,6 +134,8 @@ for aq_file in \
     components/switcher/SwitcherModel.qml \
     components/switcher/SwitcherTile.qml \
     components/switcher/SwitcherRow.qml \
+    components/switcher/switcher-keys.js \
+    tests/switcher-js-tests.mjs \
     docs/app-switcher.md \
     tests/search-js-tests.mjs \
     components/notifications/NotificationLayer.qml \
@@ -1637,6 +1639,16 @@ if command -v node > /dev/null 2>&1; then
     else
         fail "the notification progress tests failed (listed above)."
     fi
+
+    # components/switcher/switcher-keys.js joined them on 2026-09-14. Every bug
+    # the app switcher has had was a SEQUENCE of key events arriving in a
+    # particular order a few milliseconds apart — the one thing reading the code
+    # never catches, and the one thing running it always does.
+    if node tests/switcher-js-tests.mjs; then
+        pass "the app switcher's key rules behave"
+    else
+        fail "the app switcher key tests failed (listed above)."
+    fi
 else
     echo "  SKIP node is not installed; the JavaScript logic tests cannot run."
     echo "       These are the only tests in this repo that execute real code —"
@@ -1655,7 +1667,8 @@ echo "=== 24. the search JavaScript stays plain JavaScript ==="
 
 aq_js_ok=1
 for aq_js in components/search/fuzzy.js components/search/calc.js \
-             components/notifications/progress.js; do
+             components/notifications/progress.js \
+             components/switcher/switcher-keys.js; do
     if ! grep -q '^\.pragma library' "${aq_js}"; then
         fail "${aq_js} is missing its '.pragma library' line." \
              "Without it QML gives every importer its own copy, and the" \
@@ -4200,50 +4213,76 @@ PYTHON
     # Enter, and the panel read that as "go to the selected app" and closed.
     # The fix is one boolean: a key that arrives while the release-grace timer
     # is still running was sent by the remapper (which lets go of ⌘ to send a
-    # chord), not pressed by a person. Three things have to stay true, and each
-    # of them silently un-fixes the bug on its own.
+    # chord), not pressed by a person.
     #
-    #   1. the flag is READ BEFORE the timer is stopped — stop() first and it is
-    #      always false, and ⌘↓ closes the panel again;
+    # Since 2026-09-14 the DECISIONS live in components/switcher/switcher-keys.js
+    # — plain JavaScript, so node can run the real sequences against them
+    # (tests/switcher-js-tests.mjs) instead of this file guessing from the text.
+    # Three things still have to stay true, and each of them silently un-fixes
+    # the bug on its own.
+    #
+    #   1. the state of the timer reaches the rulebook as an ARGUMENT, captured
+    #      before anything is stopped — and the rulebook cannot touch the timer
+    #      at all, which is what makes that order impossible to get wrong;
     #   2. Enter branches on it, instead of always committing;
     #   3. a modifier the remapper pressed for a chord is remembered, so its
     #      release does not start a commit (this is ⌘↑, which becomes Alt+↑).
     aq_switcher_qml="components/switcher/AppSwitcher.qml"
+    aq_switcher_js="components/switcher/switcher-keys.js"
 
-    if python3 - "${aq_switcher_qml}" <<'PY'
-import re, sys
-text = open(sys.argv[1], encoding="utf-8").read()
-# The order of these two lines inside Keys.onPressed is the whole fix.
-read = text.find("const fromRemapper = releaseGrace.running")
-stop = text.find("releaseGrace.stop()", read if read >= 0 else 0)
-sys.exit(0 if (read >= 0 and stop > read) else 1)
-PY
-    then
-        pass "AppSwitcher.qml reads the release grace BEFORE it stops it"
+    if [ ! -f "${aq_switcher_js}" ]; then
+        fail "${aq_switcher_js} is missing; the switcher's rulebook is gone."
+    elif grep -qF 'graceRunning: releaseGrace.running' "${aq_switcher_qml}" \
+        && ! grep -q 'releaseGrace' "${aq_switcher_js}"; then
+        pass "the switcher hands the release grace to its rulebook, which cannot stop it"
     else
-        fail "${aq_switcher_qml} does not capture 'fromRemapper' before" \
-             "calling releaseGrace.stop()." \
-             "Stopping the timer first makes the flag always false, and ⌘↓" \
-             "with Files in front closes the switcher again (bench," \
-             "2026-09-08). See docs/app-switcher.md, 'the third edge'."
+        fail "${aq_switcher_qml} no longer passes 'graceRunning: releaseGrace.running'" \
+             "into the rulebook, or ${aq_switcher_js} has learned about the timer." \
+             "Reading the timer AFTER stopping it makes the flag always false," \
+             "and ⌘↓ with Files in front closes the switcher again (bench," \
+             "2026-09-08). Passing it as an argument is what makes that" \
+             "mistake impossible. See docs/app-switcher.md, 'the third edge'."
     fi
 
-    if grep -q "if (fromRemapper)" "${aq_switcher_qml}" \
-        && grep -q "root.stepDown()" "${aq_switcher_qml}"; then
-        pass "AppSwitcher.qml reads a remapped Enter as Down, not as commit"
+    if grep -qF 'fromRemapper ? "down" : "commit"' "${aq_switcher_js}"; then
+        pass "the rulebook reads a remapped Enter as Down, not as commit"
     else
-        fail "${aq_switcher_qml} does not branch on where Enter came from." \
+        fail "${aq_switcher_js} does not branch on where Enter came from." \
              "Aquarius Keys' Files block sends ⌘↓ as Enter; under the" \
              "switcher that is the person pressing Down."
     fi
 
-    if grep -q "remapperModifier" "${aq_switcher_qml}"; then
-        pass "AppSwitcher.qml ignores the release of a chord's own modifier"
+    if grep -q "remapperModifier" "${aq_switcher_js}" \
+        && grep -q "remapperModifier" "${aq_switcher_qml}"; then
+        pass "the switcher ignores the release of a chord's own modifier"
     else
-        fail "${aq_switcher_qml} no longer remembers remapperModifier." \
+        fail "${aq_switcher_js} no longer remembers remapperModifier." \
              "⌘↑ in Files is sent as Alt+↑: the remapper presses Alt and lets" \
              "it go again, and a modifier release is what this panel commits" \
              "on. Without this the commit is only cancelled by a race."
+    fi
+
+    # -- the fast tap ----------------------------------------------------------
+    # Bench, 2026-09-14: "the app switcher command sometimes doesn't select or
+    # switch apps if the command is hit too quickly." Let go of ⌘ before the
+    # panel has the keyboard and labwc posts that release to the window you were
+    # in; the panel never sees it and never commits. Qt does not turn the keys
+    # held at focus time into events, so the panel cannot see the release it
+    # missed — but the NEXT modifier press tells it, because a modifier that is
+    # still held cannot be pressed again. The first keyboard event after the
+    # panel opens being a modifier PRESS therefore means the last gesture ended
+    # out of sight, and the next Tab must open the panel afresh.
+    if grep -q "sawKeyEvent" "${aq_switcher_js}" \
+        && grep -q "gestureRestart" "${aq_switcher_js}" \
+        && grep -q "root.gestureRestart" "${aq_switcher_qml}"; then
+        pass "a second ⌘-Tab after a lost release starts the gesture over"
+    else
+        fail "${aq_switcher_qml} / ${aq_switcher_js} no longer handle the fast tap." \
+             "Press ⌘-Tab and let go before the panel has the keyboard and the" \
+             "release lands on the window you were in — the panel then sits" \
+             "there and nothing switches. Pressing ⌘ again is the signal that" \
+             "this happened (sawKeyEvent), and the next Tab must re-open the" \
+             "panel rather than step along a dead selection (gestureRestart)."
     fi
 
     # -- the write-up, second half ---------------------------------------------
