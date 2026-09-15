@@ -53,7 +53,7 @@ function check(description, actual, expected) {
     }
 }
 
-const { pressDecision, releaseDecision } =
+const { pressDecision, releaseDecision, keyName } =
     loadQmlLibrary("components/switcher/switcher-keys.js");
 
 // Qt's key numbers, exactly as AppSwitcher.qml's `keyCodes` hands them over.
@@ -270,6 +270,36 @@ for (const [name, key, expected] of [["Down", K.down, "down"], ["End", K.end, "d
                                      ["Up", K.up, "up"], ["Home", K.home, "up"]]) {
     const p = panel();
     check(`${name} means ${expected}`, press(p, key).action, expected);
+}
+
+// -----------------------------------------------------------------------------
+console.log("--- the trace can name every key the rulebook has an opinion about ---");
+// Added 2026-09-15 with the flight recorder. The names are what Royce reads off
+// the bench; a key the rulebook knows about but the namer does not would print
+// as a bare number in exactly the trace somebody is trying to read.
+for (const [name, key] of [["Escape", K.escape], ["Down", K.down], ["End", K.end],
+                           ["Up", K.up], ["Home", K.home], ["Meta", K.meta],
+                           ["Super_L", K.superL], ["Super_R", K.superR],
+                           ["Alt", K.alt], ["Return", K.ret], ["Enter", K.enter]]) {
+    check(`${name} is named, not numbered`, keyName(K, key), name);
+}
+{
+    // Every key the rulebook reacts to must have a name. This is the check that
+    // catches "a key was added to the rules and not to the namer": anything the
+    // rulebook handles, or acts on, has to come back as something other than a
+    // bare hex number.
+    for (const key of Object.values(K)) {
+        const p = panel();
+        const d = pressDecision(K, key, p);
+        if (d.handled || d.action !== "none") {
+            check(`a key the rules act on (0x${key.toString(16)}) has a name`,
+                  /^0x/.test(keyName(K, key)), false);
+        }
+    }
+}
+{
+    // A key it has no opinion about is honestly printed as a number.
+    check("a plain letter prints as hex", keyName(K, LETTER_A), "0x41");
 }
 
 // -----------------------------------------------------------------------------

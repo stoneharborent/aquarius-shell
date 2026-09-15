@@ -198,6 +198,49 @@
 //   ⌘↑ needed nothing: `A-Up` arrives as Alt then Up, and Up already means up.
 //
 // =============================================================================
+// THE FOURTH BENCH REPORT, 2026-09-15: "STILL A GLITCH"
+// =============================================================================
+// Royce, on the image carrying the fast-tap fix above: "still a glitch with
+// switcher where sometimes it won't switch to selected app." No trace, no
+// reproduction, just "sometimes".
+//
+// THE HONEST READING OF THAT. The fast-tap fix was reasoned out of the source
+// and never proven on hardware. It may be right and incomplete; it may be right
+// and irrelevant. Nothing anybody can read in this file will settle it, because
+// "sometimes" is a statement about timing and this file is a statement about
+// intent. So 2026-09-15 did two things: it made the panel RECORD itself, and it
+// closed the two other ways a miss can happen that could be proven from code.
+//
+//   1. THE FLIGHT RECORDER — services/SwitcherTrace.qml. Off unless
+//      AQ_SWITCHER_TRACE=1 (or AQ_TRACE=switcher) is set. With it on, every
+//      event this panel decides on gets one timestamped line in the session log:
+//      the open request, the surface going up, the keyboard arriving and
+//      leaving, every key with its modifiers and the state the rulebook saw,
+//      every decision, the commit, and — a hundred milliseconds later — what the
+//      compositor says actually has focus. "When the switcher misses: how to
+//      capture it" in docs/app-switcher.md is the page to hand Royce.
+//
+//   2. THE LIST IS FROZEN WHILE THE PANEL IS OPEN — `frozenEntries` below. It
+//      used to be live, and a live list under a plain integer index is a silent
+//      miss waiting to happen: a window closing mid-gesture can leave the index
+//      pointing past the end of the list, and then the commit has nothing to
+//      commit to and does nothing at all. Provable from the code, fixed.
+//
+//   3. THE ACTIVATION IS NOW CHECKED — `focusCheck` below. `activate()` is a
+//      request with no reply; the compositor is free to ignore it, and several
+//      ordinary things make it do so. The panel now asks a hundred milliseconds
+//      later whether the window it wanted is the one with focus, retries once if
+//      it is not, and writes down both. This is the candidate the bench report
+//      fits best — "it didn't switch" with the panel behaving perfectly — and it
+//      is the one no amount of reading could confirm.
+//
+// WHAT WAS LOOKED AT AND LEFT ALONE. The sixty-millisecond commit delay is a
+// DELAY, not a deadline: a slow frame makes it fire late, never not at all, so
+// a busy machine cannot be the reason nothing switched. The rulebook's handling
+// of the remapper was re-read against xremap's own ordering and not changed.
+// Both are now printed in the trace, so the next report will say which.
+//
+// =============================================================================
 // TWO PROFILES, ONE PANEL
 // =============================================================================
 //   Mac profile      Command-Tab moves between APPLICATIONS; Down opens the
@@ -293,7 +336,39 @@ Scope {
     // `aq keys windows` and the next Tab lists windows instead of apps.
     readonly property bool grouped: KeyProfile.mac
 
-    readonly property var entries: root.switcherModel.entries
+    // ⚠️ THE LIST IS FROZEN WHILE THE PANEL IS OPEN (2026-09-15)
+    //   `switcherModel.entries` is alive: it rebuilds whenever a window opens or
+    //   closes, whenever an application is installed, and whenever focus moves
+    //   (because the order is most-recently-used). That is exactly right when
+    //   the panel is SHUT and exactly wrong while somebody is choosing from it.
+    //
+    //   What goes wrong, and it is not subtle. `selectedIndex` is a plain
+    //   number — "the third tile" — not a handle on an application. Rebuild the
+    //   list underneath it and the third tile is a different app than the one
+    //   the person was looking at when they pressed Tab. Worse, if the list gets
+    //   SHORTER (a window closed, a splash screen went away) the index can point
+    //   past the end of it, `selectedEntry` is null, `targetWindow` is null, and
+    //   `commit()` does nothing whatsoever. That is "it didn't switch", exactly
+    //   as reported, with no key event involved at all.
+    //
+    //   SwitcherModel's own header argues that this cannot happen, because labwc
+    //   keeps its active view while a layer surface holds the keyboard. That
+    //   argument covers ONE of the three ways the list moves — focus — and only
+    //   as long as labwc keeps behaving that way. It says nothing about a window
+    //   opening or closing, which needs no focus change at all and which happens
+    //   constantly on a machine running Resolve.
+    //
+    //   So: when the panel opens, the list it is showing is copied, and the copy
+    //   is what it draws and what it commits to. `frozenEntries` being null
+    //   means "shut, follow the live list". Because QML works out what a binding
+    //   depends on from what it actually READS, the line below stops depending
+    //   on the model at all while the copy is in place — the model can churn as
+    //   much as it likes and not one tile moves.
+    property var frozenEntries: null
+
+    readonly property var entries: root.frozenEntries !== null
+        ? root.frozenEntries
+        : root.switcherModel.entries
 
     signal opened()
     signal closed()
@@ -319,6 +394,112 @@ Scope {
     Component.onDestruction: Overlays.unregister(root)
 
     // =========================================================================
+    // The two timers this panel runs on
+    // =========================================================================
+    // ⚠️ WHY THE COMMIT WAITS A MOMENT AFTER THE MODIFIER COMES UP
+    //   Found on the bench, 2026-09-07: Command-Tab, then Down to open an app's
+    //   windows — and the panel went to the app instead.
+    //
+    //   Aquarius Keys (xremap) turns Command+Down into Ctrl+End, the Mac "end
+    //   of document" habit, in every ordinary app. To send that chord it has to
+    //   RELEASE Command, press Ctrl+End, and then press Command again (xremap's
+    //   send_key_press_and_release: release the extra modifiers, tap the key,
+    //   "resurrect" them). The whole thing takes a few milliseconds. This panel
+    //   saw the release and did what a release means: it committed.
+    //
+    //   So a release now starts this timer instead of committing, and two
+    //   things stop it: the modifier being pressed again (the resurrection), or
+    //   any key arriving (the chord). A real let-go has neither, and the commit
+    //   lands when the timer fires.
+    //
+    //   The interval is the cost. xremap's sequence completes in well under ten
+    //   milliseconds by default; sixty leaves room for a slow machine and is
+    //   still below what a hand can notice on release. It must stay short: this
+    //   is latency on EVERY switch.
+    //
+    //   ⚠️ IT IS A DELAY, NOT A DEADLINE, AND THAT MATTERS FOR THE BUG HUNT.
+    //     A slow frame — Resolve open, 4K on the timeline — makes a Qt timer
+    //     fire LATE. It does not make it fail to fire. So a busy machine can
+    //     make the switch feel sluggish; it cannot make this timer be the
+    //     reason nothing switched. The trace prints how long the commit
+    //     actually took, so that stops being an argument and becomes a number.
+    Timer {
+        id: releaseGrace
+        interval: 60
+        repeat: false
+        onTriggered: {
+            SwitcherTrace.log("grace-fired", { interval: releaseGrace.interval });
+            root.commit();
+        }
+    }
+
+    // ---- did the compositor actually do what we asked? -----------------------
+    // A hundred milliseconds after a commit, compare what we asked for with
+    // what the compositor says has focus. See the long note in `commit()`.
+    //
+    // A hundred is chosen to be comfortably longer than a compositor needs to
+    // process one activation request and shorter than a person needs to notice
+    // that nothing happened and reach for the keys again. If the retry ever
+    // fires while somebody is already mid-way through their next gesture it
+    // would fight them, so the check stands down the moment the panel reopens.
+    Timer {
+        id: focusCheck
+        interval: 100
+        repeat: false
+        onTriggered: {
+            const wanted = root.pendingTarget;
+            const got = ToplevelManager.activeToplevel;
+            const match = !!wanted && wanted === got;
+
+            SwitcherTrace.log("focus-check", {
+                wanted: SwitcherTrace.window(wanted),
+                got: SwitcherTrace.window(got),
+                match: match,
+                retried: root.pendingRetried
+            });
+
+            if (match || !wanted) {
+                root.pendingTarget = null;
+                return;
+            }
+
+            if (root.pendingRetried) {
+                // Two goes, and the compositor still has focus somewhere else.
+                // Nothing more to try from here — but this line is the whole
+                // point of the exercise: it is the evidence that the miss is
+                // the ACTIVATION, not the keyboard.
+                SwitcherTrace.log("activate-failed", {
+                    wanted: SwitcherTrace.window(wanted),
+                    got: SwitcherTrace.window(got),
+                    note: "the compositor did not honour the request"
+                });
+                root.pendingTarget = null;
+                return;
+            }
+
+            // The panel has reopened since; the person has moved on and a retry
+            // now would yank focus out from under their new gesture.
+            if (root.isOpen) {
+                SwitcherTrace.log("retry-skipped", { reason: "panel reopened" });
+                root.pendingTarget = null;
+                return;
+            }
+
+            // A window that closed in the meantime is not a failed activation.
+            if (!root.isLive(wanted)) {
+                SwitcherTrace.log("retry-skipped", { reason: "window gone" });
+                root.pendingTarget = null;
+                return;
+            }
+
+            root.pendingRetried = true;
+            SwitcherTrace.log("retry", { wanted: SwitcherTrace.window(wanted) });
+            root.switcherModel.goTo(wanted);
+            focusCheck.restart();
+        }
+    }
+
+    // =========================================================================
     // The public API — what the keybinds and the panel itself call
     // =========================================================================
 
@@ -337,9 +518,25 @@ Scope {
     // only ALMOST always 0 — a window with no app id at all is not listed, and
     // then the app you are in is not on the row for the first tap to move off.
     function step(delta: int): void {
-        const list = root.entries;
-        if (list.length === 0)
+        SwitcherTrace.log("step-request", {
+            delta: delta,
+            open: root.isOpen,
+            restart: root.gestureRestart,
+            entries: root.entries.length,
+            live: root.switcherModel.entries.length
+        });
+
+        // A fresh look at the live list on the way in, and ONLY here. Opening or
+        // restarting is the one moment the panel is allowed to change its mind
+        // about what is running; see `frozenEntries` above for why every other
+        // moment is forbidden.
+        const opening = !root.isOpen || root.gestureRestart;
+        const list = opening ? root.switcherModel.entries : root.entries;
+
+        if (list.length === 0) {
+            SwitcherTrace.log("step-empty", { note: "nothing to switch to" });
             return;
+        }
 
         // OPENING — and also RE-opening, which is the 2026-09-14 fast-tap fix.
         // `gestureRestart` means the panel is on screen but the gesture that
@@ -349,14 +546,21 @@ Scope {
         // tap of a NEW gesture and must behave exactly like one: work the
         // selection out afresh from the app they are in, rather than stepping
         // along a selection nobody ever got to use. Read switcher-keys.js.
-        if (!root.isOpen || root.gestureRestart) {
+        if (opening) {
             const wasShut = !root.isOpen;
+
+            if (wasShut)
+                SwitcherTrace.mark();
 
             Overlays.claim(root);
 
             root.gestureRestart = false;
             root.expanded = false;
             root.expandedIndex = 0;
+
+            // Take the copy BEFORE working the selection out, so that the index
+            // and the list it indexes into are the same list for certain.
+            root.frozenEntries = list;
 
             const at = root.switcherModel.currentIndex;
             const from = at >= 0 ? at : 0;
@@ -365,6 +569,16 @@ Scope {
                 ((from + (delta >= 0 ? 1 : -1)) % count + count) % count;
 
             root.isOpen = true;
+
+            SwitcherTrace.log("open-request", {
+                reason: wasShut ? "shut" : "restart",
+                delta: delta,
+                entries: count,
+                currentIndex: at,
+                selected: root.selectedIndex,
+                app: root.selectedEntry ? root.selectedEntry.key : null
+            });
+
             if (wasShut)
                 root.opened();
             return;
@@ -380,6 +594,13 @@ Scope {
         // longer on.
         root.expanded = false;
         root.expandedIndex = 0;
+
+        SwitcherTrace.log("step", {
+            delta: delta,
+            selected: root.selectedIndex,
+            of: count,
+            app: root.selectedEntry ? root.selectedEntry.key : null
+        });
     }
 
     // Down. In the Mac profile this opens the selected app's windows, and then
@@ -433,37 +654,153 @@ Scope {
 
     // Let go of the modifier: go to what is selected and put the panel away.
     function commit(): void {
-        if (!root.isOpen)
+        if (!root.isOpen) {
+            // Worth a line of its own. It means the commit timer fired into a
+            // panel that had already gone — something else closed it in the
+            // sixty milliseconds after the modifier came up. Nothing switches,
+            // and from the outside that is indistinguishable from the switcher
+            // ignoring you.
+            SwitcherTrace.log("commit-skipped", { reason: "panel already shut" });
             return;
+        }
 
         const target = root.targetWindow;
+
+        SwitcherTrace.log("commit", {
+            selected: root.selectedIndex,
+            of: root.entries.length,
+            expanded: root.expanded,
+            row: root.expandedIndex,
+            app: root.selectedEntry ? root.selectedEntry.key : null,
+            target: SwitcherTrace.window(target)
+        });
+
+        // ⚠️ IS THE WINDOW WE PICKED STILL THERE? (2026-09-15)
+        //   The list is frozen while the panel is open, which is what keeps the
+        //   tile you are looking at and the entry that commits from drifting
+        //   apart. The price of freezing is that a window can close while the
+        //   panel is up and leave the copy pointing at something that no longer
+        //   exists. Activating a dead handle does nothing and says nothing, so
+        //   it is checked for here and written down instead.
+        if (target && !root.isLive(target)) {
+            SwitcherTrace.log("commit-stale", {
+                target: SwitcherTrace.window(target),
+                note: "that window closed while the panel was open"
+            });
+            root.close();
+            return;
+        }
 
         // Close FIRST. Activating a window makes the compositor move keyboard
         // focus, and a panel still holding an exclusive keyboard grab at that
         // moment is a panel arguing with the thing it just asked for.
         root.close();
 
-        if (target)
-            root.switcherModel.goTo(target);
+        if (!target) {
+            // The other silent miss: the selection points at nothing. Before
+            // the list was frozen this was reachable simply by a window closing
+            // mid-gesture. It should now be unreachable; a line here is how we
+            // would learn that it is not.
+            SwitcherTrace.log("commit-empty", {
+                selected: root.selectedIndex,
+                note: "nothing selected to switch to"
+            });
+            return;
+        }
+
+        root.switcherModel.goTo(target);
+        SwitcherTrace.log("activate", { target: SwitcherTrace.window(target) });
+
+        // ---- and then CHECK, which is the 2026-09-15 addition -----------------
+        // `activate()` is a REQUEST. wlr-foreign-toplevel-management says the
+        // compositor may refuse it, and there is no reply either way: the call
+        // returns instantly whether the window came forward or not. Several
+        // ordinary things can eat it — an XWayland client (which is DaVinci
+        // Resolve), a window on another output, a focus rule, or simply the
+        // compositor re-deciding who has focus as our own layer surface goes
+        // away underneath it, which happens in the same handful of milliseconds.
+        //
+        // So a hundred milliseconds later the panel asks the compositor what it
+        // actually did, and if the answer is not the window we asked for, it
+        // asks once more — un-minimise, then activate — and writes down both
+        // the question and the answer. One retry, not a loop: if the second one
+        // does not take either, the compositor is refusing us and the trace is
+        // now the bug report.
+        root.pendingTarget = target;
+        root.pendingRetried = false;
+        focusCheck.restart();
     }
+
+    // Is this window still one the compositor is telling us about? A handle we
+    // kept from a frozen list can outlive the window it names.
+    function isLive(win: var): bool {
+        if (!win)
+            return false;
+        const live = root.switcherModel.toplevels || [];
+        return live.indexOf(win) !== -1;
+    }
+
+    // The window `commit()` asked for, kept until the focus check has had its
+    // look. Null the rest of the time.
+    property var pendingTarget: null
+
+    // Has the one retry been spent on this commit?
+    property bool pendingRetried: false
 
     // Escape, or a click on the dimmed desktop. Changes nothing.
     function cancel(): void {
+        SwitcherTrace.log("cancel", { selected: root.selectedIndex });
         root.close();
     }
 
     function close(): void {
         if (!root.isOpen)
             return;
+        SwitcherTrace.log("close", {});
         root.isOpen = false;
         root.expanded = false;
         root.expandedIndex = 0;
+        // The copy taken when the panel opened goes with it, so that the next
+        // time it opens it looks at what is running now.
+        root.frozenEntries = null;
+        // A commit that was armed and never fired must not fire into a panel
+        // that has gone. The timer lives beside this function rather than
+        // inside the panel's window for exactly this reason: it can be stopped
+        // from here, at the moment the window is being torn down.
+        releaseGrace.stop();
         // Nothing about the last chord survives into the next time the panel
         // opens; the surface and its keyboard grab are torn down here.
         root.remapperModifier = 0;
         root.sawKeyEvent = false;
         root.gestureRestart = false;
         root.closed();
+    }
+
+    // ---- writing down one key event ------------------------------------------
+    // Called FIRST in both key handlers, before any decision is taken, so that
+    // the trace shows the state the rulebook was actually handed rather than
+    // the state it left behind. Everything here is the argument the bug hunt
+    // has been having since 2026-09-07 — which key, which modifiers were held,
+    // was a commit pending, had this panel heard anything yet.
+    //
+    // `event.isAutoRepeat` is printed because a held key repeats, and a repeat
+    // arriving in the middle of a gesture looks exactly like a fresh press in
+    // every log that does not say so.
+    function traceKey(what: string, event: var): void {
+        if (!SwitcherTrace.enabled)
+            return;
+        SwitcherTrace.log(what, {
+            key: SwitcherKeys.keyName(root.keyCodes, event.key),
+            code: "0x" + Number(event.key).toString(16),
+            mods: "0x" + Number(event.modifiers).toString(16),
+            repeat: !!event.isAutoRepeat,
+            grace: releaseGrace.running,
+            saw: root.sawKeyEvent,
+            restart: root.gestureRestart,
+            remapperMod: root.remapperModifier
+                ? SwitcherKeys.keyName(root.keyCodes, root.remapperModifier) : null,
+            selected: root.selectedIndex
+        });
     }
 
     // ---- carrying out one key decision ---------------------------------------
@@ -477,6 +814,15 @@ Scope {
     // us", not "we did something with it", and that is exactly what the fast-tap
     // rule needs it to mean.
     function applyDecision(d: var, event: var): void {
+        SwitcherTrace.log("decision", {
+            action: d.action,
+            grace: d.grace,
+            handled: d.handled,
+            restart: d.gestureRestart,
+            remapperMod: d.remapperModifier
+                ? SwitcherKeys.keyName(root.keyCodes, d.remapperModifier) : null
+        });
+
         root.sawKeyEvent = true;
         root.remapperModifier = d.remapperModifier;
 
@@ -657,8 +1003,14 @@ Scope {
         // being put on screen — the same pattern, and the same reason, as the
         // search palette's text field.
         onVisibleChanged: {
+            SwitcherTrace.log("surface", { visible: overlay.visible });
             if (overlay.visible) {
-                Qt.callLater(() => keys.forceActiveFocus());
+                Qt.callLater(() => {
+                    keys.forceActiveFocus();
+                    SwitcherTrace.log("focus-asked", {
+                        gotIt: keys.activeFocus
+                    });
+                });
                 Qt.callLater(() => root.shown = true);
             } else {
                 root.shown = false;
@@ -717,6 +1069,15 @@ Scope {
             anchors.fill: parent
             focus: true
 
+            // The moment the compositor hands this surface the keyboard — and
+            // the moment it takes it away again. The gap between "surface" and
+            // this line IS the fast-tap window: a release that happens inside
+            // it lands on the window you were in and the panel never sees it.
+            // Measuring that gap on the real machine is the single most useful
+            // number this trace produces.
+            onActiveFocusChanged: SwitcherTrace.log(
+                keys.activeFocus ? "focus-gained" : "focus-lost", {})
+
             // ⚠️ TAB DOES NOT ARRIVE HERE, AND THAT IS CORRECT.
             //   Command-Tab is a compositor keybind, so labwc consumes the
             //   press and never forwards it. Tab reaches this panel as an IPC
@@ -728,6 +1089,7 @@ Scope {
             //   after the release. A key press means the person is still
             //   driving the panel, whatever the modifier said a moment ago.
             Keys.onPressed: event => {
+                root.traceKey("key-press", event);
                 root.applyDecision(SwitcherKeys.pressDecision(root.keyCodes, event.key, {
                     graceRunning: releaseGrace.running,
                     sawKeyEvent: root.sawKeyEvent,
@@ -753,6 +1115,7 @@ Scope {
             // one is switched on: whichever modifier you were holding is the one
             // whose release arrives.
             Keys.onReleased: event => {
+                root.traceKey("key-release", event);
                 root.applyDecision(SwitcherKeys.releaseDecision(root.keyCodes, event.key, {
                     graceRunning: releaseGrace.running,
                     sawKeyEvent: root.sawKeyEvent,
@@ -785,12 +1148,15 @@ Scope {
             //   The alternative — removing Command+Down/Up from the keys map —
             //   would cost a Mac habit to fix a switcher, which is backwards.
             //   Windows mode is untouched: Alt+Down is not remapped.
-            Timer {
-                id: releaseGrace
-                interval: 60
-                repeat: false
-                onTriggered: root.commit()
-            }
+            //   ⚠️ THE TIMER ITSELF LIVES AT THE TOP OF THIS FILE, NOT HERE.
+            //     It was a child of this Item until 2026-09-15, which put it
+            //     inside the panel's window — and the panel's window is torn
+            //     down the instant `isOpen` goes false, which is the first
+            //     thing `commit()` does. A timer that is destroyed by the
+            //     handler it is running is a question nobody should have to
+            //     ask about the most timing-sensitive code in the shell. It is
+            //     now a child of `root`, which outlives every panel, and
+            //     `close()` stops it explicitly.
 
             // ---- the panel -----------------------------------------------------
             Rectangle {

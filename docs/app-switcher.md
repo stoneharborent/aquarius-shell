@@ -403,7 +403,8 @@ changes what it lists the moment the file changes.
 |---|---|
 | `components/switcher/AppSwitcher.qml` | The overlay: the window, the keyboard, the IPC door, the state. The long explanation of the modifier release is at the top of it. It *carries out* key decisions; it no longer makes them. |
 | `components/switcher/switcher-keys.js` | The rulebook: what one key event means, given what happened just before it. Plain JavaScript with no QML in it, so it can be run. |
-| `tests/switcher-js-tests.mjs` | 40 assertions that walk whole gestures — the ordinary one, each of the three bench findings, the fast tap — through the rulebook under node. |
+| `tests/switcher-js-tests.mjs` | 63 assertions that walk whole gestures — the ordinary one, each of the three bench findings, the fast tap — through the rulebook under node. |
+| `services/SwitcherTrace.qml` | The flight recorder. Off unless `AQ_SWITCHER_TRACE=1` (or `AQ_TRACE=switcher`) is set; on, it writes one line per event into the ordinary session log. See "When the switcher misses" below. |
 | `components/switcher/SwitcherModel.qml` | What to list and in what order — the most-recently-used list, and the grouping into applications. |
 | `components/switcher/SwitcherTile.qml` | One application, as a 124px tile with its icon and its window count. |
 | `components/switcher/SwitcherRow.qml` | One window, as a line. Used at two sizes: the Windows profile's rows and the Mac profile's ↓ list. |
@@ -418,6 +419,139 @@ The same `rc.xml` block exists a second time in the os-image repository, at
 `build_files/check-labwc-drift.sh` over there fails the build if they disagree.
 
 ---
+
+## When the switcher misses: how to capture it
+
+Royce reported on 2026-09-15, and twice before that: *sometimes it won't switch
+to the selected app.* Each time the report arrived with nothing attached, because
+there was nothing to attach. Every fix so far has been worked out by reading the
+source and guessing at the order of events. Two of those guesses were probably
+right. None of them were ever checked against a real miss.
+
+This section is how that stops. The switcher can now write down everything it
+does. It is **off by default** — it costs nothing when it is off — and when it is
+on, one miss produces about twenty lines that say exactly which step did not
+happen.
+
+**What we need from you: make it miss once with the trace on, then send the
+lines.** That is the whole ask.
+
+### Way 1 — right now, in a terminal, no logging out
+
+This is the quickest, and the trace appears straight in the terminal window where
+you can see it. It restarts the desktop's panel, dock and menus for a second —
+your applications are **not** touched, nothing closes, nothing is lost.
+
+Open a terminal and type this, all on one line:
+
+```bash
+pkill -x qs; sleep 1; AQ_SWITCHER_TRACE=1 qs 2>&1 | tee ~/switcher-trace.txt
+```
+
+What that does, word by word:
+
+| Piece | What it means |
+|---|---|
+| `pkill -x qs` | stop the shell that is running now (the bar and the dock vanish for a moment) |
+| `sleep 1` | give it a second to tidy up |
+| `AQ_SWITCHER_TRACE=1` | start the next one with the trace switched **on** |
+| `qs` | start the shell again — the bar and dock come back |
+| `tee ~/switcher-trace.txt` | show everything on screen **and** save a copy in your home folder |
+
+Leave that terminal running. Now use ⌘Tab normally until it misses. The moment
+it does, come back to the terminal, press **Ctrl+C** to stop it, and then start
+the shell again the ordinary way:
+
+```bash
+/usr/libexec/aquarius-shell-start &
+```
+
+The file `~/switcher-trace.txt` now has the evidence in it. Send the last fifty
+lines or so:
+
+```bash
+tail -n 50 ~/switcher-trace.txt
+```
+
+### Way 2 — leave it on for a whole session
+
+Use this if the miss is rare and you would rather not sit in front of a terminal
+waiting for it. It survives logging out and back in, and it turns itself off
+again when you undo it.
+
+```bash
+mkdir -p ~/.config/labwc
+cp /usr/share/aquarius/labwc/environment ~/.config/labwc/environment
+echo "AQ_SWITCHER_TRACE=1" >> ~/.config/labwc/environment
+```
+
+Log out and back in. From now on the trace lines go into the session log, along
+with everything else the desktop says:
+
+```bash
+grep switcher ~/.local/state/aquarius-session/session.log | tail -n 60
+```
+
+(The log from your **previous** session is next to it, as `session.log.1`. If the
+miss happened just before you logged out, that is the file to look in.)
+
+To turn it off again, delete the line you added — or, if you copied nothing else
+into that file, delete the whole file:
+
+```bash
+rm ~/.config/labwc/environment
+```
+
+There is a second name for the same switch, `AQ_TRACE=switcher`, which exists so
+that other parts of the shell can grow traces of their own later
+(`AQ_TRACE=switcher,dock` would turn on two). Either one works; use whichever you
+remember.
+
+### ⚠️ `AQ_LOG` is not the switch
+
+It is a natural guess, because of the name. `AQ_LOG` is a **file path** — it is
+how the session tells every program where to write. It decides *where* these
+lines land. `AQ_SWITCHER_TRACE` decides *whether they are written at all*. You
+need the second one.
+
+### ⚠️ There is no `aq switcher trace` command, on purpose
+
+`aq` is the operating system's command, and it lives in the **os-image**
+repository, not this one. The shell cannot add subcommands to it from here. If a
+subcommand is ever wanted, it belongs beside `aq keys` in
+`os-image/system_files/usr/bin/aq`, and all it would do is what the two recipes
+above do by hand.
+
+### What the lines look like, and how to read one
+
+```
+[shell] switcher +0000ms open-request   reason=shut delta=1 entries=6 currentIndex=0 selected=1 app=org.gnome.Nautilus at=…
+[shell] switcher +0002ms surface        visible=true at=…
+[shell] switcher +0041ms focus-gained   at=…
+[shell] switcher +0388ms key-release    key=Super_L code=0x1000053 mods=0x0 repeat=false grace=false saw=false restart=false selected=1 at=…
+[shell] switcher +0388ms decision       action=none grace=arm handled=true restart=false at=…
+[shell] switcher +0449ms grace-fired    interval=60 at=…
+[shell] switcher +0449ms commit         selected=1 of=6 expanded=false app=org.gnome.Nautilus target=org.gnome.Nautilus@0x55f1… at=…
+[shell] switcher +0450ms go-to          target=org.gnome.Nautilus@0x55f1… unminimised=false at=…
+[shell] switcher +0550ms focus-check    wanted=org.gnome.Nautilus@0x55f1… got=org.gnome.Nautilus@0x55f1… match=true at=…
+```
+
+The `+NNNNms` is **milliseconds since the panel opened**, not the time of day.
+Every question anybody has ever had about this feature is a question about how
+many milliseconds apart two things were, so that is the number on the front of
+every line. The time of day is on the end, as `at=`, for lining up against the
+rest of the log.
+
+You do not have to interpret it. But if you want to, here is the short version of
+what a miss looks like in each of the four shapes it could take:
+
+| What you see in the trace | What it means |
+|---|---|
+| no `key-release` line at all, then nothing | the release of ⌘ never reached the panel — the fast tap, the known gap. Look at how long `focus-gained` took. |
+| `commit` and `go-to` happen, then `focus-check … match=false`, then `retry`, then `activate-failed` | the panel did everything right and **the compositor refused to bring the app forward**. This is the candidate nobody could prove by reading. |
+| `commit-empty` or `commit-stale` | the selection pointed at nothing, or at a window that had closed. Should be impossible now that the list is frozen; if it appears, the freeze has a hole. |
+| `commit-skipped` | something closed the panel in the sixty milliseconds between letting go and the switch. |
+
 
 ## What is unproven
 
@@ -443,3 +577,24 @@ The bench list, in order:
 8. **⌘↓ still works after a fast tap.** With a fast tap's panel still up, hold ⌘
    and press ↓: the selected app's window list should open, as it always has.
    This is the case the fast-tap rule must not break.
+9. **The trace, on a miss (2026-09-15).** Follow "When the switcher misses: how
+   to capture it" above, use ⌘Tab until it misses once, and send the lines. This
+   is the most valuable single thing on this list — it is worth more than the
+   other eight put together, because it is the only one that produces evidence
+   rather than an opinion.
+10. **A window opening mid-gesture.** Hold ⌘ and tap Tab, and while the panel is
+    up have something open a new window (a Resolve render finishing, a
+    notification opening a window, `xdg-open` from a second terminal). The tiles
+    must **not** move or renumber while you are looking at them, and letting go
+    must land on the tile you were on. This is the frozen-list fix of
+    2026-09-15.
+11. **A window closing mid-gesture.** The same, but close a window instead. The
+    panel must not renumber; if you had that window selected, letting go should
+    simply do nothing rather than switching somewhere unexpected.
+12. **Switching TO DaVinci Resolve, repeatedly.** Resolve is an XWayland client,
+    which is the kind most likely to ignore an activation request. ⌘Tab to it and
+    away from it twenty times. With the trace on, any `activate-failed` line
+    here is the answer to the whole bug.
+13. **Switching to a minimised window.** Minimise something, ⌘Tab to it. It
+    should come back up. With the trace on, `go-to … unminimised=true` and then
+    `focus-check … match=true`.

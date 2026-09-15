@@ -19,6 +19,7 @@ singleton KeyProfile 1.0 KeyProfile.qml
 singleton MountTable 1.0 MountTable.qml
 singleton Overlays 1.0 Overlays.qml
 singleton SettingsLauncher 1.0 SettingsLauncher.qml
+singleton SwitcherTrace 1.0 SwitcherTrace.qml
 singleton SystemAppearance 1.0 SystemAppearance.qml
 
 # NOT a singleton, and that is the point: an IpcHandler has to be part of the
