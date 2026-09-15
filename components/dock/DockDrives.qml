@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Stone Harbor Entertainment
 // SPDX-License-Identifier: Apache-2.0
 // =============================================================================
-// DockDrives — the live list of mounted external drives, right of the apps
+// DockDrives — the live list of mounted drives, right of the apps
 // =============================================================================
 // This is what replaced the dashed "+" at the end of the dock on 2026-09-06
 // (Royce's call). Instead of a button that opened the app grid, the right end of
@@ -48,6 +48,58 @@
 // Unmounting takes the GVfs/GIO road (`gio mount -u`), in DockDrive.qml, because
 // that is the one unmount command that works from a mount PATH — which is all a
 // directory listing gives us — without first resolving the backing device.
+//
+// =============================================================================
+// TWO KINDS OF DRIVE, TWO FOLDERS TO WATCH (FEATURES 020, 2026-09-14)
+// =============================================================================
+// Everything above describes drives you PLUG IN. There is now a second kind.
+//
+// A drive that lives INSIDE the computer used to ask for an administrator
+// password every single time it was mounted. Since FEATURES 020 the OS asks
+// once — "Mount Footage every login?" — and if you say yes it writes a line
+// into /etc/fstab and the drive is simply there at every login, mounted at:
+//
+//     /media/aquarius/<name>
+//
+// NOT under /run/media/<you>, because that folder belongs to udisks2 and only
+// exists after you have logged in — a drive that must be there BEFORE you log
+// in cannot live there. (The full story is in the header of
+// ../os-image/system_files/usr/libexec/aquarius-remember-drive.)
+//
+// So a remembered drive showed up in Files and got no dock tile. This file now
+// watches BOTH folders and draws one group of tiles from the two of them:
+//
+//     /run/media/<you>/*     plugged-in drives   — tile offers Unmount + Eject
+//     /media/aquarius/*      remembered inside drives — tile offers neither
+//
+// THREE THINGS ARE DIFFERENT ABOUT THE SECOND FOLDER, and each one is handled:
+//
+//   1. /media/aquarius DOES NOT ALWAYS EXIST. Nothing in the image creates it.
+//      The privileged helper makes it the first time somebody says yes to a
+//      drive (its `os.makedirs(mount_point)`), and on a machine where nobody
+//      ever has, it is simply not there. That is exactly the trap described
+//      below, so it gets exactly the same answer: a second chain of watchers,
+//      each level created only while the level above it says its directory is
+//      really there. This chain starts at "/" rather than "/run" — the root
+//      directory is the one folder that cannot be missing.
+//
+//   2. THE FOLDER EXISTS EVEN WHEN THE DRIVE IS NOT MOUNTED. A remembered drive
+//      is written into fstab with `x-systemd.automount`, which means the mount
+//      point is made once and the drive itself is only mounted the first time
+//      somebody opens it. So "there is a folder here" no longer means "there is
+//      a drive here", the way it does under /run/media. Every candidate is
+//      therefore checked against the kernel's own mount table
+//      (services/MountTable.qml, which reads /proc/self/mounts) and a folder
+//      that is not really mounted draws NO tile. An automount placeholder that
+//      has not been opened yet appears in that table as type `autofs`, which is
+//      the one type that is read as "not mounted yet".
+//
+//   3. NOTHING ANNOUNCES A MOUNT. /proc files do not tell anybody when they
+//      change, and the autofs → real-filesystem moment happens silently the
+//      first time any program opens the folder. There is no signal to listen
+//      for. So while — and only while — /media/aquarius exists, a slow timer
+//      re-reads the mount table (see `mountPoll` below). On every machine where
+//      nobody has remembered a drive, that timer never runs at all.
 //
 // =============================================================================
 // ⚠️ THE TRAP THIS FILE IS BUILT AROUND — read this before changing anything
@@ -156,20 +208,34 @@ import Qt.labs.folderlistmodel
 
 import Quickshell
 
+import "../../services"
 import "../../theme"
 
 Row {
     id: root
 
-    // True when at least one external drive is mounted AND the model listing it
-    // passed its own health check. Dock.qml binds the drives Loader's visibility
-    // to this, so an empty — or a distrusted — list adds no separator and no gap
-    // to the dock.
-    readonly property bool hasDrives:
-        driveLoader.item !== null
-        && driveLoader.item !== undefined
-        && driveLoader.item.healthy === true
-        && driveLoader.item.count > 0
+    // True when at least one drive — plugged in OR remembered — is showing a
+    // tile. Dock.qml binds the drives Loader's visibility to this, so an empty
+    // — or a distrusted — list adds no separator and no gap to the dock.
+    readonly property bool hasDrives: root.removableCount > 0 || root.internalCount > 0
+
+    // The plugged-in drives: every subfolder of /run/media/<you>, as long as the
+    // model listing them passed its own health check.
+    readonly property int removableCount:
+        (driveLoader.item !== null
+         && driveLoader.item !== undefined
+         && driveLoader.item.healthy === true)
+        ? driveLoader.item.count : 0
+
+    // The remembered inside drives: the subfolders of /media/aquarius that are
+    // REALLY MOUNTED right now. Not the same as the folder count — see point 2
+    // in the header. MountTable.byPath is read inside the counting function, and
+    // reading it is what makes this re-count when the mount table is re-read.
+    readonly property int internalCount:
+        (internalLoader.item !== null
+         && internalLoader.item !== undefined
+         && internalLoader.item.healthy === true)
+        ? root.countMounted(internalLoader.item, MountTable.byPath) : 0
 
     spacing: Theme.dockGap
 
@@ -234,19 +300,60 @@ Row {
     readonly property string mediaBase: root.asUrl(root.mediaBasePath)
     readonly property string mediaRoot: root.asUrl(root.mediaRootPath)
 
+    // ---- the remembered inside drives: the SECOND set of three ---------------
+    // Deliberately the same shape as the three above, not a clever shared one.
+    // The chain above is the one that was measured working on the bench on
+    // 2026-09-08 (see the header); copying its shape rather than rewriting it
+    // into something both can share is the cheaper mistake to make.
+    //
+    // ⚠️ AQ_REMEMBERED_ROOT is the test override, exactly like AQ_MEDIA_ROOT
+    //   above and for exactly the same reason: making /media/aquarius appear on
+    //   demand needs root, and a check that needs root is a check that never
+    //   runs. Whatever it names, its GRANDPARENT must already exist when the
+    //   shell starts. Unset — which is every real login — means /media/aquarius.
+    readonly property string internalRootPath: {
+        const override = Quickshell.env("AQ_REMEMBERED_ROOT");
+        if (override !== null && override !== undefined && String(override) !== "")
+            return root.withoutTrailingSlash(String(override));
+        return "/media/aquarius";
+    }
+
+    // /media on a real machine. Fedora ships it, but this file never assumes a
+    // directory exists — it looks.
+    readonly property string internalBasePath: root.parentOf(root.internalRootPath)
+
+    // "/" on a real machine: the root directory, which cannot be missing, so a
+    // model pointed here cannot take the fallback described in the header.
+    readonly property string internalTopPath: root.parentOf(root.internalBasePath)
+
+    readonly property string internalBaseName: root.baseNameOf(root.internalBasePath)
+    readonly property string internalRootName: root.baseNameOf(root.internalRootPath)
+
+    readonly property string internalTop: root.asUrl(root.internalTopPath)
+    readonly property string internalBase: root.asUrl(root.internalBasePath)
+    readonly property string internalRoot: root.asUrl(root.internalRootPath)
+
     // ---- taking a path apart --------------------------------------------------
     // Deliberately plain string work rather than anything clever: this runs
     // before the first tile is drawn and a wrong answer here shows somebody
     // their home directory (see the header).
     //
-    // A path with no "/" in it after the first character has no parent worth
-    // watching, and that returns "" — which unbuilds the chain and draws
-    // nothing, which is the safe end of the trade.
+    // A path with no "/" in it at all has no parent worth watching, and that
+    // returns "" — which unbuilds the chain and draws nothing, which is the
+    // safe end of the trade.
+    //
+    // The parent of a top-level folder is the root directory. "/media" has its
+    // only slash at position 0, so the answer is "/" — which is the one folder
+    // on a Linux machine that is always there, and therefore a safe place for
+    // the remembered-drives chain to start. (The plugged-in chain never reaches
+    // this case: its levels are /run/media/<you>, /run/media and /run.)
     function parentOf(path): string {
         const s = String(path);
         const cut = s.lastIndexOf("/");
-        if (cut <= 0)
+        if (cut < 0)
             return "";
+        if (cut === 0)
+            return s.length > 1 ? "/" : "";
         return s.slice(0, cut);
     }
 
@@ -312,6 +419,42 @@ Row {
         const s = String(text);
         return (s.length > 1 && s.charAt(s.length - 1) === "/")
             ? s.slice(0, s.length - 1) : s;
+    }
+
+    // ---- "is there really a drive in this folder?" ---------------------------
+    // Only the remembered inside drives need this question asked. Under
+    // /run/media a folder IS a mount — udisks2 makes it when it mounts and
+    // removes it when it unmounts — but a remembered drive's mount point is
+    // made once, in /etc/fstab, and stays there whether the drive is mounted or
+    // not. So the folder is only a drive if the kernel's mount table says so.
+    //
+    // `table` is passed in rather than read from the singleton inside, so that a
+    // binding calling this re-evaluates when the mount table is re-read. The
+    // value itself is not used — MountTable.fsTypeFor does the lookup — but
+    // naming it as an argument is what creates the dependency.
+    //
+    // `autofs` is the one type that means NOT mounted: it is the placeholder
+    // systemd leaves at an `x-systemd.automount` mount point until the first
+    // program opens the folder. When the real drive does mount, it is mounted
+    // over the top at the same path and the mount table's last word for that
+    // path becomes the real filesystem (ext4, xfs, exfat …), which is what
+    // MountTable's parser keeps.
+    function isReallyMounted(path, table): bool {
+        const fs = MountTable.fsTypeFor(String(path));
+        return fs !== "" && fs !== "autofs";
+    }
+
+    // How many of a model's folders are really mounted right now.
+    function countMounted(model, table): int {
+        if (model === null || model === undefined)
+            return 0;
+
+        let n = 0;
+        for (let i = 0; i < model.count; i++) {
+            if (root.isReallyMounted(model.get(i, "filePath"), table))
+                n++;
+        }
+        return n;
     }
 
     // ---- level 1: /run, watched unconditionally ------------------------------
@@ -403,6 +546,112 @@ Row {
         }
     }
 
+    // ---- the remembered inside drives: the same three levels again -----------
+    // Level 1: "/" on a real machine. The root directory is always there, so
+    // this model — like /run above — cannot take the componentComplete fallback.
+    FolderListModel {
+        id: internalTopDir
+
+        folder: root.internalTop
+
+        showDirs: true
+        showFiles: false
+        showDotAndDotDot: false
+        showHidden: false
+    }
+
+    // Level 2: /media, only while it is really there.
+    Loader {
+        id: internalBaseLoader
+
+        visible: false
+        active: root.internalTop !== ""
+                && root.listingHas(internalTopDir, root.internalBaseName)
+        sourceComponent: internalBaseComponent
+    }
+
+    Component {
+        id: internalBaseComponent
+
+        FolderListModel {
+            id: internalBaseDir
+
+            folder: root.internalBase
+
+            showDirs: true
+            showFiles: false
+            showDotAndDotDot: false
+            showHidden: false
+
+            property bool healthy: false
+            Component.onCompleted:
+                internalBaseDir.healthy = root.folderIsExactly(internalBaseDir, root.internalBase)
+        }
+    }
+
+    // Level 3: /media/aquarius — the folder the remembered drives are mounted
+    // in. Created only when /media really contains it, and destroyed again the
+    // moment it does not, so saying yes to the very first drive of your life
+    // builds this list without a logout.
+    Loader {
+        id: internalLoader
+
+        visible: false
+        active: root.internalRoot !== ""
+                && internalBaseLoader.item !== null
+                && internalBaseLoader.item !== undefined
+                && internalBaseLoader.item.healthy === true
+                && root.listingHas(internalBaseLoader.item, root.internalRootName)
+        sourceComponent: internalModelComponent
+
+        // The folder has just appeared (or gone). Either way the mount table has
+        // something new to say, and nothing else will say it.
+        onItemChanged: MountTable.refresh()
+    }
+
+    Component {
+        id: internalModelComponent
+
+        FolderListModel {
+            id: internalModel
+
+            folder: root.internalRoot
+
+            showDirs: true
+            showFiles: false
+            showDotAndDotDot: false
+            showHidden: false
+
+            property bool healthy: false
+            Component.onCompleted: {
+                internalModel.healthy = root.folderIsExactly(internalModel, root.internalRoot);
+                // A folder here is not yet a drive; ask the kernel which of them
+                // are actually mounted before drawing anything.
+                MountTable.refresh();
+            }
+        }
+    }
+
+    // ---- the one poll in this file, and why it is here -----------------------
+    // /proc/self/mounts cannot be watched: /proc files never tell anybody they
+    // changed. And the moment that matters here — an `x-systemd.automount`
+    // placeholder turning into the real mounted drive — happens silently, the
+    // first time any program opens the folder. Nothing emits a signal for it.
+    //
+    // So this re-reads the mount table every few seconds, and ONLY while
+    // /media/aquarius exists. On a machine where nobody has ever said yes to an
+    // inside drive, `internalLoader.item` is null and this timer never runs at
+    // all. The read itself is a few hundred bytes the kernel makes up on the
+    // spot, so the cost when it does run is a rounding error.
+    Timer {
+        id: mountPoll
+
+        interval: Theme.driveMountPollInterval
+        repeat: true
+        running: internalLoader.item !== null && internalLoader.item !== undefined
+        onTriggered: MountTable.refresh()
+    }
+
     // ---- what is drawn -------------------------------------------------------
     // The rule that sets the drives apart from the apps, drawn only when there is
     // at least one drive — the same 1px × dockSeparatorHeight rule the "+" used
@@ -418,10 +667,12 @@ Row {
 
     Repeater {
         // Note what the model is: not `driveLoader.item` but the item ONLY when
-        // the whole chain is healthy. A model that failed its read-back check
-        // draws no tiles at all, rather than drawing whatever it happens to be
-        // listing.
-        model: root.hasDrives ? driveLoader.item : null
+        // THIS chain is healthy. A model that failed its read-back check draws
+        // no tiles at all, rather than drawing whatever it happens to be
+        // listing. It is removableCount and not hasDrives, because hasDrives is
+        // now true when EITHER list has something in it — asking the wrong one
+        // here would let a remembered drive put an untrusted listing on screen.
+        model: root.removableCount > 0 ? driveLoader.item : null
 
         delegate: DockDrive {
             required property string fileName
@@ -429,6 +680,31 @@ Row {
 
             mountLabel: fileName
             mountPath: filePath
+        }
+    }
+
+    // The remembered inside drives, after the plugged-in ones. Same tile, same
+    // group, no second separator — to the person looking at the dock these are
+    // simply "my drives".
+    //
+    // Note the delegate's `visible`: a folder that is not really mounted (an
+    // automount placeholder nobody has opened yet, or a drive that has been
+    // taken out of the machine) draws nothing. An invisible child of a Row is
+    // skipped by the Positioner, so it costs neither width nor a spacing gap.
+    Repeater {
+        model: (internalLoader.item !== null
+                && internalLoader.item !== undefined
+                && internalLoader.item.healthy === true)
+               ? internalLoader.item : null
+
+        delegate: DockDrive {
+            required property string fileName
+            required property string filePath
+
+            mountLabel: fileName
+            mountPath: filePath
+            internal: true
+            visible: root.isReallyMounted(filePath, MountTable.byPath)
         }
     }
 }

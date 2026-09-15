@@ -2305,10 +2305,15 @@ text = pathlib.Path('theme/Theme.qml').read_text(encoding='utf-8')
 #                   MACHINE. That is the whole reason this list exists.
 #   the millis      lockVeilFadeMs, lockShakeMs. Same rule as durFast/durMed
 #                   above: a taller card must not animate more slowly.
+# driveMountPollInterval is milliseconds, not pixels: how often the dock re-reads
+# /proc/self/mounts while a remembered inside drive's folder exists. A BIGGER
+# SCREEN MUST NOT NOTICE A DRIVE MORE SLOWLY — same rule as the seconds below.
+#
 #   the fractions   lockClockTopFraction (a share of the screen's height),
 #                   lockVeilWash / lockCardOpacity / lockDimWash (opacities).
 #                   Already multipliers, like dockHoverScale.
 exempt = {'durFast', 'durMed', 'uiScaleMin', 'uiScaleMax', 'dockHoverScale',
+          'driveMountPollInterval',
           'lockIdleDimSeconds', 'lockIdleLockSeconds', 'lockIdleOffSeconds',
           'lockWaitSeconds', 'lockCalmBackSeconds',
           'lockVeilFadeMs', 'lockShakeMs',
@@ -3277,15 +3282,146 @@ else
          "this bug hid for a day."
 fi
 
-# hasDrives is what Dock.qml believes. An unhealthy model must make it false, so
-# a distrusted listing draws no separator and no tiles.
-if printf '%s' "${aq_drives_code}" | grep -A6 'property bool hasDrives' \
-        | grep -qF 'healthy'; then
-    pass "hasDrives is false unless the model passed its health check"
+# hasDrives is what Dock.qml believes. It is now the sum of two counts — the
+# plugged-in drives and the remembered inside ones — and an unhealthy model must
+# make its count zero, so a distrusted listing draws no separator and no tiles.
+if printf '%s' "${aq_drives_code}" | grep -A2 'property bool hasDrives' \
+        | grep -qF 'removableCount' \
+   && printf '%s' "${aq_drives_code}" | grep -A2 'property bool hasDrives' \
+        | grep -qF 'internalCount'; then
+    pass "hasDrives counts both the plugged-in and the remembered drives"
 else
-    fail "components/dock/DockDrives.qml computes hasDrives without consulting" \
-         "the health check. A model that fell back to the home directory would" \
-         "report drives, which is exactly what the dock drew on 2026-09-06."
+    fail "components/dock/DockDrives.qml no longer builds hasDrives from" \
+         "removableCount and internalCount. Dock.qml shows the whole group — " \
+         "separator included — only when that property is true, so a" \
+         "remembered drive with no count would get no tile."
+fi
+
+for aq_count in removableCount internalCount; do
+    if printf '%s' "${aq_drives_code}" | grep -A6 "property int ${aq_count}" \
+            | grep -qF 'healthy'; then
+        pass "${aq_count} is zero unless the model passed its health check"
+    else
+        fail "components/dock/DockDrives.qml computes ${aq_count} without" \
+             "consulting the health check. A model that fell back to the home" \
+             "directory would report drives, which is exactly what the dock" \
+             "drew on 2026-09-06."
+    fi
+done
+
+# ------------------------------------------------------------------------------
+# FEATURES 020 — the remembered inside drives get tiles too (2026-09-14)
+# ------------------------------------------------------------------------------
+# A drive that lives INSIDE the machine can be "remembered": say yes once and the
+# OS writes an /etc/fstab line so it is mounted at /media/aquarius/<name> at every
+# login (../os-image/system_files/usr/libexec/aquarius-remember-drive). Until this
+# change those drives appeared in Files and got no dock tile, because the dock
+# only listed the subfolders of /run/media/<you>.
+#
+# Four things have to stay true, and each one is a bug that has already happened
+# somewhere in this file's history:
+#
+#   1. the second folder is watched at all
+#   2. it is watched through the SAME guarded chain, because /media/aquarius does
+#      not exist until somebody remembers their first drive — an unguarded
+#      FolderListModel pointed at a missing folder lists the home directory
+#   3. a folder there is only drawn when the drive is REALLY MOUNTED: an
+#      x-systemd.automount mount point exists before the drive is mounted, and
+#      shows in the mount table as `autofs`
+#   4. the tile offers neither Unmount nor Eject — see below
+
+if printf '%s' "${aq_drives_code}" | grep -qF '/media/aquarius'; then
+    pass "DockDrives.qml also watches the remembered-drive folder"
+else
+    fail "components/dock/DockDrives.qml no longer watches /media/aquarius." \
+         "That is where FEATURES 020 mounts a remembered inside drive, so" \
+         "without it those drives are in Files and not in the dock."
+fi
+
+if printf '%s' "${aq_drives_code}" | grep -qF 'AQ_REMEMBERED_ROOT'; then
+    pass "the remembered-drive folder can be pointed at a test folder"
+else
+    fail "components/dock/DockDrives.qml no longer reads AQ_REMEMBERED_ROOT." \
+         "Making /media/aquarius appear on demand needs root, so without the" \
+         "override the appear-later behaviour cannot be tested at all."
+fi
+
+# The chain, not a bare model. Two levels above /media/aquarius must be watched
+# by name, and the top of that chain is "/" — the one directory that is always
+# there, so the model that IS created unguarded cannot fall back.
+if printf '%s' "${aq_drives_code}" | grep -qF 'internalBaseName' \
+   && printf '%s' "${aq_drives_code}" | grep -qF 'internalRootName' \
+   && printf '%s' "${aq_drives_code}" | grep -qF 'internalTopDir'; then
+    pass "the remembered-drive folder is watched through the same guarded chain"
+else
+    fail "components/dock/DockDrives.qml watches /media/aquarius without the" \
+         "three-level chain. /media/aquarius does not exist until the first" \
+         "drive is remembered, and a FolderListModel created pointing at a" \
+         "missing folder silently lists the process's working directory — the" \
+         "home directory. That is the 2026-09-06 bug, again."
+fi
+
+# The mount-table filter. Without it, every remembered drive shows a tile from
+# the moment it is remembered, mounted or not.
+if printf '%s' "${aq_drives_code}" | grep -qF 'isReallyMounted' \
+   && printf '%s' "${aq_drives_code}" | grep -qF 'autofs' \
+   && printf '%s' "${aq_drives_code}" | grep -qF 'MountTable.byPath'; then
+    pass "a remembered drive draws a tile only when it is really mounted"
+else
+    fail "components/dock/DockDrives.qml no longer filters the remembered" \
+         "drives through the kernel's mount table. An x-systemd.automount" \
+         "mount point EXISTS as an empty folder before the drive is mounted" \
+         "and reads as 'autofs' in /proc/self/mounts; without this check the" \
+         "dock shows tiles for drives that are not there."
+fi
+
+# Nothing announces the autofs -> real-mount moment, so the mount table is
+# re-read on a timer — and only while the folder exists, so the timer never runs
+# on a machine with no remembered drives.
+if printf '%s' "${aq_drives_code}" | grep -qF 'Theme.driveMountPollInterval' \
+   && printf '%s' "${aq_drives_code}" | grep -A4 'id: mountPoll' \
+        | grep -qF 'internalLoader.item'; then
+    pass "the mount table is re-read only while there is a folder to watch"
+else
+    fail "components/dock/DockDrives.qml no longer re-reads the mount table," \
+         "or does it unconditionally. /proc files never say they changed and" \
+         "an automount placeholder becomes a real mount silently, so a slow" \
+         "poll is the only way to notice — but it must be gated on" \
+         "internalLoader.item so it costs nothing when nobody has remembered" \
+         "a drive."
+fi
+
+# THE ONE THAT IS ABOUT HONESTY, NOT DRAWING.
+# An fstab mount is made by systemd as root. `gio mount -u -f` goes to udisks2,
+# which asks polkit for filesystem-unmount-others — a permission
+# 49-aquarius-udisks.rules deliberately does not grant. `udisksctl unmount -b`
+# is the same D-Bus call. Plain `umount` needs `user`/`users`/`owner` in the
+# fstab line, and the remembered lines carry none of the three. So there is no
+# way to unmount one of these without an administrator password, and the menu
+# must not offer an item that pops a password box. It must not offer Eject
+# either: the drive is bolted inside the machine.
+if printf '%s' "${aq_drive_code}" | grep -qF 'visible: !root.macDrive && !root.internal' \
+   && printf '%s' "${aq_drive_code}" | grep -B1 'qsTr("Eject")' \
+        | grep -qF 'visible: !root.internal'; then
+    pass "a remembered inside drive is offered neither Unmount nor Eject"
+else
+    fail "components/dock/DockDrive.qml offers Unmount or Eject on a" \
+         "remembered inside drive. Neither works: an fstab mount cannot be" \
+         "undone without an administrator password (udisks2 wants" \
+         "filesystem-unmount-others, which 49-aquarius-udisks.rules does not" \
+         "grant, and plain umount wants a 'user' option the fstab line does" \
+         "not carry), and there is no cable to unplug. Widening the polkit" \
+         "rule is the one thing FEATURES 020 forbids."
+fi
+
+# And it says which kind of drive it is, because the two tiles are the same mark.
+if printf '%s' "${aq_drive_code}" | grep -qF 'qsTr("Internal drive")'; then
+    pass "the hover label on a remembered drive says 'Internal drive'"
+else
+    fail "components/dock/DockDrive.qml no longer says 'Internal drive' on" \
+         "hover. A drive tile is a quiet line-drawn mark with no label under" \
+         "it, so the hover card is the only place the difference between a" \
+         "drive you can eject and one you cannot is ever stated."
 fi
 
 # THE RULE ITSELF, stated as a grep: no FolderListModel anywhere in the shell may

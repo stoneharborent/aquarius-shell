@@ -897,4 +897,14 @@ Singleton {
     readonly property int durFast: 120
     readonly property int durMed: 220
     readonly property var easeOut: [0.22, 1.0, 0.36, 1.0, 1.0, 1.0]
+
+    // How often the dock re-reads the kernel's mount table while a remembered
+    // inside drive's folder exists. NOT a design token and not an animation —
+    // it is here because it is a tunable number and every tunable number in this
+    // shell lives in one file. See the "one poll in this file" note in
+    // components/dock/DockDrives.qml for why a poll exists at all: /proc files
+    // never announce a change, and an automount placeholder becomes a real
+    // mounted drive silently. Five seconds is slow enough to be free and fast
+    // enough that a drive appears while you are still looking at the dock.
+    readonly property int driveMountPollInterval: 5000
 }
