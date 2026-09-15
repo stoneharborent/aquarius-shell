@@ -171,3 +171,31 @@ function releaseDecision(k, key, state) {
 
     return decision("none", "arm", remapper, false, true);
 }
+
+// ---- naming a key, for the trace ---------------------------------------------
+// The flight recorder (services/SwitcherTrace.qml) prints every key event, and a
+// line that says `key=0x1000053` is a line somebody has to go and look up. This
+// turns the number into the name the rest of this file uses for it.
+//
+// ⚠️ IT LIVES HERE, NOT IN THE TRACE, FOR ONE REASON: the names have to come
+//   from the same table the DECISIONS come from. If a key is ever added to the
+//   rulebook and not to this function, the trace would quietly print a number
+//   for exactly the key somebody is debugging. Same file, same `k`, no second
+//   list to keep in step — and node checks it in tests/switcher-js-tests.mjs.
+//
+// Anything not in the table comes back as plain hex, which is the honest answer
+// for a key this panel has no opinion about.
+function keyName(k, key) {
+    if (key === k.escape) return "Escape";
+    if (key === k.down) return "Down";
+    if (key === k.end) return "End";
+    if (key === k.up) return "Up";
+    if (key === k.home) return "Home";
+    if (key === k.meta) return "Meta";
+    if (key === k.superL) return "Super_L";
+    if (key === k.superR) return "Super_R";
+    if (key === k.alt) return "Alt";
+    if (key === k.ret) return "Return";
+    if (key === k.enter) return "Enter";
+    return "0x" + Number(key).toString(16);
+}

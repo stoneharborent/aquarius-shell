@@ -279,11 +279,22 @@ QtObject {
     // restore it, so a switcher that only activated would leave you looking at
     // the same screen having apparently done nothing. The spec is explicit that
     // minimised windows are listed and are restored on go.
+    // The trace line here records the one thing the protocol will not tell us:
+    // that we ASKED. `activate()` has no reply — nothing comes back to say the
+    // window came forward or that the compositor declined — so the only way to
+    // learn whether it worked is to ask the compositor afterwards what has
+    // focus, which AppSwitcher's `focusCheck` timer does a hundred milliseconds
+    // later. These two lines are the two halves of that question.
     function goTo(win: var): void {
         if (!win)
             return;
-        if (win.minimized)
+        const wasMinimized = !!win.minimized;
+        if (wasMinimized)
             win.minimized = false;
+        SwitcherTrace.log("go-to", {
+            target: SwitcherTrace.window(win),
+            unminimised: wasMinimized
+        });
         win.activate();
     }
 }

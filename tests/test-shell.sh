@@ -2159,7 +2159,7 @@ echo "=== 28. every enum namespace is one the shipped build actually has ==="
 # Quickshell build.
 aq_ns_ours="Theme FocusState Overlays SettingsLauncher SystemAppearance Fuzzy
 Calc Progress GreeterState LockState AppIdentity KeyProfile MountTable
-SwitcherKeys"
+SwitcherKeys SwitcherTrace"
 
 # Names Qt itself provides — globals, value types and attached types.
 aq_ns_qt="Qt Math JSON Date Object Array Locale Accessible Component Keys Easing
@@ -4322,6 +4322,60 @@ else
                  "Under Command-Tab, Aquarius Keys delivers Command+Down as Ctrl+End."
         fi
     done
+
+    # -- the 2026-09-15 work: record it, freeze it, check it -------------------
+    # The fourth bench report ("still a glitch ... sometimes it won't switch to
+    # selected app") arrived with no trace, because there was nothing to trace
+    # with. These four checks guard the three things that changed that.
+
+    # 1. The flight recorder is wired in. A switcher with no trace calls is a
+    #    switcher that will produce another "sometimes" report.
+    if printf '%s' "${aq_switcher_code}" | grep -q 'SwitcherTrace.log'; then
+        pass "AppSwitcher.qml writes a trace of what it decides"
+    else
+        fail "${aq_switcher} no longer calls SwitcherTrace.log." \
+             "That trace is the only evidence anybody has ever had about this" \
+             "bug. docs/app-switcher.md tells Royce to turn it on and send it."
+    fi
+
+    # 2. The trace must be OFF by default. A shell that logged every key press
+    #    of every switch, forever, into the session log is a different bug.
+    if grep -q 'AQ_SWITCHER_TRACE' services/SwitcherTrace.qml \
+       && grep -q 'AQ_TRACE' services/SwitcherTrace.qml; then
+        pass "the switcher trace is off unless AQ_SWITCHER_TRACE or AQ_TRACE asks for it"
+    else
+        fail "services/SwitcherTrace.qml no longer reads AQ_SWITCHER_TRACE or" \
+             "AQ_TRACE. The trace has to be something Royce turns ON; a shell" \
+             "that always logged every key event would be its own problem."
+    fi
+
+    # 3. The list is frozen while the panel is open. It used to be live, and a
+    #    live list under a plain integer index can leave the index pointing past
+    #    the end of it — a commit with nothing to commit to, which is a silent
+    #    miss with no key event involved at all.
+    if printf '%s' "${aq_switcher_code}" | grep -q 'frozenEntries'; then
+        pass "AppSwitcher.qml freezes the list while the panel is open"
+    else
+        fail "${aq_switcher} no longer freezes its list (frozenEntries)." \
+             "A window opening or closing mid-gesture would then move the tiles" \
+             "under the selection, and a shorter list would leave selectedIndex" \
+             "pointing at nothing — which switches to nothing, silently."
+    fi
+
+    # 4. The activation is checked afterwards. `activate()` is a request with no
+    #    reply; the compositor may ignore it and say nothing.
+    if printf '%s' "${aq_switcher_code}" | grep -q 'id: focusCheck' \
+       && printf '%s' "${aq_switcher_code}" | grep -q 'ToplevelManager.activeToplevel'; then
+        pass "AppSwitcher.qml checks that the app it asked for really came forward"
+    else
+        fail "${aq_switcher} no longer verifies the activation (focusCheck)." \
+             "wlr-foreign-toplevel activate() returns nothing and may be" \
+             "refused — by an XWayland client such as Resolve, by a focus rule," \
+             "or by the compositor re-deciding focus as our surface goes away." \
+             "Without the check, a refused switch looks exactly like a bug in" \
+             "the keyboard handling, and three bench sessions went that way."
+
+    fi
 
     if grep -q 'ToplevelManager' "${aq_switcher_model}"; then
         pass "SwitcherModel.qml lists windows from ToplevelManager"
