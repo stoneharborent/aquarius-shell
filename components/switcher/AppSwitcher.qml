@@ -79,28 +79,72 @@
 //       keyboard, and when you let Command go, labwc posts that release
 //       straight to us. `Keys.onReleased` below is the whole mechanism.
 //
-// ⚠️ THE ONE ROUGH EDGE, SAID PLAINLY
+// ⚠️ THE ONE ROUGH EDGE, SAID PLAINLY — AND WHAT WAS DONE ABOUT IT ON 2026-09-14
 //   There is a gap of a few tens of milliseconds between Tab being pressed and
 //   this panel having the keyboard: the keybind has to start a small program,
 //   that program has to talk to the shell, and the compositor has to put the
 //   surface up. Let go of Command inside that gap — a really fast tap — and the
 //   release lands somewhere else and we never see it.
 //
-//   The panel does not become a trap when that happens. THREE ways out, and all
-//   three are ordinary things a person would already try:
+//   THE BENCH SAYS IT HAPPENS. Royce, 2026-09-14: "the app switcher command
+//   sometimes doesn't select or switch apps if the command is hit too quickly."
+//   That is this, exactly: the panel is up, the gesture is over, and nothing
+//   ever commits, because the event that means "commit" went to the window you
+//   were in.
 //
-//     * press Escape;
-//     * click the app you wanted, or click anywhere else to cancel;
-//     * press Command-Tab again — the next release lands here, because by then
-//       we certainly have the keyboard.
+//   WE CANNOT SEE THE RELEASE WE MISSED, and it is worth saying why so nobody
+//   goes looking for a way. Wayland does tell a client which keys are held when
+//   it is handed the keyboard — labwc passes them along — but Qt throws that
+//   list away rather than turning it into events (qtwayland,
+//   qwaylandinputdevice.cpp, keyboard_enter: `Q_UNUSED(keys)`). So this panel
+//   genuinely cannot tell "still holding Command" from "let go a moment ago".
 //
-//   It is written down here rather than hidden because it is the one thing on
-//   the bench list that could look like a bug and is actually a known limit.
-//   If it turns out to be common in real use, the fix is upstream: a labwc
-//   keybind that fires on the release of a modifier REGARDLESS of what was
-//   pressed in between. That is a small, obviously-correct change to
-//   handle_compositor_keybindings() and it would suit every other Wayland shell
-//   that wants an alt-tab too.
+//   BUT THE NEXT PRESS TELLS US, and that is the fix. There are only two things
+//   that can happen next, and they look nothing alike:
+//
+//     still holding    the next thing we hear is that modifier's RELEASE. A key
+//                      that is already down cannot be pressed again.
+//     release lost     the person presses Command again to have another go, and
+//                      THAT press lands here, because by now we certainly have
+//                      the keyboard.
+//
+//   So: THE FIRST KEYBOARD EVENT AFTER THE PANEL OPENS BEING A MODIFIER *PRESS*
+//   MEANS THE LAST GESTURE ENDED WHERE WE COULD NOT SEE IT. Nothing else can
+//   produce it. When it happens the panel sets `gestureRestart`, and the next
+//   Tab re-opens it — works the selection out afresh from the app you are in,
+//   instead of stepping along a selection nobody ever got to use. Hitting the
+//   keys again, which is what a person does anyway, now lands on the app the
+//   first tap should have. One boolean each way: `sawKeyEvent`, `gestureRestart`.
+//
+//   ⚠️ WHY IT IS "THE FIRST EVENT" AND NOT SIMPLY "A MODIFIER PRESS". Aquarius
+//     Keys presses the modifier again all the time — it lets go of Command for
+//     a few milliseconds to send a remapped chord and then puts it back (the
+//     second edge, below). By then the panel has already heard that release and
+//     the chord's own keys, so `sawKeyEvent` is true and the resurrection is not
+//     mistaken for a fresh gesture. A panel that restarted on ANY modifier press
+//     would break Command-Down, which is the fix before this one.
+//
+//   The other ways out are still there, and still ordinary: press Escape, or
+//   click the app you wanted, or click anywhere else to cancel.
+//
+//   THE REST OF THE GAP IS STILL UPSTREAM'S. This makes the recovery right; it
+//   does not make the gap go away. The real cure is a labwc keybind that fires
+//   on the release of a modifier REGARDLESS of what was pressed in between — a
+//   small, obviously-correct change to handle_compositor_keybindings() that
+//   would suit every other Wayland shell that wants an alt-tab too.
+//
+// =============================================================================
+// WHERE THE KEY RULES LIVE (2026-09-14)
+// =============================================================================
+//   The DECISIONS — what one key event means, given what happened just before
+//   it — are in components/switcher/switcher-keys.js, and this file only
+//   carries them out (`applyDecision` below). That split is not tidiness: every
+//   bug this panel has had was a SEQUENCE of events arriving in a particular
+//   order a few milliseconds apart, which is the one thing reading the code
+//   never catches. As plain JavaScript the rules can be RUN —
+//   tests/switcher-js-tests.mjs walks the real sequences through them on a
+//   machine with no screen, and the three bench findings below are each a test
+//   in it now.
 //
 //   THE SECOND EDGE, FOUND ON THE BENCH 2026-09-07: Aquarius Keys turns
 //   Command+Down into Ctrl+End (and Up into Ctrl+Home), and to do that it lets
@@ -184,6 +228,7 @@ import Quickshell.Wayland
 
 import "../../services"
 import "../../theme"
+import "switcher-keys.js" as SwitcherKeys
 
 Scope {
     id: root
@@ -209,6 +254,34 @@ Scope {
     // go again — and a modifier release is what this panel commits on. See the
     // two key handlers near the bottom of this file.
     property int remapperModifier: 0
+
+    // Has this panel heard ANYTHING from the keyboard since it opened? It is
+    // the whole of the 2026-09-14 fast-tap fix: the first event being a
+    // modifier PRESS can only mean the previous gesture's release went
+    // somewhere else. The rulebook is components/switcher/switcher-keys.js.
+    property bool sawKeyEvent: false
+
+    // Set when that happens. The next Tab then opens the panel afresh — from
+    // the app you are in — instead of stepping along a selection nobody ever
+    // got to use.
+    property bool gestureRestart: false
+
+    // The Qt key numbers, in one place, handed to the rulebook so that no
+    // number is written down twice and so that node can run the same rules
+    // against the same values (tests/switcher-js-tests.mjs).
+    readonly property var keyCodes: ({
+        escape: Qt.Key_Escape,
+        down: Qt.Key_Down,
+        end: Qt.Key_End,       // what the Mac keys map makes of Command+Down
+        up: Qt.Key_Up,
+        home: Qt.Key_Home,     // ... and of Command+Up
+        meta: Qt.Key_Meta,
+        superL: Qt.Key_Super_L,
+        superR: Qt.Key_Super_R,
+        alt: Qt.Key_Alt,       // the Windows profile's modifier
+        ret: Qt.Key_Return,
+        enter: Qt.Key_Enter
+    })
 
     // See the long note in components/search/FlowSearch.qml about Exclusive
     // versus OnDemand. Turn this off if Exclusive misbehaves on the bench — but
@@ -268,9 +341,20 @@ Scope {
         if (list.length === 0)
             return;
 
-        if (!root.isOpen) {
+        // OPENING — and also RE-opening, which is the 2026-09-14 fast-tap fix.
+        // `gestureRestart` means the panel is on screen but the gesture that
+        // put it there ended where we could not see it (the release landed on
+        // the window we were in, because the panel did not have the keyboard
+        // yet). The person has pressed Command again, so this Tab is the first
+        // tap of a NEW gesture and must behave exactly like one: work the
+        // selection out afresh from the app they are in, rather than stepping
+        // along a selection nobody ever got to use. Read switcher-keys.js.
+        if (!root.isOpen || root.gestureRestart) {
+            const wasShut = !root.isOpen;
+
             Overlays.claim(root);
 
+            root.gestureRestart = false;
             root.expanded = false;
             root.expandedIndex = 0;
 
@@ -281,7 +365,8 @@ Scope {
                 ((from + (delta >= 0 ? 1 : -1)) % count + count) % count;
 
             root.isOpen = true;
-            root.opened();
+            if (wasShut)
+                root.opened();
             return;
         }
 
@@ -376,7 +461,52 @@ Scope {
         // Nothing about the last chord survives into the next time the panel
         // opens; the surface and its keyboard grab are torn down here.
         root.remapperModifier = 0;
+        root.sawKeyEvent = false;
+        root.gestureRestart = false;
         root.closed();
+    }
+
+    // ---- carrying out one key decision ---------------------------------------
+    // The rulebook (components/switcher/switcher-keys.js) decides; this does.
+    // It is kept as small as possible on purpose: everything that can be got
+    // wrong about ORDER lives in the rulebook, where node can run it, and
+    // everything here is a straight translation of an answer into an action.
+    //
+    // `sawKeyEvent` is set for EVERY key event, whatever the decision was —
+    // including keys this panel does not handle. It means "the keyboard reached
+    // us", not "we did something with it", and that is exactly what the fast-tap
+    // rule needs it to mean.
+    function applyDecision(d: var, event: var): void {
+        root.sawKeyEvent = true;
+        root.remapperModifier = d.remapperModifier;
+
+        if (d.gestureRestart)
+            root.gestureRestart = true;
+
+        if (d.grace === "stop")
+            releaseGrace.stop();
+        else if (d.grace === "arm")
+            releaseGrace.restart();
+
+        switch (d.action) {
+        case "cancel":
+            root.cancel();
+            break;
+        case "down":
+            root.stepDown();
+            break;
+        case "up":
+            root.stepUp();
+            break;
+        case "commit":
+            root.commit();
+            break;
+        default:
+            break;
+        }
+
+        if (d.handled)
+            event.accepted = true;
     }
 
     // Command-` — walk this application's own windows, with no panel.
@@ -598,89 +728,11 @@ Scope {
             //   after the release. A key press means the person is still
             //   driving the panel, whatever the modifier said a moment ago.
             Keys.onPressed: event => {
-                // ⚠️ READ THIS BEFORE THE SWITCH BELOW.
-                //   `releaseGrace` is running for exactly one reason: the
-                //   modifier came up within the last sixty milliseconds and
-                //   nothing has arrived since. A person cannot produce that —
-                //   letting go of Command and then pressing a key inside a
-                //   sixteenth of a second is not a thing hands do. Aquarius
-                //   Keys produces it on every single remapped chord, because
-                //   sending one means releasing Command, tapping the key, and
-                //   putting Command back (xremap's send_key_press_and_release).
-                //
-                //   So this one boolean is "the key about to arrive was sent by
-                //   the remapper, not pressed by the person". It is read BEFORE
-                //   the timer is stopped, because stopping it is also what keeps
-                //   the panel open.
-                const fromRemapper = releaseGrace.running;
-
-                releaseGrace.stop();
-                switch (event.key) {
-                case Qt.Key_Escape:
-                    root.cancel();
-                    event.accepted = true;
-                    break;
-                case Qt.Key_Down:
-                // Ctrl+End is what Aquarius Keys' Mac set turns Command+Down
-                // into (the "end of document" habit). Under Command-Tab that is
-                // the person pressing Down, so it is Down here — see the note
-                // beside releaseGrace. Plain End is accepted for the same
-                // reason; nothing else in this panel wants it.
-                case Qt.Key_End:
-                    root.stepDown();
-                    event.accepted = true;
-                    break;
-                case Qt.Key_Up:
-                case Qt.Key_Home:   // Command+Up becomes Ctrl+Home, likewise
-                    root.stepUp();
-                    event.accepted = true;
-                    break;
-                // A modifier coming down while a commit is pending is one of
-                // two things, and both are the remapper, not the person:
-                //
-                //   the SAME modifier   Aquarius Keys "resurrecting" Command
-                //                       after its chord. Nothing to do — the
-                //                       stop() above already kept the panel
-                //                       open.
-                //   a DIFFERENT one     the chord's own modifier. ⌘↑ in Files
-                //                       becomes `A-Up`, so Alt is pressed here
-                //                       and released again two events later.
-                //                       That release must NOT be read as the
-                //                       person letting go, so the key is
-                //                       remembered and its release swallowed.
-                //                       See Keys.onReleased below.
-                case Qt.Key_Meta:
-                case Qt.Key_Super_L:
-                case Qt.Key_Super_R:
-                case Qt.Key_Alt:
-                    if (fromRemapper)
-                        root.remapperModifier = event.key;
-                    event.accepted = true;
-                    break;
-                // ENTER MEANS TWO DIFFERENT THINGS, AND WHICH ONE IS DECIDED
-                // BY WHO SENT IT. Bench, 2026-09-08 — the third rough edge at
-                // the top of this file.
-                //
-                //   from the remapper  it is ⌘↓ with Files in front, which
-                //                      Aquarius Keys turns into Enter. Under
-                //                      the switcher that is the person pressing
-                //                      Down, so it opens the window row.
-                //   from a person      Return on a switcher that is up means
-                //                      "this one" — go there and close.
-                //
-                // Nothing else in this panel wants Enter, so there is no third
-                // case to get wrong.
-                case Qt.Key_Return:
-                case Qt.Key_Enter:
-                    if (fromRemapper)
-                        root.stepDown();
-                    else
-                        root.commit();
-                    event.accepted = true;
-                    break;
-                default:
-                    break;
-                }
+                root.applyDecision(SwitcherKeys.pressDecision(root.keyCodes, event.key, {
+                    graceRunning: releaseGrace.running,
+                    sawKeyEvent: root.sawKeyEvent,
+                    remapperModifier: root.remapperModifier
+                }), event);
             }
 
             // THE COMMIT. Read the long note at the top of this file for why a
@@ -693,30 +745,19 @@ Scope {
             //                            depends on the keymap, so both are
             //                            listed rather than guessed at.
             //   Key_Alt                  the Windows profile's modifier.
+            // They are all in `root.keyCodes` near the top of this file, and
+            // releaseDecision() in switcher-keys.js is what makes anything of
+            // them.
             //
             // Both profiles are covered without this file having to know which
             // one is switched on: whichever modifier you were holding is the one
             // whose release arrives.
             Keys.onReleased: event => {
-                switch (event.key) {
-                case Qt.Key_Meta:
-                case Qt.Key_Super_L:
-                case Qt.Key_Super_R:
-                case Qt.Key_Alt:
-                    // The remapper putting down the modifier it picked up for a
-                    // chord — see the note in Keys.onPressed. Not a person
-                    // letting go, so no commit is started.
-                    if (root.remapperModifier === event.key) {
-                        root.remapperModifier = 0;
-                        event.accepted = true;
-                        break;
-                    }
-                    releaseGrace.restart();
-                    event.accepted = true;
-                    break;
-                default:
-                    break;
-                }
+                root.applyDecision(SwitcherKeys.releaseDecision(root.keyCodes, event.key, {
+                    graceRunning: releaseGrace.running,
+                    sawKeyEvent: root.sawKeyEvent,
+                    remapperModifier: root.remapperModifier
+                }), event);
             }
 
             // ⚠️ WHY THE COMMIT WAITS A MOMENT AFTER THE MODIFIER COMES UP

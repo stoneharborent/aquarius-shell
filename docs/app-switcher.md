@@ -191,7 +191,7 @@ hoped for:
   while you choose (`seat_focus()` does not change labwc's `active_view`). If
   that were not true, the first tap of Tab would take you nowhere.
 
-### The one rough edge, said plainly
+### The one rough edge, said plainly — and the 2026-09-14 fix for it
 
 There is a gap of a few tens of milliseconds between Tab going down and the
 panel having the keyboard: a small program has to start, talk to the shell, and
@@ -199,21 +199,49 @@ the compositor has to put a surface on screen. **Let go inside that gap — a
 really fast tap — and the release lands somewhere else and the panel does not
 see it.**
 
-It never becomes a trap. Three ways out, all of them things you would try
-anyway:
+**The bench found it.** Royce, 2026-09-14: *"the app switcher command sometimes
+doesn't select or switch apps if the command is hit too quickly."* That is this
+edge and nothing else: the panel is up, the gesture is over, and nothing ever
+commits, because the event that means *commit* went to the window you were in.
 
-* press **Esc**;
-* **click** the app you wanted, or click anywhere else to cancel;
-* press **⌘Tab again** — by then the panel certainly has the keyboard, so the
-  next release lands on it.
+**The panel cannot see the release it missed**, and it is worth knowing why so
+nobody goes looking for a way. Wayland does tell a client which keys are held
+when it is handed the keyboard, and labwc does pass them along — but Qt throws
+that list away rather than turning it into events (qtwayland,
+`qwaylandinputdevice.cpp`, `keyboard_enter`: `Q_UNUSED(keys)`). So "still
+holding ⌘" and "let go a moment ago" look identical from in here.
 
-If this turns out to be common in real use, the proper fix is upstream in labwc:
-a keybind that fires on a modifier's release *regardless* of what was pressed in
-between. That is a small change to `handle_compositor_keybindings()` and it
-would suit every other Wayland shell that wants an alt-tab.
+**But the next press tells it.** Only two things can happen next, and they look
+nothing alike:
 
-**This is the thing to watch for on the bench.** It is a known limit, not a bug
-to hunt.
+| what really happened | what the panel hears next |
+|---|---|
+| you are still holding ⌘ | that modifier's **release**. A key already down cannot be pressed again. |
+| the release was lost | you press ⌘ again to have another go — and that **press** lands on the panel, which by now certainly has the keyboard. |
+
+So the rule, in one line: **the first keyboard event after the panel opens being
+a modifier *press* means the last gesture ended out of sight.** The panel then
+starts the gesture over, and the next Tab opens it afresh — on the app the first
+tap should have landed on — instead of stepping along a selection nobody ever
+got to use. Pressing the keys again, which is what a person does anyway, is now
+the fix. Two booleans carry it: `sawKeyEvent` and `gestureRestart`.
+
+⚠️ **Why "the first event" and not simply "a modifier press".** Aquarius Keys
+presses the modifier again all the time — it lets go of ⌘ for a few
+milliseconds to send a remapped chord and then puts it back (the second edge,
+below). By then the panel has already heard that release and the chord's own
+keys, so `sawKeyEvent` is true and the resurrection is not mistaken for a fresh
+gesture. A panel that restarted on *any* modifier press would break ⌘↓, which is
+the fix before this one. `tests/switcher-js-tests.mjs` asserts both.
+
+The other ways out are unchanged, and still things you would try anyway: press
+**Esc**, **click** the app you wanted, or click anywhere else to cancel.
+
+**The gap itself is still upstream's.** This makes the recovery right; it does
+not make the gap go away. The proper cure is a labwc keybind that fires on a
+modifier's release *regardless* of what was pressed in between — a small change
+to `handle_compositor_keybindings()` that would suit every other Wayland shell
+that wants an alt-tab.
 
 ### The second edge — the arrows, and Aquarius Keys (found on the bench, 2026-09-07)
 
@@ -373,7 +401,9 @@ changes what it lists the moment the file changes.
 
 | File | What it is |
 |---|---|
-| `components/switcher/AppSwitcher.qml` | The overlay: the window, the keyboard, the IPC door, the state. The long explanation of the modifier release is at the top of it. |
+| `components/switcher/AppSwitcher.qml` | The overlay: the window, the keyboard, the IPC door, the state. The long explanation of the modifier release is at the top of it. It *carries out* key decisions; it no longer makes them. |
+| `components/switcher/switcher-keys.js` | The rulebook: what one key event means, given what happened just before it. Plain JavaScript with no QML in it, so it can be run. |
+| `tests/switcher-js-tests.mjs` | 40 assertions that walk whole gestures — the ordinary one, each of the three bench findings, the fast tap — through the rulebook under node. |
 | `components/switcher/SwitcherModel.qml` | What to list and in what order — the most-recently-used list, and the grouping into applications. |
 | `components/switcher/SwitcherTile.qml` | One application, as a 124px tile with its icon and its window count. |
 | `components/switcher/SwitcherRow.qml` | One window, as a line. Used at two sizes: the Windows profile's rows and the Mac profile's ↓ list. |
@@ -404,6 +434,12 @@ The bench list, in order:
    title over the application's name.
 5. **Esc** cancels and changes nothing.
 6. **Two monitors.** The panel should appear on the one your pointer is on.
-7. **The fast tap.** Tap ⌘Tab as fast as you can. If the panel stays up, that is
-   the known race described above — press Esc and say so; it is a measurement,
-   not a bug report.
+7. **The fast tap, and the recovery (2026-09-14).** Tap ⌘Tab as fast as you can.
+   The panel may still stay up with nothing switched — that is the known gap,
+   and it is a measurement, not a bug report. What is now being tested is what
+   happens **next**: tap ⌘Tab a second time, at a normal speed, and let go. You
+   should land on the app you were last in — the same place one clean ⌘Tab would
+   have taken you — and *not* two apps along. Say which happened.
+8. **⌘↓ still works after a fast tap.** With a fast tap's panel still up, hold ⌘
+   and press ↓: the selected app's window list should open, as it always has.
+   This is the case the fast-tap rule must not break.
