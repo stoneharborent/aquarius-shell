@@ -91,11 +91,11 @@ shrink the dock's apparent size and nobody would connect the two.
 |---|---|
 | `components/dock/Dock.qml` | The layer-shell panel, one per monitor, and the slab it draws. Owns the `appGridRequested` seam. |
 | `components/dock/DockItem.qml` | One app: tile, icon, hover lift, running dots, and what a click does. |
-| `components/dock/DockDrives.qml` | The live list of mounted external drives at the right end (R6). |
-| `components/dock/DockDrive.qml` | One mounted drive: glyph, open in Files, right-click to unmount or eject (R6; two items since FEATURES 019). |
+| `components/dock/DockDrives.qml` | The live list of mounted drives at the right end (R6) — plugged-in drives, and since FEATURES 020 the remembered inside ones too. |
+| `components/dock/DockDrive.qml` | One mounted drive: glyph, open in Files, right-click to unmount or eject (R6; two items since FEATURES 019, none for a remembered inside drive since FEATURES 020). |
 | `components/dock/open-drive.py` | Opens a drive at its files (skips an APFS volume's wrapper folders). |
 | `components/dock/eject-drive.py` | Eject: unmount the right way for the kind of drive, then power it off. |
-| `services/MountTable.qml` | Reads `/proc/self/mounts` so the dock knows an APFS drive from an ordinary one. |
+| `services/MountTable.qml` | Reads `/proc/self/mounts` so the dock knows an APFS drive from an ordinary one — and whether a remembered inside drive is really mounted yet. |
 | `components/dock/DockAddTile.qml` | The dashed `+` tile. **No longer drawn** (the drives list took its place, R6); the file is kept because the structural tests still list it and it is one Rectangle from returning if an app grid ever wants a launch tile. |
 | `components/dock/DockModel.qml` | Turns *pinned list* + *live windows* into one ordered list of tiles. |
 | `components/dock/DockConfig.qml` | Reads `~/.config/aquarius-shell/dock.json`. |
@@ -137,6 +137,87 @@ separator, no placeholder.
 - Each tile draws the shell's own **drive glyph** (from `QsGlyph`) rather than
   app artwork, because a drive has no `.desktop` entry; the volume's name is on
   the tile's accessibility label and at the head of the right-click menu.
+
+### Remembered inside drives (FEATURES 020, 2026-09-14)
+
+There is a second kind of drive on the dock now. A drive that lives **inside**
+the computer used to ask for an administrator password every time it was
+mounted; since FEATURES 020 the OS asks once — *"Mount Footage every login?"* —
+and if you say yes it writes a line into `/etc/fstab` so the drive is simply
+there at every login, mounted at:
+
+```
+/media/aquarius/<name>
+```
+
+Not under `/run/media/<you>`, because that folder belongs to udisks2 and only
+exists after you have logged in. Those drives showed up in Files and got no dock
+tile. Now the dock watches **both** folders and draws one group of tiles from the
+two of them, plugged-in drives first, with the same single separator before the
+group.
+
+| | plugged in (`/run/media/<you>`) | remembered inside (`/media/aquarius`) |
+|---|---|---|
+| left-click | opens in Files | opens in Files |
+| right-click | **Unmount** and **Eject** | the drive's name and *"Mounted at every login"* — no actions |
+| hover label | the drive's name | the drive's name, and a second quiet line: **Internal drive** |
+| tile appears when | the folder appears | the drive is **really mounted**, not just listed |
+
+**Why a remembered drive gets no Unmount.** This is not a design choice; it is
+what the system allows. An fstab mount is made by systemd, as root, and all
+three ways to undo it want an administrator password:
+
+| tried | what happens |
+|---|---|
+| `gio mount -u -f <path>` | GVfs hands it to udisks2, which sees a mount it did not make and asks polkit for `filesystem-unmount-others`. `49-aquarius-udisks.rules` deliberately does **not** grant that one, so it falls through to Fedora's default: type an administrator password. |
+| `udisksctl unmount -b <device>` | the same D-Bus call by another name, so the same polkit question and the same prompt. |
+| `umount <path>` | plain `umount` lets an ordinary person unmount only a mount whose fstab line carries `user`, `users` or `owner`. The remembered lines carry `nofail,x-systemd.automount,x-systemd.device-timeout=10` (plus `uid`/`gid`/`umask` on FAT-ish filesystems) and none of those three, so it answers *"only root can unmount"*. |
+
+Widening the polkit rule to make one of them work is the one thing FEATURES 020
+explicitly forbids — it would make **every** internal partition on the machine
+mountable and unmountable with no password, including ones nobody chose. So the
+menu says the drive's name and, quietly, what it is. The way to stop a drive
+being remembered is `aq drives forget`, which is a place where a password is the
+honest thing to ask for. There is no **Eject** either: the drive is bolted inside
+the machine and there is no cable to pull.
+
+**Three things are different about that folder, and each one is handled.**
+
+1. **`/media/aquarius` does not always exist.** Nothing in the image creates it —
+   the privileged helper makes it the first time somebody says yes to a drive
+   (`os.makedirs(mount_point)` in `aquarius-remember-drive`), and on a machine
+   where nobody ever has, it is not there at all. That is exactly the trap
+   described below, so it gets exactly the same answer: a second chain of
+   watchers, each level created only while the level above says its directory is
+   really there. This chain starts at `/` rather than `/run`, because the root
+   directory is the one folder that cannot be missing.
+2. **The folder exists even when the drive is not mounted.** `x-systemd.automount`
+   means the mount point is made once and the drive is only mounted the first
+   time somebody opens it. So "there is a folder here" no longer means "there is
+   a drive here". Every candidate is checked against `/proc/self/mounts` through
+   `services/MountTable.qml`, and a folder that is not really mounted draws **no
+   tile**. An automount placeholder nobody has opened yet appears in that table
+   as type `autofs`, which is read as *not mounted yet*.
+3. **Nothing announces a mount.** `/proc` files never say they changed, and the
+   `autofs` → real-filesystem moment happens silently. So the mount table is
+   re-read on a five-second timer — **only while `/media/aquarius` exists**. On
+   every machine where nobody has remembered a drive, that timer never runs.
+
+`AQ_REMEMBERED_ROOT` points the second chain at a folder a test can create, the
+same way `AQ_MEDIA_ROOT` does for the first; the recipe is in
+[`../harness/README.md`](../harness/README.md). **Not proven on hardware** — the
+bench checklist is at the end of this section.
+
+**Bench checklist for the remembered drives:**
+
+1. `aq drives remembered` lists a drive → a tile for it appears at the right end
+   of the dock within about five seconds of the drive actually being mounted
+   (open it in Files once to trigger the automount), and **not** before.
+2. Hovering it says the drive's name and **Internal drive**; right-clicking shows
+   the name and *"Mounted at every login"* and **no Unmount, no Eject**. Clicking
+   it opens the drive in Files.
+3. `aq drives forget <name>` and reboot → the tile is gone, and a plugged-in USB
+   drive still gets its own tile with Unmount and Eject beside it.
 
 **Where the list comes from — the standardised route, and why this one.** The
 task was to read the mounts through UDisks2 over D-Bus or the GVfs/GIO volume

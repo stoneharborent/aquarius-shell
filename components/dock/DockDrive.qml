@@ -51,6 +51,43 @@
 //   putting it away. Offering both names for one action would be a menu telling
 //   a small lie. services/MountTable.qml is what knows which kind this is.
 //
+// A REMEMBERED INSIDE DRIVE GETS NO ACTIONS AT ALL — ONLY A NAME
+//   (FEATURES 020, 2026-09-14.) A drive that lives inside the computer can now
+//   be "remembered": you say yes once and the OS writes a line into /etc/fstab
+//   so it is mounted at /media/aquarius/<name> at every login. Those drives get
+//   a tile here too (DockDrives.qml watches that folder as well), and the tile
+//   opens in Files exactly like any other.
+//
+//   What it does NOT get is Eject — it is bolted inside the machine, there is
+//   no cable to pull — and it does not get Unmount either. That second one was
+//   not a design choice; it is what the system allows. An fstab mount is made
+//   by systemd, as root, and NONE of the three ways to undo it works without an
+//   administrator password:
+//
+//     gio mount -u -f <path>     GVfs hands this to udisks2, which sees a mount
+//                                it did not make and asks polkit for
+//                                filesystem-unmount-others. The os-image rule
+//                                49-aquarius-udisks.rules deliberately does not
+//                                grant that one (its own header says so), so it
+//                                falls through to Fedora's default: ask for an
+//                                administrator password.
+//     udisksctl unmount -b <dev> the same D-Bus call by another name, and so
+//                                the same polkit question and the same prompt.
+//     umount <path>              plain umount lets a normal person unmount only
+//                                a mount whose fstab line carries `user`,
+//                                `users` or `owner`. The remembered lines carry
+//                                nofail,x-systemd.automount,x-systemd.device-timeout=10
+//                                (plus uid/gid/umask on FAT-ish filesystems) and
+//                                none of those three — so it answers "only root
+//                                can unmount".
+//
+//   Widening the polkit rule to make it work is the one thing FEATURES 020
+//   explicitly forbids: it would make every internal partition on the machine
+//   mountable and unmountable with no password, including ones nobody chose.
+//   So the menu shows the drive's name and says, quietly, what it is. The way
+//   to stop a drive being remembered is `aq drives forget`, which is the place
+//   where a password is the honest thing to ask for.
+//
 // HOW IT REACHES THE SYSTEM — and the standardised route it takes
 //   All three actions are `execDetached` one-shots:
 //
@@ -85,6 +122,12 @@ Item {
     // The volume's name, which is the mount directory's own name.
     property string mountLabel: ""
 
+    // True for a REMEMBERED INSIDE drive — one mounted from /etc/fstab under
+    // /media/aquarius, rather than a drive you plugged in. It opens like any
+    // other tile and offers no way to put it away; see the header for why that
+    // is the system's answer and not ours.
+    property bool internal: false
+
     implicitWidth: Theme.dockTileSize
     implicitHeight: Theme.dockTileSize
 
@@ -98,9 +141,11 @@ Item {
 
     Accessible.role: Accessible.Button
     Accessible.name: root.mountLabel
-    Accessible.description: root.macDrive
-        ? qsTr("Mac drive · click to open, right-click to eject it")
-        : qsTr("External drive · click to open, right-click to unmount or eject it")
+    Accessible.description: root.internal
+        ? qsTr("Internal drive · click to open. It is mounted at every login.")
+        : (root.macDrive
+           ? qsTr("Mac drive · click to open, right-click to eject it")
+           : qsTr("External drive · click to open, right-click to unmount or eject it"))
 
     function open(): void {
         if (root.mountPath !== "")
@@ -230,24 +275,54 @@ Item {
 
         Rectangle {
             id: labelCard
-            implicitWidth: Math.min(driveLabel.implicitWidth + Theme.logoMenuRowPaddingH * 2,
+
+            // A remembered inside drive adds a second, quieter line saying what
+            // kind of drive it is — "Internal drive". The tiles are identical
+            // marks, so the hover label is the only place the difference can be
+            // said, and it is the reason a person is not left wondering why this
+            // one has no Eject.
+            readonly property bool twoLines: root.internal
+
+            implicitWidth: Math.min(Math.max(driveLabel.implicitWidth, driveKind.implicitWidth)
+                                    + Theme.logoMenuRowPaddingH * 2,
                                     Theme.logoMenuMinWidth * 2)
-            implicitHeight: driveLabel.implicitHeight + Theme.logoMenuPaddingV * 2
+            implicitHeight: labelText.implicitHeight + Theme.logoMenuPaddingV * 2
             radius: Theme.logoMenuRadius
             color: Theme.surface
             border.width: Theme.hairline
             border.color: Theme.lineStrong
 
-            Text {
-                id: driveLabel
+            Column {
+                id: labelText
+
                 anchors.centerIn: parent
-                width: parent.implicitWidth - Theme.logoMenuRowPaddingH * 2
-                text: root.mountLabel
-                textFormat: Text.PlainText
-                elide: Text.ElideMiddle
-                font.family: Theme.fontBody
-                font.pixelSize: Theme.fsCaption
-                color: Theme.ink
+                width: labelCard.implicitWidth - Theme.logoMenuRowPaddingH * 2
+                spacing: 0
+
+                Text {
+                    id: driveLabel
+                    width: parent.width
+                    text: root.mountLabel
+                    textFormat: Text.PlainText
+                    elide: Text.ElideMiddle
+                    horizontalAlignment: Text.AlignHCenter
+                    font.family: Theme.fontBody
+                    font.pixelSize: Theme.fsCaption
+                    color: Theme.ink
+                }
+
+                Text {
+                    id: driveKind
+                    width: parent.width
+                    visible: labelCard.twoLines
+                    text: qsTr("Internal drive")
+                    textFormat: Text.PlainText
+                    elide: Text.ElideRight
+                    horizontalAlignment: Text.AlignHCenter
+                    font.family: Theme.fontBody
+                    font.pixelSize: Theme.fsCaption
+                    color: Theme.inkMute
+                }
             }
         }
     }
@@ -320,12 +395,26 @@ Item {
                     isSeparator: true
                 }
 
+                // A REMEMBERED INSIDE DRIVE — the whole menu, and it does
+                // nothing. There is no Eject (nothing to unplug) and no Unmount
+                // (no way to do it without an administrator password; the
+                // header has the three commands that were tried and what each
+                // one answers). Saying that plainly is better than an item that
+                // pops a password box, and better than a menu that is only a
+                // name.
+                MenuRow {
+                    width: menuCol.width
+                    visible: root.internal
+                    label: qsTr("Mounted at every login")
+                    disabled: true
+                }
+
                 // UNMOUNT — closes the files, leaves the drive switched on
                 // and in the Files sidebar with a re-mount icon. Hidden for a
                 // Mac drive, where it would be a second name for Eject.
                 MenuRow {
                     width: menuCol.width
-                    visible: !root.macDrive
+                    visible: !root.macDrive && !root.internal
                     label: qsTr("Unmount")
                     onActivated: {
                         root.unmount();
@@ -340,6 +429,7 @@ Item {
                 // come out. The one item a Mac drive gets.
                 MenuRow {
                     width: menuCol.width
+                    visible: !root.internal
                     label: qsTr("Eject")
                     onActivated: {
                         root.eject();

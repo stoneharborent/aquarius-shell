@@ -279,6 +279,40 @@ Two rules about the path you give it:
 Unset the variable and you are back to the real thing: `/run/media/<you>`,
 which is what every actual login uses.
 
+#### The other drives folder: remembered inside drives
+
+Since FEATURES 020 the dock draws a second kind of drive — one that lives
+*inside* the computer and that you said yes to once, so the OS mounts it at
+`/media/aquarius/<name>` at every login. It is watched exactly the same way, has
+exactly the same override, and obeys the same two rules about the path:
+
+```bash
+AQ_REMEMBERED_ROOT=/tmp/fake/inside/aquarius ./harness/run-nested.sh
+```
+
+```bash
+mkdir -p /tmp/fake/inside                   # the grandparent, before the shell starts
+mkdir /tmp/fake/inside/aquarius             # the folder the helper makes on the first yes
+mkdir /tmp/fake/inside/aquarius/Footage     # a remembered drive's mount point
+```
+
+**And then nothing appears — which is correct.** A remembered drive's folder
+exists whether or not the drive is mounted (the fstab line says
+`x-systemd.automount`, so the mount point is made once and the drive is mounted
+the first time somebody opens it). The dock only draws a tile when the kernel's
+own mount table says something is really mounted there, so on a test folder
+nothing ever is. To see the tile you need a real mount at that path — on a
+Linux box you can fake one with:
+
+```bash
+sudo mount -t tmpfs none /tmp/fake/inside/aquarius/Footage   # a tile appears
+sudo umount /tmp/fake/inside/aquarius/Footage                # and goes again
+```
+
+The tile can take up to five seconds to notice either way: `/proc/self/mounts`
+never announces that it changed, so the dock re-reads it on a slow timer while —
+and only while — that folder exists.
+
 ### Testing notifications
 
 The shell wants to BE the machine's notification daemon, and only one program per
