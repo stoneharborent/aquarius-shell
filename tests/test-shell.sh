@@ -806,18 +806,38 @@ echo "=== 15. the colour rule reaches the session files too ==="
 # comes out of the QML it just read. Section 15b proves that, on the generator's
 # actual output, which is a far stronger check than reading its source.
 
-if grep -rn -E '#[0-9A-Fa-f]{3,8}\b' \
-        session/niri session/labwc session/portals \
-        --exclude=generate-theme > /dev/null 2>&1; then
-    grep -rn -E '#[0-9A-Fa-f]{3,8}\b' \
-        session/niri session/labwc session/portals \
-        --exclude=generate-theme || true
+# THE ONE LINE THAT IS ALLOWED A COLOUR, AND WHY IT IS ONLY THAT LINE.
+#
+# rc.xml carries one `decorationColors="..."` attribute, on the DaVinci Resolve
+# window rule. Those six colours are not the desktop's — they are read off
+# Resolve's own dark window, so its title bar stops looking bolted on — and
+# there is no role in Ice.qml or Midnight.qml that could hold them without
+# putting another company's colour into our palette, where somebody would
+# eventually use it for something else.
+#
+# So it is allowed, and allowed NARROWLY: the exemption below matches that one
+# attribute with its six colours and nothing else. A seventh colour, a different
+# attribute, or the same six on some other line all still fail. The sister
+# attribute `decorationButtons="buttons-resolve"` names a FOLDER, not a colour,
+# and needs no exemption — the ink that folder is drawn in lives in
+# generate-theme, and section 15c checks that the two agree.
+aq_colour_hits="$(grep -rn -E '#[0-9A-Fa-f]{3,8}\b' \
+    session/niri session/labwc session/portals \
+    --exclude=generate-theme 2> /dev/null \
+    | grep -v -E 'rc\.xml:[0-9]+:[[:space:]]*decorationColors="(#[0-9a-f]{6} ){5}#[0-9a-f]{6}"$' \
+    || true)"
+
+if [ -n "${aq_colour_hits}" ]; then
+    printf '%s\n' "${aq_colour_hits}"
     fail "a session configuration contains what looks like a hex colour." \
          "Colour belongs in theme/Ice.qml and theme/Midnight.qml only." \
          "labwc's own colours are no longer written by hand at all — they are" \
          "generated from those two files by session/labwc/generate-theme, so" \
          "there is nowhere left that needs a colour typed into it. Leave" \
-         "everything else at the compositor's own defaults."
+         "everything else at the compositor's own defaults." \
+         "The single exemption is the six-colour decorationColors attribute on" \
+         "the DaVinci Resolve window rule in rc.xml, which carries Resolve's" \
+         "own frame colours and nothing else."
 else
     pass "no colours in the compositor or portal configurations"
 fi
@@ -978,7 +998,105 @@ PYTHON
         else
             fail "these ${aq_scheme} button pictures were not drawn:${aq_missing_buttons}"
         fi
+
+        # --- 5b. and the second set, the one DaVinci Resolve gets -------------
+        # Design rule 6, second sentence: Resolve's frame draws its buttons in
+        # Resolve's own text white, because the desktop's near-black ink
+        # disappeared into Resolve's near-black title bar (Royce, 2026-09-15).
+        # Same sixteen names, same folder layout, one folder deeper — which is
+        # how labwc finds them, and how rc.xml's decorationButtons names them.
+        #
+        # It has to exist in BOTH schemes. A set that is there in Midnight and
+        # missing in Ice would hand Resolve its ordinary buttons back the moment
+        # somebody flipped the theme, and nobody would think to look.
+        aq_missing_buttons=""
+        for aq_button in close iconify max max_toggled; do
+            for aq_state in "" "_hover"; do
+                for aq_focus in active inactive; do
+                    aq_svg="${aq_out}/theme/buttons-resolve/${aq_button}${aq_state}-${aq_focus}.svg"
+                    [ -s "${aq_svg}" ] || aq_missing_buttons="${aq_missing_buttons} $(basename "${aq_svg}")"
+                done
+            done
+        done
+        if [ -z "${aq_missing_buttons}" ]; then
+            pass "all 16 ${aq_scheme} ${aq_scale}x Resolve button pictures were drawn"
+        else
+            fail "these ${aq_scheme} Resolve button pictures were not drawn:${aq_missing_buttons}" \
+                 "Without them labwc falls back to the desktop's own buttons and" \
+                 "Resolve's window controls go back to being invisible."
+        fi
+
+        # Every one of those sixteen is drawn in the white, and only the hovered
+        # close button is allowed anything else — the palette's danger red with
+        # its X in inkOnAccent, which is mix B and is the same in both sets.
+        aq_ink_wrong=""
+        for aq_svg in "${aq_out}"/theme/buttons-resolve/*.svg; do
+            case "$(basename "${aq_svg}")" in
+                close_hover-*) continue ;;
+            esac
+            if grep -qiE '#[0-9A-Fa-f]{6}' "${aq_svg}" \
+                    && [ -z "$(grep -oiE '#[0-9A-Fa-f]{6}' "${aq_svg}" \
+                        | grep -viE '^#dedee2$' || true)" ]; then
+                :
+            else
+                aq_ink_wrong="${aq_ink_wrong} $(basename "${aq_svg}")"
+            fi
+        done
+        if [ -z "${aq_ink_wrong}" ]; then
+            pass "the ${aq_scheme} ${aq_scale}x Resolve buttons are drawn in #dedee2 only"
+        else
+            fail "these Resolve button pictures are not drawn in #dedee2:${aq_ink_wrong}" \
+                 "They have to match the title text on the bar beside them," \
+                 "which is the fifth colour of the decorationColors rule in" \
+                 "session/labwc/rc.xml."
+        fi
+
+        # And the ordinary set must NOT have gone white with them. This is the
+        # other half of the feature: every window that is not Resolve keeps the
+        # desktop's own ink.
+        if grep -qi 'dedee2' "${aq_out}/theme/close-active.svg"; then
+            fail "the DESKTOP's own buttons are being drawn in Resolve's white." \
+                 "Only session/labwc/rc.xml's Resolve rule asks for that set;" \
+                 "every other window keeps the palette's ink."
+        else
+            pass "the ordinary ${aq_scheme} buttons still use the palette's ink"
+        fi
     done
+
+    # --- 5c. the three spellings that have to agree ---------------------------
+    # The Resolve buttons only appear if THREE separate files say the same two
+    # things, and none of the three knows about the other two:
+    #
+    #   generate-theme  RESOLVE_BUTTON_INK   the colour the pictures are drawn in
+    #                   RESOLVE_BUTTON_DIR   the folder they are written into
+    #   rc.xml          decorationColors     its fifth colour is the title text
+    #                   decorationButtons    the folder labwc is sent to
+    #
+    # If the ink and the title text drift apart, the buttons stop matching the
+    # bar they sit on — the exact fault Royce reported on 2026-09-15, in reverse.
+    # If the two folder names drift apart, labwc finds nothing, says nothing, and
+    # quietly draws the desktop's own buttons instead.
+    aq_rule="$(grep -E 'decorationColors=' session/labwc/rc.xml || true)"
+    aq_title_text="$(printf '%s' "${aq_rule}" | grep -oE '#[0-9a-f]{6}' | sed -n '5p')"
+    aq_ink="$(grep -E '^RESOLVE_BUTTON_INK = ' "${aq_gen}" | cut -d'"' -f2)"
+    if [ -n "${aq_title_text}" ] && [ "${aq_ink}" = "${aq_title_text}" ]; then
+        pass "the Resolve buttons are drawn in the same ${aq_ink} as the bar's title text"
+    else
+        fail "generate-theme draws the Resolve buttons in '${aq_ink}' but" \
+             "session/labwc/rc.xml writes that window's title text in" \
+             "'${aq_title_text}'. Design rule 6: Resolve's frame draws its" \
+             "buttons in Resolve's OWN text white. Change one, change both."
+    fi
+
+    aq_dir="$(grep -E '^RESOLVE_BUTTON_DIR = ' "${aq_gen}" | cut -d'"' -f2)"
+    if grep -qF "decorationButtons=\"${aq_dir}\"" session/labwc/rc.xml; then
+        pass "rc.xml sends labwc to the folder generate-theme writes (${aq_dir})"
+    else
+        fail "generate-theme writes the Resolve buttons into '${aq_dir}' but" \
+             "session/labwc/rc.xml does not name that folder on the Resolve" \
+             "rule. labwc would find nothing, say nothing, and draw the" \
+             "desktop's own buttons on Resolve's dark bar."
+    fi
 
     # --- 3. the design sheet's own values, read back ---------------------------
     # Ice at 1x is the design exactly as drawn, so this is where the numbers can
