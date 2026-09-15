@@ -92,7 +92,10 @@ shrink the dock's apparent size and nobody would connect the two.
 | `components/dock/Dock.qml` | The layer-shell panel, one per monitor, and the slab it draws. Owns the `appGridRequested` seam. |
 | `components/dock/DockItem.qml` | One app: tile, icon, hover lift, running dots, and what a click does. |
 | `components/dock/DockDrives.qml` | The live list of mounted external drives at the right end (R6). |
-| `components/dock/DockDrive.qml` | One mounted drive: glyph, open in Files, right-click to eject (R6). |
+| `components/dock/DockDrive.qml` | One mounted drive: glyph, open in Files, right-click to unmount or eject (R6; two items since FEATURES 019). |
+| `components/dock/open-drive.py` | Opens a drive at its files (skips an APFS volume's wrapper folders). |
+| `components/dock/eject-drive.py` | Eject: unmount the right way for the kind of drive, then power it off. |
+| `services/MountTable.qml` | Reads `/proc/self/mounts` so the dock knows an APFS drive from an ordinary one. |
 | `components/dock/DockAddTile.qml` | The dashed `+` tile. **No longer drawn** (the drives list took its place, R6); the file is kept because the structural tests still list it and it is one Rectangle from returning if an app grid ever wants a launch tile. |
 | `components/dock/DockModel.qml` | Turns *pinned list* + *live windows* into one ordered list of tiles. |
 | `components/dock/DockConfig.qml` | Reads `~/.config/aquarius-shell/dock.json`. |
@@ -107,8 +110,30 @@ it goes. **When nothing is plugged in, the dock draws nothing there** — no
 separator, no placeholder.
 
 - **Left-click** opens the drive in the file manager (`xdg-open <mount path>`).
-- **Right-click** offers *Eject / Unmount*, which unmounts it through GVfs/GIO
-  (`gio mount -u -f <mount path>`).
+- **Right-click** offers **Unmount** and **Eject** — two items, because they are
+  two different things (FEATURES 019, 2026-09-14):
+  - **Unmount** closes the drive's files through GVfs/GIO
+    (`gio mount -u -f <mount path>`). The drive stays powered and udisks2 still
+    knows it is there, so it **stays in the Files sidebar with a re-mount icon**
+    and one click brings it back, no password. The dock tile goes, because the
+    list is the folders under `/run/media/<you>` and that folder has gone.
+  - **Eject** unmounts and then powers the drive down
+    (`udisksctl power-off -b <device>`), so it is safe to unplug. Two steps in
+    order, which QML cannot do on its own, so this one runs
+    `components/dock/eject-drive.py`. No password: the os-image polkit rule
+    `49-aquarius-udisks.rules` grants `power-off-drive` for removable drives to
+    the person at the screen. The script hands `udisksctl` the **partition**
+    device from `findmnt`; udisksctl walks from the partition to the drive it
+    lives on itself (`udisks_client_get_drive_for_block()`), so nothing here has
+    to work that out.
+  - **A Mac (APFS) drive gets only Eject.** It was opened by `apfs-fuse` in your
+    own session, not by udisks2, so there is no powered drive object behind it
+    and nothing to leave sitting in Files — closing it *is* putting it away, and
+    two names for one action would be a menu telling a small lie. The script
+    closes those with `fusermount3 -u`, the same split `aq drive eject` makes.
+    Which kind a drive is comes from `services/MountTable.qml`, which reads
+    `/proc/self/mounts`; if that read ever fails the tile falls back to the
+    ordinary two-item menu, where both items still close the drive.
 - Each tile draws the shell's own **drive glyph** (from `QsGlyph`) rather than
   app artwork, because a drive has no `.desktop` entry; the volume's name is on
   the tile's accessibility label and at the head of the right-click menu.

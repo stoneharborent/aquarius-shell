@@ -99,6 +99,7 @@ for aq_file in \
     services/AppIdentity.qml \
     services/FocusState.qml \
     services/KeyProfile.qml \
+    services/MountTable.qml \
     services/Overlays.qml \
     services/SettingsLauncher.qml \
     components/quicksettings/QuickSettingsPanel.qml \
@@ -120,6 +121,8 @@ for aq_file in \
     components/quicksettings/StatusGlyphNetwork.qml \
     components/quicksettings/StatusGlyphSound.qml \
     components/quicksettings/StatusGlyphBattery.qml \
+    components/dock/open-drive.py \
+    components/dock/eject-drive.py \
     components/search/FlowSearch.qml \
     components/search/SearchEngine.qml \
     components/search/SearchField.qml \
@@ -2024,7 +2027,8 @@ echo "=== 28. every enum namespace is one the shipped build actually has ==="
 # `import "x.js" as Name`, so they are our own code and cannot be missing from a
 # Quickshell build.
 aq_ns_ours="Theme FocusState Overlays SettingsLauncher SystemAppearance Fuzzy
-Calc Progress GreeterState LockState AppIdentity KeyProfile"
+Calc Progress GreeterState LockState AppIdentity KeyProfile MountTable
+SwitcherKeys"
 
 # Names Qt itself provides — globals, value types and attached types.
 aq_ns_qt="Qt Math JSON Date Object Array Locale Accessible Component Keys Easing
@@ -3041,6 +3045,69 @@ if grep -qF '"gio", "mount", "-u"' components/dock/DockDrive.qml; then
     pass "DockDrive.qml unmounts through GVfs/GIO"
 else
     fail "components/dock/DockDrive.qml no longer unmounts with 'gio mount -u'."
+fi
+
+# -- Unmount and Eject are two items, and they do two different things ---------
+# FEATURES 019, Royce, 2026-09-14. The menu used to say one thing, "Eject /
+# Unmount", and only ever unmounted — so a drive that had been "ejected" was
+# still powered up and unsafe to unplug. The two are now separate:
+#
+#   Unmount  gio mount -u -f          the drive stays in Files, re-mountable
+#   Eject    eject-drive.py           unmount, then udisksctl power-off
+#
+# A menu that offers both names for the same action is the fault this guards
+# against coming back.
+aq_drive_code="$(sed -E 's,//.*,,' components/dock/DockDrive.qml)"
+if printf '%s' "${aq_drive_code}" | grep -qF 'qsTr("Unmount")' \
+   && printf '%s' "${aq_drive_code}" | grep -qF 'qsTr("Eject")' \
+   && ! printf '%s' "${aq_drive_code}" | grep -qF 'Eject / Unmount'; then
+    pass "the drive menu offers Unmount and Eject as two separate items"
+else
+    fail "components/dock/DockDrive.qml does not offer Unmount and Eject." \
+         "FEATURES 019: unmounting leaves the drive in Files with a re-mount" \
+         "icon; ejecting powers it off so the cable can come out. One item" \
+         "called 'Eject / Unmount' promises a power-off it never does."
+fi
+
+if grep -qF '/components/dock/eject-drive.py' components/dock/DockDrive.qml \
+   && grep -qF '"udisksctl", "power-off", "-b"' components/dock/eject-drive.py; then
+    pass "Eject powers the drive off (udisksctl power-off)"
+else
+    fail "components/dock/eject-drive.py no longer powers the drive off." \
+         "'udisksctl power-off -b <device>' is what makes a drive safe to" \
+         "unplug, and 49-aquarius-udisks.rules in the os-image grants it" \
+         "without a password for removable drives."
+fi
+
+# A Mac drive is an apfs-fuse mount, not a udisks2 one: there is nothing to
+# power off, and nothing stays behind in Files. So it is closed with
+# fusermount3 (the same split 'aq drive eject' makes) and the menu offers it
+# ONE item, Eject, rather than two names for one action.
+if grep -qF 'fusermount3' components/dock/eject-drive.py; then
+    pass "eject-drive.py closes a Mac (APFS) drive with fusermount3"
+else
+    fail "components/dock/eject-drive.py does not use fusermount3." \
+         "An APFS volume is mounted by apfs-fuse in the user's own session;" \
+         "'gio mount -u' is not the command that closes one."
+fi
+
+if grep -qF 'MountTable.isMacDrive' components/dock/DockDrive.qml \
+   && grep -qF 'visible: !root.macDrive' components/dock/DockDrive.qml; then
+    pass "a Mac drive is offered Eject only"
+else
+    fail "components/dock/DockDrive.qml no longer hides Unmount for a Mac drive." \
+         "On an apfs-fuse mount, unmounting and ejecting are the same act, and" \
+         "the drive does not stay in Files afterwards. Two names for it would" \
+         "be a menu telling a small lie."
+fi
+
+if grep -qF '/proc/self/mounts' services/MountTable.qml; then
+    pass "MountTable.qml reads the kernel's own mount table"
+else
+    fail "services/MountTable.qml no longer reads /proc/self/mounts." \
+         "That is where 'what kind of drive is this' is answered, for the same" \
+         "reason DockDrives.qml watches a directory: the shipped Quickshell has" \
+         "no UDisks2 or GIO binding and this shell does not hand-roll D-Bus."
 fi
 
 # The drive tile draws the drive glyph, which therefore has to exist in the
